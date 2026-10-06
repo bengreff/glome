@@ -38,30 +38,46 @@ export function chartCoords(n) {
 // index = i + N*j + N*N*(c*N + l), with texture depth 8N.
 const SEAM = 0.04;   // blend width across chart seams, as a fraction of the largest component
 
+// Pre-smooth the raw samples with the cubic B-spline kernel [1, 4, 1]/6 along each axis (clamped at chart
+// edges). Trilinear interpolation of the result tracks the smooth cubic surface closely (median ~1 cm)
+// while costing a single texture fetch.
+export function prefilter(src, N) {
+  const a = new Float32Array(src.length), b = new Float32Array(src.length), NN = N * N, rows = src.length / N;
+  const run = (from, to, stride, startOf) => {
+    for (let r = 0; r < rows; r++) {
+      const s0 = startOf(r);
+      for (let i = 0; i < N; i++) {
+        const lo = from[s0 + Math.max(0, i - 1) * stride], mid = from[s0 + i * stride], hi = from[s0 + Math.min(N - 1, i + 1) * stride];
+        to[s0 + i * stride] = (lo + 4 * mid + hi) / 6;
+      }
+    }
+  };
+  run(src, a, 1, r => r * N);
+  run(a, b, N, r => (r % N) + Math.floor(r / N) * NN);
+  run(b, a, NN, r => (r % NN) + Math.floor(r / NN) * NN * N);   // z stays within its chart
+  return a;
+}
+
+// CPU copy of the (prefiltered) atlas for physics. Layout matches the GPU 3D texture:
+// index = i + N*j + N*N*(c*N + l), texture depth 8N. Lookups match the shader exactly.
 export class HeightField {
   constructor(data, N) { this.data = data; this.N = N; }
 
-  // Height via a cubic B-spline inside one chart (axis k), clamped at the chart's edges.
   chartHeight(n, k) {
     const { N, data } = this, m = Math.abs(n[k]), c = 2 * k + (n[k] > 0 ? 1 : 0);
-    const u = []; for (let i = 0; i < 4; i++) if (i !== k) u.push(n[i] / m);
-    const idx = u.map(v => (v * 0.5 + 0.5) * (N - 1));
-    const i0 = idx.map(Math.floor), f = idx.map((v, j) => v - i0[j]);
-    const w = f.map(t => { const g = 1 - t; const w0 = g * g * g / 6, w1 = (4 - 6 * t * t + 3 * t * t * t) / 6, w3 = t * t * t / 6; return [w0, w1, 1 - w0 - w1 - w3, w3]; });
-    const cl = v => v < 0 ? 0 : v > N - 1 ? N - 1 : v;
+    const t = [];
+    for (let i = 0; i < 4; i++) if (i !== k) t.push(Math.min(N - 1, Math.max(0, (n[i] / m * 0.5 + 0.5) * (N - 1))));
+    const i0 = t.map(v => Math.min(N - 2, Math.floor(v))), f = t.map((v, j) => v - i0[j]);
     let h = 0;
-    for (let dz = 0; dz < 4; dz++) {
-      const z = cl(i0[2] + dz - 1), wz = w[2][dz];
-      for (let dy = 0; dy < 4; dy++) {
-        const y = cl(i0[1] + dy - 1), wyz = wz * w[1][dy], base = N * y + N * N * (c * N + z);
-        for (let dx = 0; dx < 4; dx++) h += wyz * w[0][dx] * data[base + cl(i0[0] + dx - 1)];
-      }
+    for (let q = 0; q < 8; q++) {
+      const x = q & 1, y = (q >> 1) & 1, z = (q >> 2) & 1;
+      h += (x ? f[0] : 1 - f[0]) * (y ? f[1] : 1 - f[1]) * (z ? f[2] : 1 - f[2]) * data[(i0[0] + x) + N * (i0[1] + y) + N * N * (c * N + i0[2] + z)];
     }
     return h;
   }
 
-  // Blend every chart whose axis is within SEAM of the largest, with weights that vary smoothly.
-  // The ground is then continuous across seams and corners (matches the shader).
+  // Blend every chart whose axis is within SEAM of the largest, with smoothly varying weights,
+  // so the ground is continuous across seams and corners.
   heightAt(n) {
     const a = n.map(Math.abs), amax = Math.max(a[0], a[1], a[2], a[3]);
     let sum = 0, wsum = 0;

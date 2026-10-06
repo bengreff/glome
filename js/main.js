@@ -1,5 +1,5 @@
-import { VERT, SLICE_FRAG, RETINA_FRAG, EDGE_FRAG, VOLUME_FRAG } from './shaders.js';
-import { PLANET_R, SEA, HeightField } from './world.js';
+import { VERT, SLICE_FRAG, RETINA_FRAG, EDGE_FRAG, VOLUME_FRAG, UPSCALE_FRAG } from './shaders.js';
+import { PLANET_R, SEA, HeightField, prefilter } from './world.js';
 import { Player, vec4 } from './player.js';
 
 const $ = id => document.getElementById(id);
@@ -33,7 +33,7 @@ function program(fragSrc) {
   p.u = name => (name in locs) ? locs[name] : (locs[name] = gl.getUniformLocation(p, name));
   return p;
 }
-const progSlice = program(SLICE_FRAG), progRetina = program(RETINA_FRAG), progEdge = program(EDGE_FRAG), progVol = program(VOLUME_FRAG);
+const progSlice = program(SLICE_FRAG), progRetina = program(RETINA_FRAG), progEdge = program(EDGE_FRAG), progVol = program(VOLUME_FRAG), progUp = program(UPSCALE_FRAG);
 const vao = gl.createVertexArray();
 
 function tex3D(w, h, d, internal, format, type, filter, data = null) {
@@ -76,11 +76,51 @@ function buildAtlas() {
   });
 }
 
+// Tileable 3D value noise with analytic gradient: rgb = gradient / 3, a = value (all mapped to 0..1).
+function makeNoise() {
+  const S = 64, P = 16, k = S / P;
+  let seed = 7;
+  const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+  const lat = new Float32Array(P * P * P).map(rnd);
+  const L = (x, y, z) => lat[((x % P + P) % P) + P * (((y % P + P) % P) + P * ((z % P + P) % P))];
+  const out = new Uint8Array(S * S * S * 4);
+  const sm = f => f * f * (3 - 2 * f), dsm = f => 6 * f * (1 - f);
+  for (let z = 0; z < S; z++) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const q = [(x + 0.5) / k, (y + 0.5) / k, (z + 0.5) / k];
+    const i = q.map(Math.floor), f = q.map((v, j) => v - i[j]);
+    const w = f.map(sm), dw = f.map(dsm);
+    let v = 0, gx = 0, gy = 0, gz = 0;
+    for (let c = 0; c < 8; c++) {
+      const a = c & 1, b = (c >> 1) & 1, d = (c >> 2) & 1;
+      const val = L(i[0] + a, i[1] + b, i[2] + d);
+      const wx = a ? w[0] : 1 - w[0], wy = b ? w[1] : 1 - w[1], wz = d ? w[2] : 1 - w[2];
+      const sx = a ? dw[0] : -dw[0], sy = b ? dw[1] : -dw[1], sz = d ? dw[2] : -dw[2];
+      v += wx * wy * wz * val; gx += sx * wy * wz * val; gy += wx * sy * wz * val; gz += wx * wy * sz * val;
+    }
+    const o = 4 * (x + S * (y + S * z)), enc = t => Math.max(0, Math.min(255, Math.round((t * 0.5 + 0.5) * 255)));
+    out[o] = enc(gx / 3); out[o + 1] = enc(gy / 3); out[o + 2] = enc(gz / 3); out[o + 3] = enc(v);
+  }
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE7);
+  gl.bindTexture(gl.TEXTURE_3D, t);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, S, S, S, 0, gl.RGBA, gl.UNSIGNED_BYTE, out);
+  for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, p, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (aniso) gl.texParameterf(gl.TEXTURE_3D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  gl.generateMipmap(gl.TEXTURE_3D);
+  gl.bindTexture(gl.TEXTURE_3D, null);
+  gl.activeTexture(gl.TEXTURE0);
+  return t;
+}
+
 // ---------- state ----------
 const DAY1 = 300;                       // seconds for one turn in the first rotation plane (at 1×)
 const state = {
   view: 'slice', time: 0, timeScale: 1, paused: false, rotation: 'double',
-  scale: 0.6, shadows: true, retinaM: 64, help: false, anaTint: false,
+  shadows: true, retinaM: 64, help: false, anaTint: false,
   eyeYaw: 0, eyePitch: 0.3, eyeAuto: true,
 };
 const RATIOS = { double: 1.6180339887, isoclinic: 1 };
@@ -91,7 +131,7 @@ function sunDir(t) {
   return [a * Math.cos(w1 * t), -a * Math.sin(w1 * t), a * Math.cos(w2 * t), -a * Math.sin(w2 * t)];
 }
 
-let player, atlasTex;
+let player, atlasTex, noiseTex;
 let retinaTex = null, volTex = null, fbo = null;
 
 function makeRetina(M) {
@@ -99,6 +139,40 @@ function makeRetina(M) {
   retinaTex = tex3D(M, M, M, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
   volTex = tex3D(M, M, M, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
   fbo = fbo || gl.createFramebuffer();
+}
+
+// Dynamic resolution: render internally at a fraction of the screen, adjusted to hold ~55-60 fps,
+// then upscale with sharpening. 1/2/3 pick a fixed level, 0 returns to automatic.
+const dyn = { scale: 0.6, auto: true, acc: 0, n: 0, slow: 0, fast: 0 };
+const maxScale = () => Math.min(1, 1.5 / Math.min(devicePixelRatio || 1, 2));
+function updateDyn(dt) {
+  dyn.acc += dt; dyn.n++;
+  if (dyn.acc < 0.35) return;
+  const avg = dyn.acc / dyn.n; dyn.acc = 0; dyn.n = 0;
+  if (!dyn.auto) return;
+  // drop quickly when frames are slow, climb only after a sustained run of fast frames (no flip-flopping)
+  dyn.slow = avg > 1 / 50 ? dyn.slow + 1 : 0;
+  dyn.fast = avg < 1 / 58 ? dyn.fast + 1 : 0;
+  if (dyn.slow >= 1) { dyn.scale = Math.max(0.3, dyn.scale * (avg > 1 / 35 ? 0.8 : 0.9)); dyn.slow = 0; }
+  else if (dyn.fast >= 4) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.06); dyn.fast = 0; }
+}
+const scene = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
+function ensureScene(w, h) {
+  if (scene.tex && Math.abs(w - scene.w) < 2 && Math.abs(h - scene.h) < 2) return;
+  if (scene.tex) gl.deleteTexture(scene.tex);
+  scene.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE5);
+  gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scene.tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.activeTexture(gl.TEXTURE0);
+  scene.w = w; scene.h = h;
 }
 
 // ---------- input ----------
@@ -117,9 +191,10 @@ addEventListener('keydown', e => {
     case 'KeyT': state.rotation = state.rotation === 'double' ? 'isoclinic' : 'double'; break;
     case 'KeyH': state.help = !state.help; $('help').hidden = !state.help; break;
     case 'KeyG': state.shadows = !state.shadows; break;
-    case 'Digit1': state.scale = 0.4; break;
-    case 'Digit2': state.scale = 0.6; break;
-    case 'Digit3': state.scale = 0.85; break;
+    case 'Digit0': dyn.auto = true; break;
+    case 'Digit1': dyn.auto = false; dyn.scale = 0.4 * maxScale(); break;
+    case 'Digit2': dyn.auto = false; dyn.scale = 0.7 * maxScale(); break;
+    case 'Digit3': dyn.auto = false; dyn.scale = maxScale(); break;
     case 'KeyM': state.retinaM = { 48: 64, 64: 96, 96: 48 }[state.retinaM]; makeRetina(state.retinaM); break;
     case 'KeyO': state.eyeAuto = !state.eyeAuto; break;
     case 'KeyX': state.anaTint = !state.anaTint; break;
@@ -156,17 +231,17 @@ function readInput() {
 // ---------- rendering ----------
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  const w = Math.max(1, Math.round(innerWidth * dpr * state.scale));
-  const h = Math.max(1, Math.round(innerHeight * dpr * state.scale));
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  const ow = Math.round(innerWidth * dpr), oh = Math.round(innerHeight * dpr);
-  if (overlay.width !== ow || overlay.height !== oh) { overlay.width = ow; overlay.height = oh; }
+  const W = Math.max(1, Math.round(innerWidth * dpr)), H = Math.max(1, Math.round(innerHeight * dpr));
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
+  ensureScene(Math.max(16, Math.round(W * dyn.scale)), Math.max(16, Math.round(H * dyn.scale)));
 }
 
 function setWorld(p, cam, sun) {
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_3D, atlasTex);
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D, noiseTex);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, atlasTex);
   gl.uniform1i(p.u('uAtlas'), 0);
+  gl.uniform1i(p.u('uNoise'), 4);
   gl.uniform1f(p.u('uN'), N);
   gl.uniform1f(p.u('uPR'), PLANET_R);
   gl.uniform1f(p.u('uSea'), SEA);
@@ -184,7 +259,7 @@ function setWorld(p, cam, sun) {
 const FOV = Math.tan(38 * Math.PI / 180);
 
 function drawSlice(cam, sun, x, y, w, h) {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
   gl.viewport(x, y, w, h);
   gl.useProgram(progSlice);
   setWorld(progSlice, cam, sun);
@@ -221,8 +296,8 @@ function drawEye(cam, sun, t) {
   }
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_3D, null);
   // 3. view the retina cube from outside
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+  gl.viewport(0, 0, scene.w, scene.h);
   gl.useProgram(progVol);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_3D, volTex);
   gl.uniform1i(progVol.u('uVol'), 2);
@@ -231,13 +306,13 @@ function drawEye(cam, sun, t) {
   gl.uniform3fv(progVol.u('uCamR'), cv.R);
   gl.uniform3fv(progVol.u('uCamU'), cv.U);
   gl.uniform3fv(progVol.u('uCamF'), cv.F);
-  gl.uniform2f(progVol.u('uRes'), canvas.width, canvas.height);
+  gl.uniform2f(progVol.u('uRes'), scene.w, scene.h);
   gl.uniform1f(progVol.u('uM'), M);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.activeTexture(gl.TEXTURE0);
   // inset: the ordinary slice (it is the middle layer of the retina)
-  const iw = Math.round(canvas.width * 0.27), ih = Math.round(iw * 0.62), m = Math.round(canvas.width * 0.012);
-  drawSlice(cam, sun, canvas.width - iw - m, m, iw, ih);
+  const iw = Math.round(scene.w * 0.27), ih = Math.round(iw * 0.62), m = Math.round(scene.w * 0.012);
+  drawSlice(cam, sun, scene.w - iw - m, m, iw, ih);
   return { iw, ih, m, cv };
 }
 
@@ -279,7 +354,7 @@ function drawCubeOverlay(cv, inset) {
   label([-1, -1, 1.12], 'ana ⟶');
   label([-1, -1, -1.12], 'kata');
   // inset frame
-  const k = overlay.width / canvas.width;
+  const k = overlay.width / scene.w;
   octx.strokeStyle = 'rgba(214, 224, 240, 0.5)';
   octx.strokeRect(W - (inset.iw + inset.m) * k, H - (inset.ih + inset.m) * k, inset.iw * k, inset.ih * k);
   octx.fillText('slice = middle layer', W - (inset.iw + inset.m) * k, H - (inset.ih + inset.m) * k - fs * 0.5);
@@ -315,6 +390,18 @@ function drawAnaGauge() {
   octx.fillText('ana', x0 + gw - 22 * k, y0 - 8 * k);
 }
 
+function present() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(progUp);
+  gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+  gl.uniform1i(progUp.u('uScene'), 5);
+  gl.uniform2f(progUp.u('uSrc'), scene.w, scene.h);
+  gl.uniform1f(progUp.u('uSharp'), Math.min(1, 0.35 + 0.9 * (1 - scene.w / canvas.width)));
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.activeTexture(gl.TEXTURE0);
+}
+
 // ---------- HUD ----------
 const fmt = (x, d = 0) => x.toFixed(d);
 let hudTimer = 0, fpsAcc = 0, fpsN = 0;
@@ -336,7 +423,7 @@ function updateHUD(dt, cam, sun) {
     ? `sun ${fmt(el)}° up · ${fmt(Math.abs(anaLean))}° toward ${anaLean >= 0 ? 'ana' : 'kata'} · ${fmt(Math.abs(ahead))}° ${ahead >= 0 ? 'right' : 'left'}`
     : `night · sun ${fmt(-el)}° below`;
   $('clock').textContent = `${state.paused ? 'paused' : '×' + (state.timeScale >= 1 ? state.timeScale : state.timeScale.toFixed(3))} · ${state.rotation} rotation`;
-  $('fps').textContent = `${fmt(fps)} fps`;
+  $('fps').textContent = `${fmt(fps)} fps · res ${fmt(100 * scene.w / canvas.width)}%${dyn.auto ? ' auto' : ''}`;
 }
 
 // ---------- main loop ----------
@@ -366,11 +453,13 @@ function frame(now) {
   for (let i = 0; i < sub; i++) player.update(dt / sub, input);
   if (!state.paused) state.time += dt * state.timeScale;
 
+  updateDyn(dt);
   resize();
   const cam = player.camera(), sun = sunDir(state.time);
   octx.clearRect(0, 0, overlay.width, overlay.height);
-  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, canvas.width, canvas.height); drawAnaGauge(); }
+  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h); drawAnaGauge(); }
   else { const r = drawEye(cam, sun, simT); drawCubeOverlay(r.cv, r); }
+  present();
   updateHUD(dt, cam, sun);
   requestAnimationFrame(frame);
 }
@@ -378,8 +467,9 @@ function frame(now) {
 // ---------- boot ----------
 (async function boot() {
   try {
-    const data = await buildAtlas();
+    const data = prefilter(await buildAtlas(), N);
     atlasTex = tex3D(N, N, 8 * N, gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, data);
+    noiseTex = makeNoise();
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, atlasTex);
     gl.bindVertexArray(vao);
     makeRetina(state.retinaM);
@@ -398,7 +488,7 @@ function frame(now) {
     $('hint').hidden = false;
     if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches)
       $('hint').textContent = 'Hoop needs a keyboard and mouse to explore.';
-    window.__hoop = { state, player, keys, sunDir };   // handle for debugging from the console
+    window.__hoop = { state, player, keys, sunDir, dyn };   // handle for debugging from the console
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

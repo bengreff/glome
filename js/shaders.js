@@ -15,6 +15,7 @@ precision highp int;
 precision highp sampler3D;
 
 uniform sampler3D uAtlas;   // terrain heights on the cubed 3-sphere, 8 charts stacked in depth
+uniform sampler3D uNoise;   // tileable gradient noise: rgb = gradient, a = value
 uniform float uN;           // chart resolution
 uniform float uPR;          // planet radius
 uniform float uSea;         // sea level above uPR
@@ -45,39 +46,17 @@ float vn4(vec4 x) {
   return acc;
 }
 
-// Atlas lookup with a cubic B-spline (8 trilinear fetches), matching HeightField.heightAt on the CPU.
-float atlasTap(vec3 pos, float chart) {
-  float z = clamp(pos.z, 0.0, uN - 1.0);
-  return texture(uAtlas, vec3((pos.x + 0.5) / uN, (pos.y + 0.5) / uN, (chart * uN + z + 0.5) / (8.0 * uN))).r;
-}
 float comp(vec4 n, int k) { return k == 0 ? n.x : k == 1 ? n.y : k == 2 ? n.z : n.w; }
+// One trilinear fetch from chart k (the atlas is pre-smoothed with the cubic B-spline kernel).
 float chartHeight(vec4 n, int k) {
   float s = comp(n, k), m = abs(s);
-  vec3 u = k == 0 ? n.yzw : k == 1 ? vec3(n.x, n.z, n.w) : k == 2 ? vec3(n.x, n.y, n.w) : n.xyz;
-  u /= m;
-  float chart = float(2 * k) + (s > 0.0 ? 1.0 : 0.0);
-  vec3 idx = (u * 0.5 + 0.5) * (uN - 1.0);
-  vec3 i0 = floor(idx), f = idx - i0, g = 1.0 - f;
-  vec3 w0 = g * g * g / 6.0, w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0, w3 = f * f * f / 6.0, w2 = 1.0 - w0 - w1 - w3;
-  vec3 g0 = w0 + w1, g1 = w2 + w3;
-  vec3 s0 = i0 - 1.0 + w1 / g0, s1 = i0 + 1.0 + w3 / g1;
-  return g0.z * (g0.y * (g0.x * atlasTap(vec3(s0.x, s0.y, s0.z), chart) + g1.x * atlasTap(vec3(s1.x, s0.y, s0.z), chart))
-               + g1.y * (g0.x * atlasTap(vec3(s0.x, s1.y, s0.z), chart) + g1.x * atlasTap(vec3(s1.x, s1.y, s0.z), chart)))
-       + g1.z * (g0.y * (g0.x * atlasTap(vec3(s0.x, s0.y, s1.z), chart) + g1.x * atlasTap(vec3(s1.x, s0.y, s1.z), chart))
-               + g1.y * (g0.x * atlasTap(vec3(s0.x, s1.y, s1.z), chart) + g1.x * atlasTap(vec3(s1.x, s1.y, s1.z), chart)));
-}
-// Cheap single-fetch height (trilinear, main chart only) for coarse marching and shadows.
-float heightFast(vec4 n) {
-  vec4 a = abs(n);
-  float m = a.x; int k = 0;
-  if (a.y > m) { m = a.y; k = 1; }
-  if (a.z > m) { m = a.z; k = 2; }
-  if (a.w > m) { m = a.w; k = 3; }
-  float s = comp(n, k);
   vec3 u = (k == 0 ? n.yzw : k == 1 ? vec3(n.x, n.z, n.w) : k == 2 ? vec3(n.x, n.y, n.w) : n.xyz) / m;
-  return atlasTap((u * 0.5 + 0.5) * (uN - 1.0), float(2 * k) + (s > 0.0 ? 1.0 : 0.0));
+  vec3 pos = clamp((u * 0.5 + 0.5) * (uN - 1.0), 0.0, uN - 1.0);
+  float chart = float(2 * k) + (s > 0.0 ? 1.0 : 0.0);
+  return texture(uAtlas, vec3((pos.x + 0.5) / uN, (pos.y + 0.5) / uN, (chart * uN + pos.z + 0.5) / (8.0 * uN))).r;
 }
 const float SEAM = 0.04;
+// Same seam blend as HeightField.heightAt on the CPU: what you see is what you walk on.
 float heightAt(vec4 n) {
   vec4 a = abs(n);
   float amax = max(max(a.x, a.y), max(a.z, a.w));
@@ -95,20 +74,16 @@ float sdTerrain(vec4 p) {
   float r = length(p);
   return (r - uPR - heightAt(p / r)) * 0.6;
 }
-const float MARGIN = 1.6;   // the cheap surface is lifted by this much, so coarse steps never pass the true one
-float sdFast(vec4 p) {
-  float r = length(p);
-  return (r - uPR - heightFast(p / r) - MARGIN) * 0.6;
-}
-
+// Gradient from 5 samples on a regular 4-simplex (instead of 8 central differences).
+const vec4 S0 = vec4( 0.5590170, 0.5590170, 0.5590170, -0.25);
+const vec4 S1 = vec4( 0.5590170,-0.5590170,-0.5590170, -0.25);
+const vec4 S2 = vec4(-0.5590170, 0.5590170,-0.5590170, -0.25);
+const vec4 S3 = vec4(-0.5590170,-0.5590170, 0.5590170, -0.25);
+const vec4 S4 = vec4( 0.0, 0.0, 0.0, 1.0);
 vec4 terrainNormal(vec4 p, float t) {
-  float e = 0.03 + 0.002 * t;
-  vec2 h = vec2(e, 0.0);
-  return normalize(vec4(
-    sdTerrain(p + h.xyyy) - sdTerrain(p - h.xyyy),
-    sdTerrain(p + h.yxyy) - sdTerrain(p - h.yxyy),
-    sdTerrain(p + h.yyxy) - sdTerrain(p - h.yyxy),
-    sdTerrain(p + h.yyyx) - sdTerrain(p - h.yyyx)));
+  float e = 0.9 + 0.003 * t;
+  return normalize(S0 * sdTerrain(p + e * S0) + S1 * sdTerrain(p + e * S1) + S2 * sdTerrain(p + e * S2)
+                 + S3 * sdTerrain(p + e * S3) + S4 * sdTerrain(p + e * S4));
 }
 
 float marchTerrain(vec4 ro, vec4 rd) {
@@ -120,16 +95,11 @@ float marchTerrain(vec4 ro, vec4 rd) {
     if (disc < 0.0 || b > 0.0) return -1.0;
     t = -b - sqrt(disc);
   }
-  // Step with the cheap lifted surface while far from it; near it, use the true smooth surface.
-  // After skimming past a ridge the cheap distance grows again and big steps resume.
-  for (int i = 0; i < 320; i++) {
+  for (int i = 0; i < 260; i++) {
     vec4 p = ro + rd * t;
-    float d = sdFast(p);
-    if (d < 0.03 + 0.0008 * t) {
-      d = sdTerrain(p);
-      if (d < 0.0013 * t + 0.002) return t;
-    }
-    t += max(d, 0.0006 * t);
+    float d = sdTerrain(p);
+    if (d < 0.0012 * t + 0.002) return t;
+    t += max(d, 0.0008 * t);
     if (t > MAXT) break;
     if (dot(p, p) > rOut * rOut && dot(p, rd) > 0.0) break;
   }
@@ -137,16 +107,39 @@ float marchTerrain(vec4 ro, vec4 rd) {
 }
 
 float softShadow(vec4 ro, vec4 rd) {
-  float res = 1.0, t = 0.15, rOut = uPR + SHELL;
-  for (int i = 0; i < 56; i++) {
+  float res = 1.0, t = 0.25, rOut = uPR + SHELL;
+  for (int i = 0; i < 40; i++) {
     vec4 p = ro + rd * t;
-    float d = sdFast(p) + MARGIN * 0.6;
-    res = min(res, 9.0 * d / t);
+    float d = sdTerrain(p);
+    res = min(res, 8.0 * d / t);
     if (res < 0.02) break;
-    t += clamp(d, 0.15, 9.0);
+    t += clamp(d, 0.3, 12.0);
     if (t > 260.0 || (dot(p, p) > rOut * rOut && dot(p, rd) > 0.0)) break;
   }
   return clamp(res, 0.0, 1.0);
+}
+
+// Cheap ambient occlusion: how much the bounding surface crowds in along the normal.
+float ambientOcclusion(vec4 p, vec4 n) {
+  float occ = 0.0;
+  for (int i = 1; i <= 3; i++) {
+    float h = 0.6 * float(i * i);
+    occ += (h - sdTerrain(p + n * h) / 0.6) / h * (1.0 / float(i));
+  }
+  return clamp(1.0 - 0.45 * occ, 0.35, 1.0);
+}
+
+// Surface detail from a tileable 3D gradient noise. Two different 3D projections of the 4D point
+// are summed so that no 4D direction leaves the pattern constant. Returns the value; g = 4D gradient.
+const float NOISE_P = 16.0;
+float detail(vec4 p, float f, out vec4 g) {
+  const vec3 c1 = vec3(0.613, -0.418, 0.672);
+  const vec3 c2 = vec3(-0.281, 0.805, 0.523);
+  vec4 a = texture(uNoise, (p.xyz + p.w * c1) * f / NOISE_P);
+  vec4 b = texture(uNoise, ((p.yzx - p.w * c2) * f * 1.13 + 17.0) / NOISE_P);
+  vec3 ga = (a.xyz * 2.0 - 1.0) * 3.0, gb = (b.xyz * 2.0 - 1.0) * 3.0;
+  g = f * vec4(ga, dot(ga, c1)) + f * 1.13 * vec4(gb.z, gb.x, gb.y, -dot(gb, c2));
+  return (a.w + b.w) - 1.0;
 }
 
 float dayFactor(vec4 up) { return smoothstep(-0.14, 0.18, dot(uSun, up)); }
@@ -186,28 +179,63 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec4 up = normalize(p);
   float h = length(p) - uPR;
   float slope = dot(n, up);
-  float v1 = vn4(p * 0.07), v2 = vn4(p * 0.45 + 3.0);
-  vec3 grass = mix(vec3(0.17, 0.30, 0.10), vec3(0.34, 0.44, 0.15), v1);
-  grass *= 0.85 + 0.3 * v2;
-  vec3 rock = mix(vec3(0.33, 0.31, 0.29), vec3(0.47, 0.43, 0.39), v2);
-  vec3 sand = vec3(0.74, 0.68, 0.50);
-  vec3 snow = vec3(0.93, 0.95, 0.98);
-  vec3 alb = mix(sand, grass, smoothstep(uSea + 0.5, uSea + 2.0, h));
-  alb = mix(alb, rock, 1.0 - smoothstep(0.66, 0.84, slope));
-  alb = mix(alb, snow, smoothstep(27.0, 31.0, h + 8.0 * (slope - 0.85) + 3.0 * v1));
+
+  // detail at four scales (≈9 m, 2 m, 0.45 m, 0.14 m), each faded out before it would shimmer
+  vec4 g1, g2, g3, g4;
+  float d1 = detail(p, 0.11, g1);
+  float d2 = detail(p, 0.55, g2);
+  float f2 = 1.0 - smoothstep(30.0, 90.0, t), f3 = 1.0 - smoothstep(8.0, 26.0, t), f4 = 1.0 - smoothstep(2.5, 9.0, t);
+  float d3 = f3 > 0.0 ? detail(p, 2.3, g3) : 0.0;
+  float d4 = f4 > 0.0 ? detail(p, 7.1, g4) : 0.0;
+  float f5 = 1.0 - smoothstep(1.0, 4.5, t);
+  vec4 g5 = vec4(0.0);
+  float d5 = f5 > 0.0 ? detail(p, 19.0, g5) : 0.0;
+  if (f3 <= 0.0) g3 = vec4(0.0);
+  if (f4 <= 0.0) g4 = vec4(0.0);
+  float rocky = 1.0 - smoothstep(0.62, 0.82, slope + 0.08 * d1);
+  float sandy = 1.0 - smoothstep(uSea + 0.4, uSea + 2.2 + 0.8 * d1, h);
+  float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1);
+  float dirt = smoothstep(-0.42, -0.62, d1 + 0.35 * d2) * (1.0 - rocky) * (1.0 - sandy);
+
+  vec4 bump = g1 * 0.9 + g2 * 0.25 * f2 + g3 * 0.06 * f3 + g4 * 0.03 * f4 + g5 * 0.012 * f5;
+  bump *= mix(1.0, 2.4, rocky) * mix(1.0, 0.35, sandy + snowy * 0.6);
+  vec4 nb = normalize(n - (bump - n * dot(bump, n)) * 0.6);
+
+  // grass: broad lush/dry patches, clumps, then crisp tufts up close
+  vec3 lush = vec3(0.11, 0.25, 0.06), dry = vec3(0.38, 0.40, 0.13), moss = vec3(0.17, 0.27, 0.08);
+  vec3 grass = mix(lush, dry, smoothstep(-0.35, 0.45, d1 + 0.4 * d2));
+  grass = mix(grass, moss, smoothstep(0.2, 0.7, -d2) * 0.5);
+  grass *= 0.86 + 0.12 * d2 + 0.22 * d3 * f3 + 0.17 * d4 * f4 + 0.12 * d5 * f5;
+  grass = mix(grass, vec3(0.30, 0.23, 0.14) * (0.85 + 0.25 * d3 * f3 + 0.2 * d4 * f4), dirt);
+  // rock: strata bands, plus dark cracks up close
+  float strata = smoothstep(0.3, 0.55, fract(h * 0.38 + 1.4 * d1 + 0.6 * d2));
+  vec3 rock = mix(vec3(0.30, 0.28, 0.26), vec3(0.49, 0.45, 0.40), 0.5 + 0.5 * d2 + (strata - 0.5) * 0.35 * f2);
+  rock *= 0.85 + 0.16 * d3 * f3 + 0.12 * d4 * f4 + 0.08 * d5 * f5;
+  rock *= 1.0 - 0.3 * smoothstep(0.05, 0.0, abs(d3)) * f3 * rocky;
+  // sand: fine grain and wind ripples
+  vec3 sand = mix(vec3(0.58, 0.52, 0.38), vec3(0.70, 0.64, 0.50), 0.5 + 0.5 * d2);
+  sand *= 0.92 + 0.1 * sin(dot(p, vec4(2.1, 1.3, -1.7, 0.9)) + 3.0 * d2) * f3 + 0.08 * d4 * f4;
+  vec3 snow = vec3(0.92, 0.94, 0.98) * (0.95 + 0.05 * d3);
+  vec3 alb = mix(grass, sand, sandy);
+  alb = mix(alb, rock, rocky);
+  alb = mix(alb, snow, snowy);
   if (uAnaTint > 0.5) { float an = dot(n, uA); alb = mix(alb, an > 0.0 ? vec3(0.95, 0.62, 0.30) : vec3(0.32, 0.70, 0.95), min(1.0, abs(an) * 2.2) * 0.75); }
+
   float sunEl = dot(uSun, up);
-  float dif = max(dot(n, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
+  float dif = max(dot(nb, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
   float sh = 1.0;
-  if (withShadow && dif > 0.0 && uShadows > 0.5) sh = softShadow(p + n * 0.06, uSun);
+  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) sh = softShadow(p + n * 0.08, uSun);
+  float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
-  vec3 sunCol = mix(vec3(1.0, 0.55, 0.32), vec3(1.0, 0.95, 0.86), smoothstep(0.0, 0.35, sunEl));
-  vec3 amb = mix(vec3(0.018, 0.022, 0.045), vec3(0.26, 0.34, 0.48), day);
-  return alb * (sunCol * dif * sh * 1.35 + amb * (0.55 + 0.45 * slope));
+  vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
+  vec3 sky = mix(vec3(0.012, 0.016, 0.035), vec3(0.17, 0.25, 0.38), day);
+  vec3 bounce = alb * vec3(0.9, 0.8, 0.6) * 0.14 * day;
+  float skyVis = 0.5 + 0.5 * dot(nb, up);
+  return alb * (sunCol * dif * sh * 1.6 + (sky * skyVis + bounce) * ao * ao);
 }
 
 vec3 applyFog(vec3 col, vec4 upEye, float t) {
-  return mix(col, horizonColor(upEye), 1.0 - exp(-t * 0.0032));
+  return mix(col, horizonColor(upEye) * 0.92, 1.0 - exp(-t * 0.0019));
 }
 
 vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
@@ -216,8 +244,12 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
                   sin(p.z * 0.82 + uTime * 0.9), sin(p.w * 0.64 - uTime * 1.2));
   tng += 0.5 * vec4(sin(p.y * 1.9 + uTime * 2.1), sin(p.w * 2.3 + uTime * 1.7),
                     sin(p.x * 2.1 - uTime * 1.9), sin(p.z * 1.7 + uTime * 2.3));
+  vec4 gw1, gw2;
+  detail(p + vec4(uTime * 0.31, -uTime * 0.23, uTime * 0.17, uTime * 0.27), 0.45, gw1);
+  detail(p - vec4(uTime * 0.52, uTime * 0.41, -uTime * 0.36, uTime * 0.29), 1.4, gw2);
+  tng = tng * 0.012 + gw1 * 0.05 + gw2 * 0.018 * (1.0 - smoothstep(10.0, 40.0, tw));
   tng -= up * dot(tng, up);
-  vec4 wn = normalize(up + tng * 0.025);
+  vec4 wn = normalize(up + tng);
   float fres = 0.03 + 0.97 * pow(1.0 - max(dot(-rd, wn), 0.0), 5.0);
   vec4 rr = reflect(rd, wn);
   vec3 refl = skyColor(rr, up);
@@ -265,7 +297,8 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
 }
 
 vec3 post(vec3 c) {
-  c = 1.0 - exp(-c * 1.15);
+  c *= 0.92;
+  c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0);   // ACES fit
   return pow(c, vec3(1.0 / 2.2));
 }
 `;
@@ -317,7 +350,7 @@ void main() {
   }
   // depth is stored in 8 bits, so ignore one-step jumps; real silhouettes jump much further
   float edge = smoothstep(0.012, 0.06, e);
-  float tone = smoothstep(0.14, 0.35, ec) * 0.3;
+  float tone = smoothstep(0.2, 0.45, ec) * 0.25;
   float op;
   if (s0.a > 0.999) {
     vec3 g = (vec3(c) + 0.5) / uM * 2.0 - 1.0;
@@ -364,4 +397,24 @@ void main() {
     col = acc.rgb + (1.0 - acc.a) * bg;
   }
   outColor = vec4(col, 1.0);
+}`;
+
+// Upscale the internal render to the screen with contrast-adaptive sharpening (after AMD's CAS).
+export const UPSCALE_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uScene;
+uniform vec2 uSrc;          // internal render size
+uniform float uSharp;       // 0..1
+in vec2 vUV;
+out vec4 outColor;
+void main() {
+  vec2 uv = vUV * 0.5 + 0.5, px = 1.0 / uSrc;
+  vec3 c = texture(uScene, uv).rgb;
+  vec3 n = texture(uScene, uv + vec2(0.0, px.y)).rgb, s = texture(uScene, uv - vec2(0.0, px.y)).rgb;
+  vec3 e = texture(uScene, uv + vec2(px.x, 0.0)).rgb, w = texture(uScene, uv - vec2(px.x, 0.0)).rgb;
+  vec3 mn = min(c, min(min(n, s), min(e, w))), mx = max(c, max(max(n, s), max(e, w)));
+  vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
+  vec3 wt = -amp / mix(8.0, 4.6, uSharp);
+  vec3 col = (c + (n + s + e + w) * wt) / (1.0 + 4.0 * wt);
+  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;

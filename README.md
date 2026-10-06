@@ -25,13 +25,15 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 | <kbd>V</kbd> | slice view ↔ 4D eye |
 | <kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd> | time slower / faster · pause |
 | <kbd>X</kbd> | tint slopes by the way they climb in ana |
-| <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>G</kbd> | resolution · shadows |
+| <kbd>0</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>G</kbd> | automatic / fixed resolution · shadows |
 | <kbd>H</kbd> | help |
 
 ## How it works
 - **Terrain:** 4D value noise sampled on a *cubed 3-sphere*: 8 cubic charts, one per tesseract cell. It's generated at load time in 8 web workers and stored in a 3D texture.
 - **Shared height lookups:** the shader and the physics use the same cubic B-spline lookup. Neighbouring charts are blended across seams, so what you see is exactly what you walk on.
-- **Rendering:** sphere-traced in GLSL (WebGL 2). Coarse steps use a cheap, lifted surface, and only rays near the ground evaluate the smooth one.
+- **One fetch per step:** the atlas is pre-smoothed with the cubic B-spline kernel, so a single hardware-trilinear fetch per ray-march step tracks the smooth surface. The median difference is about 1 cm.
+- **Detail without geometry:** bump-mapped normals and albedo variation come from a tileable 3D gradient-noise texture, sampled through two different projections of the 4D point. That way no 4D direction leaves the pattern constant.
+- **Resolution:** dynamic resolution holds about 60 fps, and a contrast-adaptive sharpening pass upscales the image to full screen resolution.
 - **The 4D eye:** renders a 64³ retina into a 3D texture, layer by layer, then volume-renders it.
 
 No build step: plain ES modules. To run locally, serve the folder with any static server.
