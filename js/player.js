@@ -75,6 +75,22 @@ export class Player {
     this.settleFrame();
   }
 
+  // Turn smoothly so that forward points along the horizontal unit vector dir. Returns true when aligned.
+  turnToward(dir, maxAngle) {
+    const F = this.F;
+    const c = Math.max(-1, Math.min(1, dot(F, dir)));
+    const phi = Math.acos(c);
+    if (phi < 0.004) return true;
+    let W = sub(dir, scale(F, c));
+    W = len(W) > 1e-9 ? norm(W) : this.R;
+    const st = Math.min(phi, maxAngle), cs = Math.cos(st) - 1, sn = Math.sin(st);
+    const rot = v => { const vf = dot(v, F), vw = dot(v, W);
+      return add(v, add(scale(add(scale(F, vf), scale(W, vw)), cs), scale(sub(scale(W, vf), scale(F, vw)), sn))); };
+    this.F = rot(this.F); this.R = rot(this.R); this.A = rot(this.A);
+    this.settleFrame();
+    return st === phi;
+  }
+
   update(dt, input) {
     const u = this.up();
     const wish = add(add(scale(this.F, input.fwd), scale(this.R, input.right)), scale(this.A, input.ana));

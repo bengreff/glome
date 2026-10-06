@@ -15,10 +15,11 @@
 <canvas id="overlay"></canvas>
 
 <div class="hud" id="hud" hidden>
-  <div class="title"><span class="w">Hoop</span> <span id="mode">Slice view</span></div>
+  <div class="title"><span class="w">Hoop</span> <span id="mode">Map view</span></div>
   <div id="where"></div>
   <div id="alt"></div>
   <div id="sun"></div>
+  <div id="target"></div>
   <div class="dim"><span id="clock"></span> · <span id="fps"></span></div>
 </div>
 
@@ -33,16 +34,18 @@
     <dt>mouse</dt><dd>turn left and right, look up and down</dd>
     <dt>right-drag or <kbd>Alt</kbd>+mouse</dt><dd>turn toward ana (left–right) · twist (up–down)</dd>
     <dt><kbd>Z</kbd> <kbd>C</kbd></dt><dd>turn toward kata / ana from the keyboard</dd>
-    <dt><kbd>V</kbd></dt><dd>switch between the slice view and the 4D eye</dd>
+    <dt><kbd>V</kbd></dt><dd>switch between the map and the full slice view (<kbd>Shift</kbd>+<kbd>V</kbd>: the old 4D-eye cube)</dd>
+    <dt><kbd>M</kbd> <kbd>R</kbd></dt><dd>map style: floor + shells · stacked floors · map camera: behind you / first person</dd>
+    <dt><kbd>B</kbd> <kbd>F</kbd> <kbd>N</kbd></dt><dd>next target · turn to face it · drop a marker here</dd>
     <dt><kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd></dt><dd>slow down / speed up time · pause</dd>
     <dt><kbd>T</kbd></dt><dd>planet spin: double or isoclinic</dd>
     <dt><kbd>X</kbd></dt><dd>tint slopes by which way they climb: warm toward ana, cool toward kata</dd>
     <dt><kbd>0</kbd> <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> <kbd>G</kbd></dt><dd>automatic / fixed resolution · shadows on/off</dd>
-    <dt><kbd>M</kbd> <kbd>O</kbd> <kbd>IJKL</kbd></dt><dd>4D eye: retina resolution · auto-rock · rotate the cube</dd>
+    <dt><kbd>Shift</kbd>+<kbd>M</kbd> <kbd>O</kbd> <kbd>IJKL</kbd></dt><dd>4D-eye cube: retina resolution · auto-rock · rotate</dd>
   </dl>
   <h2>What you are seeing</h2>
   <p><b>Slice view</b> is the 3D cross-section of the 4D world through your eyes, the way a 3D visitor would see it. Turning toward ana sweeps the slice through the landscape. Lighting and shadows are computed in full 4D, so you will see shadows cast by hills that are beside you in ana and not in the slice at all.</p>
-  <p><b>The 4D eye</b> is what a creature native to this world sees: its retina is three-dimensional. The cube is that retina, with forward through its centre, right and up across it, and ana along its depth. Opaque regions mark edges and silhouettes, so you can see the whole scene at once.</p>
+  <p><b>The map</b> (the default view) puts you inside the ground itself. Your three walking directions — forward, right and ana — are its three axes, so everything you can walk to is on screen; up on the screen is ana. The floor under you is an ordinary topographic map of exactly the ground your slice view shows, and the floors above and below it are the neighbouring slices, 18 m apart in ana. <kbd>Q</kbd>/<kbd>E</kbd> step you between them; turning toward ana tilts the whole stack. Height, the one direction the map leaves out, is shown by colour and contour lines.</p>
   <p>The ground is a 3-sphere: walk straight in any direction and you come back to where you started, about 1.6 km later. The planet spins in two planes at once, so there are no poles and the days are irregular.</p>
 </section>
 

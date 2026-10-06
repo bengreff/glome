@@ -418,3 +418,162 @@ void main() {
   vec3 col = (c + (n + s + e + w) * wt) / (1.0 + 4.0 * wt);
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
+
+// MAP VIEW: a 3D map of the ground you can stand inside. Its three axes are your three walking directions
+// (forward, right, ana). Map points are geodesic normal coordinates around you (the exponential map), so
+// straight lines from you are straight walks on the planet. Height, the one direction not shown, is encoded
+// by nested contour shells and colour.
+export const MAP_FRAG = COMMON + `
+uniform vec2 uRes;
+uniform float uFov;
+uniform vec4 uU0;              // up at the player
+uniform vec4 uMF, uMR, uMA;    // map axes at the player: forward, right, ana
+uniform float uPH;             // ground height under the player (m above sea)
+uniform int uStyle;            // 0 floor + contour shells, 1 stacked floors
+uniform vec3 uCam;             // camera position in map coordinates (metres)
+uniform vec3 uCamF, uCamR, uCamU;
+uniform vec4 uMark[6];         // landmark map coords (m) and radius
+uniform vec3 uMarkCol[6];
+uniform int uMarkN, uTarget;
+in vec2 vUV;
+out vec4 outColor;
+
+vec3 hyps(float h) {           // hypsometric tint: shore, lowland, upland, rock, snow
+  vec3 c = mix(vec3(0.86, 0.80, 0.58), vec3(0.30, 0.62, 0.30), smoothstep(0.5, 4.0, h));
+  c = mix(c, vec3(0.62, 0.66, 0.30), smoothstep(8.0, 16.0, h));
+  c = mix(c, vec3(0.62, 0.45, 0.30), smoothstep(16.0, 24.0, h));
+  c = mix(c, vec3(0.96, 0.96, 1.0), smoothstep(26.0, 32.0, h));
+  return c;
+}
+vec4 planetPoint(vec3 m) {     // map coordinates -> point on the unit 3-sphere
+  float r = length(m);
+  if (r < 1e-4) return uU0;
+  vec4 D = (m.x * uMF + m.y * uMR + m.z * uMA) / r;
+  float a = r / uPR;
+  return cos(a) * uU0 + sin(a) * D;
+}
+float hMap(vec3 m) { return heightAt(planetPoint(m)); }
+vec3 gradMap(vec3 m) {
+  const float e = 1.2;
+  return vec3(hMap(m + vec3(e, 0, 0)) - hMap(m - vec3(e, 0, 0)),
+              hMap(m + vec3(0, e, 0)) - hMap(m - vec3(0, e, 0)),
+              hMap(m + vec3(0, 0, e)) - hMap(m - vec3(0, 0, e))) / (2.0 * e);
+}
+
+// One horizontal map sheet (constant ana): a topographic map of the ground in that slice.
+vec3 topo(vec3 sp, float tS) {
+  float hs = hMap(sp);
+  float minor = 1.0 - smoothstep(0.0, 0.06 + 0.002 * tS, abs(fract(hs / 2.5 + 0.5) - 0.5) * 2.5);
+  float major = 1.0 - smoothstep(0.0, 0.10 + 0.003 * tS, abs(fract(hs / 10.0 + 0.5) - 0.5) * 10.0);
+  vec3 base = hs < uSea ? mix(vec3(0.20, 0.45, 0.70), vec3(0.08, 0.20, 0.40), smoothstep(0.0, 12.0, uSea - hs)) : hyps(hs);
+  return mix(base, base * 0.45, max(minor * 0.55, major));
+}
+const float FLOOR_GAP = 18.0;
+
+const float SHELL0 = 0.5, SHELL1 = 10.0, SHELL2 = 22.0;   // coast, hills, mountains
+vec3 shellCol(int k) { return k == 0 ? vec3(0.88, 0.80, 0.52) : k == 1 ? vec3(0.36, 0.72, 0.34) : vec3(0.85, 0.66, 0.48); }
+float shellA(int k)   { return k == 0 ? 0.20 : k == 1 ? 0.26 : 0.55; }
+
+void main() {
+  vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
+  vec3 rd = normalize(uCamF + q.x * uCamR + q.y * uCamU);
+  vec3 ro = uCam;
+  const float SMAX = 760.0;
+  vec3 col = vec3(0.0);
+  float T = 1.0, tHit = 1e9;
+
+  // you: a cyan marker at the origin, nose pointing forward
+  {
+    vec3 oc = ro; float b = dot(oc, rd), c = dot(oc, oc) - 0.81, d = b * b - c;
+    vec3 oc2 = ro - vec3(1.3, 0.0, 0.0); float b2 = dot(oc2, rd), c2 = dot(oc2, oc2) - 0.2, d2 = b2 * b2 - c2;
+    if (d > 0.0) tHit = -b - sqrt(d);
+    if (d2 > 0.0) tHit = min(tHit, -b2 - sqrt(d2));
+  }
+
+  if (uStyle == 1 && abs(rd.z) > 1e-4) {
+    // stacked floors are planes: intersect them directly, nearest first, no marching needed
+    float tk[5]; int kk[5]; int n = 0;
+    for (int k = -2; k <= 2; k++) {
+      float tt = (float(k) * FLOOR_GAP - ro.z) / rd.z;
+      if (tt > 0.0 && tt < 260.0) { tk[n] = tt; kk[n] = k; n++; }
+    }
+    for (int a = 0; a < 5; a++) for (int b = 0; b < 4; b++) {
+      if (b + 1 < n && tk[b + 1] < tk[b]) { float x = tk[b]; tk[b] = tk[b + 1]; tk[b + 1] = x; int y = kk[b]; kk[b] = kk[b + 1]; kk[b + 1] = y; }
+    }
+    for (int i = 0; i < 5; i++) {
+      if (i >= n || tk[i] > tHit || T < 0.02) break;
+      int k = kk[i];
+      float a = (k == 0 ? 0.56 : abs(k) == 1 ? 0.34 : 0.22) * (1.0 - smoothstep(60.0, 260.0, tk[i])) * smoothstep(2.0, 8.0, tk[i]);
+      col += T * a * topo(ro + rd * tk[i], tk[i]) * (k == 0 ? 1.0 : 0.85); T *= 1.0 - a;
+    }
+  }
+  float t = 0.6, hPrev = hMap(ro + rd * t);
+  float tSheet = abs(rd.z) > 1e-4 ? -ro.z / rd.z : -1.0;      // the sheet ana = 0: what your slice view shows
+  int lit = 0;
+  for (int i = 0; i < 320; i++) {
+    if (uStyle == 1) break;
+    float ds = 0.5 + 0.011 * t;
+    if (uStyle == 0) {
+      if (tSheet > t && tSheet <= t + ds && tSheet < 260.0) {   // the floor: a topo map of exactly what your slice shows
+        float a = 0.62 * (1.0 - smoothstep(70.0, 260.0, tSheet));
+        col += T * a * topo(ro + rd * tSheet, tSheet); T *= 1.0 - a;
+      }
+    }
+    t += ds;
+    vec3 m = ro + rd * t;
+    if (length(m) > SMAX || t > 900.0) break;
+    if (t > tHit) break;
+    float h = hMap(m);
+    float slope = abs(h - hPrev) / ds;
+    float fade = exp(-t * 0.004);
+    float near = smoothstep(1.5, 6.0, t);                    // keep the space right around the camera clear
+
+    if (uStyle == 0 && h < uSea) {                           // seas: blue volume
+      float k = (0.0035 + 0.0012 * (uSea - h)) * ds;
+      col += T * (1.0 - exp(-k)) * vec3(0.12, 0.36, 0.66);
+      T *= exp(-k);
+    }
+    if (uStyle == 0) {
+      for (int sI = 0; sI < 3; sI++) {
+        float L = sI == 0 ? SHELL0 : sI == 1 ? SHELL1 : SHELL2;
+        if ((hPrev - L) * (h - L) < 0.0) {
+          float edge = 1.0 - smoothstep(0.0, 1.2, slope);    // shells seen edge-on read as outlines
+          float a = clamp(shellA(sI) * (0.45 + 0.8 * edge), 0.0, 0.85) * (sI == 1 ? 0.35 : 0.6) * near * (0.25 + 0.75 * fade);
+          float shade = 0.75;
+          if (lit < 4) {                                     // light the nearest few crossings so shells read as surfaces
+            vec3 n = normalize(gradMap(m) + 1e-6);
+            if (dot(n, rd) > 0.0) n = -n;
+            shade = 0.35 + 0.55 * max(dot(n, normalize(vec3(-0.4, 0.45, 0.8))), 0.0) + 0.25 * pow(1.0 - abs(dot(n, rd)), 2.0);
+            lit++;
+          }
+          vec3 c = shellCol(sI) * shade * (0.45 + 0.55 * fade);
+          col += T * a * c; T *= 1.0 - a;
+        }
+      }
+    }
+    hPrev = h;
+    if (T < 0.02) break;
+  }
+  vec3 bg = mix(vec3(0.05, 0.055, 0.075), rd.z > 0.0 ? vec3(0.12, 0.08, 0.05) : vec3(0.04, 0.075, 0.12), abs(rd.z) * 0.7);
+  if (tHit < 1e8 && T > 0.0) {                               // your marker
+    vec3 p = ro + rd * tHit;
+    vec3 n = normalize(p - (length(p - vec3(1.3, 0, 0)) < 0.6 ? vec3(1.3, 0, 0) : vec3(0)));
+    col += T * vec3(0.35, 0.95, 1.0) * (0.45 + 0.55 * max(dot(n, -rd), 0.0));
+    T = 0.0;
+  }
+  col += T * bg;
+
+  for (int i = 0; i < 6; i++) {                              // landmarks: orbs, seen through terrain as a dimmer x-ray
+    if (i >= uMarkN) break;
+    if (length(uMark[i].xyz) < 8.0) continue;              // you are standing on it
+    vec3 c = uMark[i].xyz - ro; float r = uMark[i].w;
+    float b = dot(rd, c);
+    if (b <= 0.0) continue;
+    float perp2 = max(dot(c, c) - b * b, 0.0);
+    bool tgt = i == uTarget;
+    float pulse = tgt ? 0.75 + 0.25 * sin(uTime * 4.0) : 1.0;
+    col += uMarkCol[i] * exp(-perp2 / (r * r * (tgt ? 9.0 : 4.0))) * (tgt ? 0.6 : 0.3) * pulse;
+    if (perp2 < r * r) col = mix(col, uMarkCol[i], 0.8);
+  }
+  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`;
