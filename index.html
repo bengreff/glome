@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hoop — a walkable 4D world</title>
+<meta name="description" content="A planet in four spatial dimensions you can walk on. Real 4D ray-traced geometry, lighting and shadows.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+<canvas id="overlay"></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div class="title"><span class="w">Hoop</span> <span id="mode">Slice view</span></div>
+  <div id="where"></div>
+  <div id="alt"></div>
+  <div id="sun"></div>
+  <div class="dim"><span id="clock"></span> · <span id="fps"></span></div>
+</div>
+
+<div class="hint" id="hint" hidden>Click to look around · <kbd>H</kbd> for controls</div>
+
+<section class="panel help" id="help" hidden>
+  <h2>Moving in four dimensions</h2>
+  <dl>
+    <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>walk forward, left, back, right</dd>
+    <dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>step kata / ana: the third direction along the ground</dd>
+    <dt><kbd>Space</kbd> <kbd>Shift</kbd></dt><dd>jump (or swim up) · run</dd>
+    <dt>mouse</dt><dd>turn left and right, look up and down</dd>
+    <dt>right-drag or <kbd>Alt</kbd>+mouse</dt><dd>turn toward ana (left–right) · twist (up–down)</dd>
+    <dt><kbd>Z</kbd> <kbd>C</kbd></dt><dd>turn toward kata / ana from the keyboard</dd>
+    <dt><kbd>V</kbd></dt><dd>switch between the slice view and the 4D eye</dd>
+    <dt><kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd></dt><dd>slow down / speed up time · pause</dd>
+    <dt><kbd>T</kbd></dt><dd>planet spin: double or isoclinic</dd>
+    <dt><kbd>X</kbd></dt><dd>tint slopes by which way they climb: warm toward ana, cool toward kata</dd>
+    <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> <kbd>G</kbd></dt><dd>render resolution · shadows on/off</dd>
+    <dt><kbd>M</kbd> <kbd>O</kbd> <kbd>IJKL</kbd></dt><dd>4D eye: retina resolution · auto-rock · rotate the cube</dd>
+  </dl>
+  <h2>What you are seeing</h2>
+  <p><b>Slice view</b> is the 3D cross-section of the 4D world through your eyes, the way a 3D visitor would see it. Turning toward ana sweeps the slice through the landscape. Lighting and shadows are computed in full 4D, so you will see shadows cast by hills that are beside you in ana and not in the slice at all.</p>
+  <p><b>The 4D eye</b> is what a creature native to this world sees: its retina is three-dimensional. The cube is that retina, with forward through its centre, right and up across it, and ana along its depth. Opaque regions mark edges and silhouettes, so you can see the whole scene at once.</p>
+  <p>The ground is a 3-sphere: walk straight in any direction and you come back to where you started, about 1.6 km later. The planet spins in two planes at once, so there are no poles and the days are irregular.</p>
+</section>
+
+<section class="panel loading" id="loading">
+  <h1><span class="w">Hoop</span></h1>
+  <p>A planet in four spatial dimensions that you can walk on.</p>
+  <div class="bar"><div id="bar"></div></div>
+  <p class="dim">Growing the terrain of a 3-sphere…</p>
+</section>
+
+<section class="panel" id="error" hidden>
+  <h2>This world could not start</h2>
+  <pre id="error-msg"></pre>
+</section>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
