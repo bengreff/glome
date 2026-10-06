@@ -147,7 +147,7 @@ float dayFactor(vec4 up) { return smoothstep(-0.14, 0.18, dot(uSun, up)); }
 vec3 horizonColor(vec4 up) {
   float sunEl = dot(uSun, up);
   float day = dayFactor(up);
-  vec3 hz = mix(vec3(0.025, 0.03, 0.065), vec3(0.66, 0.77, 0.90), day);
+  vec3 hz = mix(vec3(0.06, 0.075, 0.13), vec3(0.66, 0.77, 0.90), day);
   float dusk = exp(-pow((sunEl + 0.02) * 5.5, 2.0));
   return mix(hz, vec3(0.95, 0.52, 0.30), dusk * 0.6);
 }
@@ -155,7 +155,7 @@ vec3 horizonColor(vec4 up) {
 vec3 skyColor(vec4 rd, vec4 up) {
   float el = dot(rd, up);
   float day = dayFactor(up);
-  vec3 zen = mix(vec3(0.006, 0.01, 0.03), vec3(0.16, 0.36, 0.75), day);
+  vec3 zen = mix(vec3(0.02, 0.03, 0.075), vec3(0.16, 0.36, 0.75), day);
   vec3 col = mix(horizonColor(up), zen, pow(clamp(el, 0.0, 1.0), 0.45));
   float sd = max(dot(rd, uSun), 0.0);
   col += vec3(1.0, 0.82, 0.6) * pow(sd, 7.0) * 0.32 * (0.3 + 0.7 * day);
@@ -228,7 +228,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
-  vec3 sky = mix(vec3(0.012, 0.016, 0.035), vec3(0.17, 0.25, 0.38), day);
+  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);   // night: starlight fill
   vec3 bounce = alb * vec3(0.9, 0.8, 0.6) * 0.14 * day;
   float skyVis = 0.5 + 0.5 * dot(nb, up);
   return alb * (sunCol * dif * sh * 1.6 + (sky * skyVis + bounce) * ao * ao);
@@ -254,7 +254,7 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
   vec4 rr = reflect(rd, wn);
   vec3 refl = skyColor(rr, up);
   float day = dayFactor(up);
-  vec3 deep = vec3(0.012, 0.075, 0.11) * (0.15 + 0.85 * day);
+  vec3 deep = vec3(0.012, 0.075, 0.11) * (0.4 + 0.6 * day);
   vec3 under = deep;
   if (tBottom > 0.0) {
     vec3 bottom = shadeTerrain(ro + rd * tBottom, rd, tBottom, false) * vec3(0.55, 0.82, 0.86);
@@ -313,7 +313,7 @@ void main() {
   vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
   vec4 rd = normalize(uF + q.x * uR + q.y * uU);
   float t;
-  vec3 col = post(render(uEye, rd, t));
+  vec3 col = post(render(uEye, rd, t) * mix(2.2, 1.0, dayFactor(normalize(uEye))));
   float vig = 1.0 - 0.25 * dot(vUV * 0.7, vUV * 0.7);
   outColor = vec4(col * vig, 1.0);
 }`;
@@ -327,7 +327,7 @@ void main() {
   float z = ((uLayer + 0.5) / uM * 2.0 - 1.0) * uFov;
   vec4 rd = normalize(uF + vUV.x * uFov * uR + vUV.y * uFov * uU + z * uA);
   float t;
-  vec3 col = post(render(uEye, rd, t));
+  vec3 col = post(render(uEye, rd, t) * mix(2.2, 1.0, dayFactor(normalize(uEye))));
   float depth = t < 0.0 ? 1.0 : min(log(1.0 + t) / log(1.0 + MAXT), 0.995);
   outColor = vec4(col, depth);
 }`;
