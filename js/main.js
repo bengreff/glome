@@ -1,4 +1,4 @@
-import { VERT, SLICE_FRAG, RETINA_FRAG, EDGE_FRAG, VOLUME_FRAG, UPSCALE_FRAG, MAP_FRAG, SKYLINE_FRAG } from './shaders.js';
+import { VERT, SLICE_FRAG, RETINA_FRAG, EDGE_FRAG, VOLUME_FRAG, UPSCALE_FRAG, MAP_FRAG } from './shaders.js';
 import { PLANET_R, SEA, HeightField, prefilter } from './world.js';
 import { Player, vec4 } from './player.js';
 
@@ -33,7 +33,7 @@ function program(fragSrc) {
   p.u = name => (name in locs) ? locs[name] : (locs[name] = gl.getUniformLocation(p, name));
   return p;
 }
-const progSlice = program(SLICE_FRAG), progRetina = program(RETINA_FRAG), progEdge = program(EDGE_FRAG), progVol = program(VOLUME_FRAG), progUp = program(UPSCALE_FRAG), progMap = program(MAP_FRAG), progSky = program(SKYLINE_FRAG);
+const progSlice = program(SLICE_FRAG), progRetina = program(RETINA_FRAG), progEdge = program(EDGE_FRAG), progVol = program(VOLUME_FRAG), progUp = program(UPSCALE_FRAG), progMap = program(MAP_FRAG);
 const vao = gl.createVertexArray();
 
 function tex3D(w, h, d, internal, format, type, filter, data = null) {
@@ -121,7 +121,7 @@ const DAY1 = 300;                       // seconds for one turn in the first rot
 const state = {
   view: 'slice', time: 0, timeScale: 1, paused: false, rotation: 'double',
   shadows: true, retinaM: 64, help: false, anaTint: false,
-  mapStyle: 1, mapChase: true, skylines: true, marks: [], target: 0, facing: false,
+  mapStyle: 1, mapChase: true,
   eyeYaw: 0, eyePitch: 0.3, eyeAuto: true,
 };
 const RATIOS = { double: 1.6180339887, isoclinic: 1 };
@@ -189,10 +189,6 @@ addEventListener('keydown', e => {
       if (e.shiftKey) state.view = state.view === 'eye' ? 'map' : 'eye';
       else state.view = state.view === 'slice' ? 'triptych' : 'slice';
       break;
-    case 'KeyK': if (state.view !== 'eye') state.skylines = !state.skylines; break;
-    case 'KeyB': state.target = (state.target + 1) % state.marks.length; state.facing = false; break;
-    case 'KeyN': dropMarker(); break;
-    case 'KeyF': state.facing = true; break;
     case 'KeyR': state.mapChase = !state.mapChase; break;
     case 'BracketRight': state.timeScale = Math.min(state.timeScale * 2, 256); break;
     case 'BracketLeft': state.timeScale = Math.max(state.timeScale / 2, 1 / 8); break;
@@ -240,75 +236,6 @@ function readInput() {
   };
 }
 
-// ---------- ana skylines ----------
-// Layers of the 4D eye's retina, by ana tilt. Index SKY_CENTER is the slice itself (computed, not drawn).
-const SKY_TILTS = [-26, -16, -8, 0, 8, 16, 26];
-const SKY_CENTER = 3, SKY_COLS = 320;
-const SKY_COLORS = [[0.35, 0.52, 1.0], [0.42, 0.70, 1.0], [0.60, 0.86, 1.0], [1, 1, 1], [1.0, 0.82, 0.50], [1.0, 0.62, 0.32], [0.96, 0.44, 0.26]];
-const SKY_ALPHA = [0.62, 0.78, 0.92, 0, 0.92, 0.78, 0.62];
-const sky = { fbo: gl.createFramebuffer(), tex: null };
-(function makeSky() {
-  sky.tex = gl.createTexture();
-  gl.activeTexture(gl.TEXTURE6);
-  gl.bindTexture(gl.TEXTURE_2D, sky.tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, SKY_COLS, SKY_TILTS.length, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, sky.fbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sky.tex, 0);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.activeTexture(gl.TEXTURE0);
-})();
-function computeSkylines(cam, sun, aspect) {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, sky.fbo);
-  gl.viewport(0, 0, SKY_COLS, SKY_TILTS.length);
-  gl.useProgram(progSky);
-  setWorld(progSky, cam, sun);
-  gl.uniform1f(progSky.u('uCols'), SKY_COLS);
-  gl.uniform1f(progSky.u('uFovX'), FOV * aspect);
-  gl.uniform1fv(progSky.u('uTilt'), new Float32Array(SKY_TILTS.map(d => Math.tan(d * Math.PI / 180)).concat([0])));
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
-}
-
-// ---------- landmarks and navigation ----------
-const MARK_COLORS = { home: [0.95, 0.95, 0.95], summit: [1.0, 0.55, 0.2], deep: [0.3, 0.55, 1.0], lake: [0.35, 0.95, 0.9], antipode: [0.78, 0.5, 1.0], marker: [1.0, 0.86, 0.25] };
-function findLandmarks(rand) {
-  const hf = player.hf, home = player.up();
-  let summit = null, deep = null, lake = null, hs = -1e9, hd = 1e9, ld = -2;
-  for (let k = 0; k < 30000; k++) {
-    const v = vec4.norm([rand() - 0.5, rand() - 0.5, rand() - 0.5, rand() - 0.5]);
-    const h = hf.heightAt(v);
-    if (h > hs) { hs = h; summit = v; }
-    if (h < hd) { hd = h; deep = v; }
-    const c = vec4.dot(v, home);
-    if (h < -2.5 && c > ld && c < Math.cos(60 / PLANET_R)) { ld = c; lake = v; }   // nearest lake at least 60 m away
-  }
-  const marks = [
-    { name: 'Home', n: home, col: MARK_COLORS.home },
-    { name: 'Summit', n: summit, col: MARK_COLORS.summit },
-    { name: 'Deep sea', n: deep, col: MARK_COLORS.deep },
-    { name: 'Antipode', n: vec4.scale(home, -1), col: MARK_COLORS.antipode },
-  ];
-  if (lake) marks.splice(1, 0, { name: 'Lake', n: lake, col: MARK_COLORS.lake });
-  return marks;
-}
-function dropMarker() {
-  const k = state.marks.filter(m => m.dropped).length + 1;
-  const m = { name: 'Marker ' + k, n: player.up(), col: MARK_COLORS.marker, dropped: true };
-  if (state.marks.length >= 6) state.marks.splice(state.marks.findIndex(x => x.dropped), 1);
-  state.marks.push(m);
-}
-// Unit horizontal direction to walk from here toward n, and the walking distance (great-circle metres).
-function headingTo(n) {
-  const u = player.up(), c = Math.max(-1, Math.min(1, vec4.dot(u, n)));
-  const v = vec4.sub(n, vec4.scale(u, c)), l = vec4.len(v);
-  return { dir: l > 1e-9 ? vec4.scale(v, 1 / l) : player.F, dist: Math.acos(c) * PLANET_R };
-}
-// Map coordinates (metres along forward, right, ana) of a point on the planet: the log map at the player.
-function mapCoords(n) {
-  const { dir, dist } = headingTo(n);
-  return [vec4.dot(dir, player.F) * dist, vec4.dot(dir, player.R) * dist, vec4.dot(dir, player.A) * dist];
-}
-
 // ---------- rendering ----------
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -344,21 +271,13 @@ function tiltedCam(cam, deg) {
   const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
   return { ...cam, F: vec4.add(vec4.scale(cam.F, c), vec4.scale(cam.A, s)), A: vec4.sub(vec4.scale(cam.A, c), vec4.scale(cam.F, s)) };
 }
-function drawSlice(cam, sun, x, y, w, h, skylines = false) {
+function drawSlice(cam, sun, x, y, w, h) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
   gl.viewport(x, y, w, h);
   gl.useProgram(progSlice);
   setWorld(progSlice, cam, sun);
   gl.uniform2f(progSlice.u('uRes'), w, h);
   gl.uniform1f(progSlice.u('uFov'), FOV);
-  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, sky.tex); gl.activeTexture(gl.TEXTURE0);
-  gl.uniform1i(progSlice.u('uSky'), 6);
-  gl.uniform1f(progSlice.u('uSkyOn'), skylines ? 1 : 0);
-  gl.uniform1f(progSlice.u('uSkyCols'), SKY_COLS);
-  gl.uniform1f(progSlice.u('uSkyN'), SKY_TILTS.length);
-  gl.uniform1f(progSlice.u('uSkyCenter'), SKY_CENTER);
-  gl.uniform3fv(progSlice.u('uSkyCol'), new Float32Array(SKY_COLORS.flat().concat([1, 1, 1])));
-  gl.uniform1fv(progSlice.u('uSkyA'), new Float32Array(SKY_ALPHA.concat([0])));
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
@@ -386,12 +305,6 @@ function drawMap(cam, sun) {
   gl.uniform3fv(progMap.u('uCamR'), CR);
   gl.uniform3fv(progMap.u('uCamU'), CU);
   state.mapCam = { pos: cp, F: CF, R: CR, U: CU };
-  const mk = new Float32Array(24), mc = new Float32Array(18);
-  state.marks.forEach((m, i) => { const c = mapCoords(m.n); mk.set([...c, i === state.target ? 4.5 : 3.0], 4 * i); mc.set(m.col, 3 * i); });
-  gl.uniform4fv(progMap.u('uMark'), mk);
-  gl.uniform3fv(progMap.u('uMarkCol'), mc);
-  gl.uniform1i(progMap.u('uMarkN'), state.marks.length);
-  gl.uniform1i(progMap.u('uTarget'), state.target);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // inset: the real first-person slice
   const iw = Math.round(scene.w * 0.27), ih = Math.round(iw * 0.62), m = Math.round(scene.w * 0.012);
@@ -537,7 +450,7 @@ const TRIP = 25;   // degrees of ana tilt for the side panels
 function drawTriptych(cam, sun) {
   const W = scene.w, H = scene.h, side = Math.round(W * 0.25), mid = W - 2 * side;
   drawSlice(tiltedCam(cam, -TRIP), sun, 0, 0, side, H);
-  drawSlice(cam, sun, side, 0, mid, H, state.skylines);
+  drawSlice(cam, sun, side, 0, mid, H);
   drawSlice(tiltedCam(cam, TRIP), sun, side + mid, 0, side, H);
   return { side, mid };
 }
@@ -550,42 +463,12 @@ function drawTriptychOverlay(cam, t) {
   octx.fillStyle = 'rgba(110, 175, 255, 0.95)'; octx.fillText(`← turned ${TRIP}° toward kata`, 12 * k, H - 16 * k);
   octx.fillStyle = 'rgba(236, 240, 246, 0.95)'; octx.fillText('your slice', side + 12 * k, H - 16 * k);
   octx.fillStyle = 'rgba(255, 170, 90, 0.95)'; octx.fillText(`turned ${TRIP}° toward ana →`, side + mid + 12 * k, H - 16 * k);
-  drawSliceMarks(cam, side, mid);
-  drawSliceMarks(tiltedCam(cam, -TRIP), 0, side);
-  drawSliceMarks(tiltedCam(cam, TRIP), side + mid, side);
 }
-function drawSkyLegend() {
-  if (!state.skylines) return;
-  const W = overlay.width, k = W / innerWidth;
-  const x0 = W - 252 * k, y0 = 22 * k;
-  octx.fillStyle = 'rgba(11, 14, 20, 0.62)'; octx.fillRect(x0 - 10 * k, y0 - 16 * k, 246 * k, 74 * k);
-  octx.font = `500 ${11 * k}px "IBM Plex Mono", ui-monospace, monospace`;
-  octx.fillStyle = 'rgba(141, 154, 176, 0.95)'; octx.fillText('skylines if you turned… (K hides)', x0, y0);
-  const row = (y, cols, label) => { cols.forEach((c, i) => { octx.fillStyle = `rgb(${c.map(v => Math.round(v * 255)).join(',')})`; octx.fillRect(x0 + i * 22 * k, y, 18 * k, 4 * k); });
-    octx.fillStyle = 'rgba(214, 224, 240, 0.9)'; octx.fillText(label, x0 + 74 * k, y + 5 * k); };
-  row(y0 + 16 * k, [SKY_COLORS[4], SKY_COLORS[5], SKY_COLORS[6]], 'toward ana 8° 16° 26°');
-  row(y0 + 34 * k, [SKY_COLORS[2], SKY_COLORS[1], SKY_COLORS[0]], 'toward kata 8° 16° 26°');
-}
-
 const MAP_STYLES = ['floor + shells', 'stacked floors'];
 function drawMapOverlay(inset) {
   const W = overlay.width, H = overlay.height, k = W / innerWidth, aspect = W / H;
   octx.font = `500 ${12 * k}px "IBM Plex Mono", ui-monospace, monospace`;
   octx.textAlign = 'center';
-  const mc = state.mapCam;
-  state.marks.forEach((mk, i) => {
-    const c0 = mapCoords(mk.n), dist = Math.hypot(...c0);
-    if (dist < 8) return;
-    const d = c0.map((v, j) => v - mc.pos[j]);
-    const z = d[0] * mc.F[0] + d[1] * mc.F[1] + d[2] * mc.F[2];
-    if (z <= 0.5) return;
-    const x = (d[0] * mc.R[0] + d[1] * mc.R[1] + d[2] * mc.R[2]) / z / (MAP_FOV * aspect);
-    const y = (d[0] * mc.U[0] + d[1] * mc.U[1] + d[2] * mc.U[2]) / z / MAP_FOV;
-    if (Math.abs(x) > 1.05 || Math.abs(y) > 1.05) return;
-    const X = (x * 0.5 + 0.5) * W, Y = (0.5 - y * 0.5) * H;
-    octx.fillStyle = i === state.target ? 'rgba(255, 236, 170, 0.98)' : 'rgba(225, 232, 244, 0.85)';
-    octx.fillText(`${mk.name} · ${Math.round(dist)} m`, X, Y - 16 * k);
-  });
   octx.textAlign = 'left';
   // legend
   const x0 = 16 * k, y0 = H - 128 * k, bw = 220 * k;
@@ -608,41 +491,6 @@ function drawMapOverlay(inset) {
   octx.strokeRect(W - (inset.iw + inset.m) * s2, H - (inset.ih + inset.m) * s2, inset.iw * s2, inset.ih * s2);
   octx.fillText('what you actually see (slice)', W - (inset.iw + inset.m) * s2, H - (inset.ih + inset.m) * s2 - 8 * k);
 }
-function drawSliceMarks(cam, x0 = 0, w0 = overlay.width) {
-  state.marks.forEach((mk, i) => { if (i !== state.target) drawSliceTarget(cam, mk, false, x0, w0); });
-  if (state.marks[state.target]) drawSliceTarget(cam, state.marks[state.target], true, x0, w0);
-}
-function drawSliceTarget(cam, mk, isTarget, x0 = 0, w0 = overlay.width) {
-  const { dir, dist } = headingTo(mk.n);
-  if (dist < 6) return;
-  const W = w0, H = overlay.height, k = overlay.width / innerWidth, aspect = W / H;
-  const f = vec4.dot(dir, cam.F), r = vec4.dot(dir, cam.R), u = vec4.dot(dir, cam.U);
-  const Fh = vec4.norm(vec4.sub(cam.F, vec4.scale(cam.up, vec4.dot(cam.F, cam.up))));   // this view's level forward
-  const ana = Math.atan2(vec4.dot(dir, cam.A), Math.hypot(vec4.dot(dir, Fh), vec4.dot(dir, cam.R))) * 180 / Math.PI;
-  let x = f > 0 ? (r / f) / (FOV * aspect) : (r >= 0 ? 2 : -2), y = f > 0 ? (u / f) / FOV : 0;
-  const off = Math.abs(x) > 0.95 || Math.abs(y) > 0.95;
-  if (off && !isTarget) return;
-  x = Math.max(-0.95, Math.min(0.95, x)); y = Math.max(-0.9, Math.min(0.9, y));
-  const X = x0 + (x * 0.5 + 0.5) * W, Y = (0.5 - y * 0.5) * H;
-  const rgb = mk.col.map(c => Math.round(c * 255)).join(',');
-  octx.strokeStyle = `rgba(${rgb},${isTarget ? 1 : 0.7})`;
-  octx.lineWidth = (isTarget ? 2 : 1.4) * k;
-  octx.beginPath(); octx.arc(X, Y, (isTarget ? 9 : 6) * k, 0, 7); octx.stroke();
-  // ana tick: how far the landmark leans out of your slice (orange up = toward ana, blue down = toward kata)
-  const tick = Math.max(-40, Math.min(40, ana)) * 0.9 * k;
-  octx.strokeStyle = ana >= 0 ? 'rgba(255, 170, 90, 0.95)' : 'rgba(110, 175, 255, 0.95)';
-  octx.lineWidth = 3 * k;
-  octx.beginPath(); octx.moveTo(X, Y - (isTarget ? 11 : 8) * k); octx.lineTo(X, Y - (isTarget ? 11 : 8) * k - Math.abs(tick)); octx.stroke();
-  if (!isTarget) return;
-  octx.font = `500 ${12 * k}px "IBM Plex Mono", ui-monospace, monospace`;
-  octx.fillStyle = 'rgba(236, 240, 246, 0.95)'; octx.textAlign = x > 0.6 ? 'right' : 'left';
-  const dx = x > 0.6 ? -14 * k : 14 * k;
-  octx.fillText(`${mk.name} ${Math.round(dist)} m`, X + dx, Y - 2 * k);
-  octx.fillStyle = 'rgba(141, 154, 176, 0.95)';
-  octx.fillText(`${Math.abs(ana) < 2 ? 'in your slice' : Math.round(Math.abs(ana)) + '° toward ' + (ana > 0 ? 'ana' : 'kata')}${off ? ' · off screen' : ''}`, X + dx, Y + 13 * k);
-  octx.textAlign = 'left';
-}
-
 // ---------- HUD ----------
 const fmt = (x, d = 0) => x.toFixed(d);
 let hudTimer = 0, fpsAcc = 0, fpsN = 0;
@@ -658,8 +506,6 @@ function updateHUD(dt, cam, sun) {
   const anaLean = Math.atan2(sa, Math.hypot(sf, sr)) * 180 / Math.PI;
   const ahead = Math.atan2(sr, sf) * 180 / Math.PI;
   $('mode').textContent = { slice: 'Slice view', triptych: 'Triptych: kata · slice · ana', map: 'Map view', eye: '4D eye (cube)' }[state.view];
-  const mk = state.marks[state.target];
-  if (mk) { const { dist } = headingTo(mk.n); $('target').textContent = `→ ${mk.name} · ${Math.round(dist)} m · B next · F face · N drop marker`; }
   $('where').textContent = `η ${fmt(h.eta)}°  ξ₁ ${fmt(h.xi1)}°  ξ₂ ${fmt(h.xi2)}°`;
   $('alt').textContent = player.swimming ? 'swimming' : `${fmt(player.altitude(), 1)} m above sea`;
   $('sun').textContent = el > -2
@@ -695,10 +541,6 @@ function frame(now) {
     if (keys.has('KeyK')) state.eyePitch = Math.max(-1.2, state.eyePitch - dt);
   }
 
-  if (state.facing && state.marks[state.target]) {
-    const done = player.turnToward(headingTo(state.marks[state.target].n).dir, 2.6 * dt);
-    if (done) state.facing = false;
-  }
   const input = readInput();
   const sub = 3;
   for (let i = 0; i < sub; i++) player.update(dt / sub, input);
@@ -708,8 +550,7 @@ function frame(now) {
   resize();
   const cam = player.camera(), sun = sunDir(state.time);
   octx.clearRect(0, 0, overlay.width, overlay.height);
-  if (state.view === 'slice' || state.view === 'triptych') computeSkylines(cam, sun, state.view === 'slice' ? scene.w / scene.h : (scene.w * 0.5) / scene.h);
-  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h, state.skylines); drawAnaGauge(); drawSliceMarks(cam); drawSkyLegend(); }
+  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h); drawAnaGauge(); }
   else if (state.view === 'triptych') { const t = drawTriptych(cam, sun); drawTriptychOverlay(cam, t); }
   else if (state.view === 'map') { const r = drawMap(cam, sun); drawMapOverlay(r); }
   else { const r = drawEye(cam, sun, simT); drawCubeOverlay(r.cv, r); }
@@ -731,8 +572,6 @@ function frame(now) {
     let seed = 20261006;
     const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
     player.spawn(rand);
-    state.marks = findLandmarks(rand);
-    state.target = 1;
     // start in the morning: sun about 20° up and rising
     const up = player.up();
     for (let t = 0; t < 20000; t += 0.5) {
@@ -744,7 +583,7 @@ function frame(now) {
     $('hint').hidden = false;
     if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches)
       $('hint').textContent = 'Hoop needs a keyboard and mouse to explore.';
-    window.__hoop = { state, player, keys, sunDir, dyn, mapCoords, headingTo };   // handle for debugging from the console
+    window.__hoop = { state, player, keys, sunDir, dyn };   // handle for debugging from the console
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

@@ -6,12 +6,8 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 
 ## What is real here
 - **The ground is a 3-sphere.** You can walk forward, sideways *and* along a third horizontal direction (ana/kata). Walk straight in any direction and you return to where you started, about 1.6 km later.
-- **The map (default view).** The ground of a 4D world is three-dimensional, so its map is a 3D space, and you stand inside it.
-  - **Axes:** your three walking directions (forward, right, ana) are its axes, and up on the screen is ana.
-  - **Floors:** the floor under you is an ordinary topographic map of exactly the ground your slice view shows. The floors above and below are the neighbouring slices, 18 m apart in ana.
-  - **Moving:** <kbd>Q</kbd>/<kbd>E</kbd> step you between floors, and turning toward ana tilts the stack.
-  - **Targets:** landmarks float in this space. Press <kbd>F</kbd> to turn until your target lands on your floor, then walk to it.
-- **Slice view.** The 3D cross-section through your eyes, which is what a 3D visitor would perceive. It's shown in the corner of the map, or full screen with <kbd>V</kbd>.
+- **Slice view (default).** The 3D cross-section through your eyes, which is what a 3D visitor would perceive. Turning toward ana sweeps the slice through the landscape. A gauge in the corner shows the ground along your ana line, the one direction the slice never shows.
+- **Triptych** (<kbd>V</kbd>). A 4D creature's retina is three-dimensional (right, up, ana); your slice is its middle layer. The triptych shows three of its layers side by side: kata 25° · slice · ana 25°.
 - **Shadows from places you can't see.** Lighting uses the full 4D sun direction, so hills that lie beside you in ana, outside the slice, still cast shadows into it.
 - **No poles, irregular days.** The planet spins in two planes at once (a double rotation), so every place gets day and night, and day lengths vary. Press <kbd>T</kbd> for an isoclinic spin, where both rates are equal.
 - **Stars are points on a 3-sphere of directions.** In the slice view you only see the ones close to your slice, so they fade in and out as you turn through ana.
@@ -25,9 +21,8 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 | mouse | turn, look up and down |
 | right-drag or <kbd>Alt</kbd>+mouse | turn toward ana · twist |
 | <kbd>Z</kbd> <kbd>C</kbd> | turn toward kata / ana |
-| <kbd>V</kbd> | map ↔ full slice view |
+| <kbd>V</kbd> <kbd>Shift</kbd>+<kbd>V</kbd> | slice ↔ triptych · experimental map / eye cube |
 | <kbd>M</kbd> <kbd>R</kbd> | map style (stacked floors / floor + contour shells) · map camera |
-| <kbd>B</kbd> <kbd>F</kbd> <kbd>N</kbd> | next target · face it · drop a marker |
 | <kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd> | time slower / faster · pause |
 | <kbd>X</kbd> | tint slopes by the way they climb in ana |
 | <kbd>0</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>G</kbd> | automatic / fixed resolution · shadows |
