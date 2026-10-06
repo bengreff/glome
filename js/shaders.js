@@ -307,15 +307,37 @@ vec3 post(vec3 c) {
 export const SLICE_FRAG = COMMON + `
 uniform vec2 uRes;
 uniform float uFov;
+uniform sampler2D uSky;
+uniform float uSkyOn, uSkyCols, uSkyN, uSkyCenter;
+uniform vec3 uSkyCol[8];
+uniform float uSkyA[8];
 in vec2 vUV;
 out vec4 outColor;
+float skyAt(int col, int k) { vec4 e = texelFetch(uSky, ivec2(col, k), 0); return (e.r + e.g / 255.0) * 4.0 - 2.0; }
 void main() {
   vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
   vec4 rd = normalize(uF + q.x * uR + q.y * uU);
   float t;
   vec3 col = post(render(uEye, rd, t) * mix(2.2, 1.0, dayFactor(normalize(uEye))));
   float vig = 1.0 - 0.25 * dot(vUV * 0.7, vUV * 0.7);
-  outColor = vec4(col * vig, 1.0);
+  col *= vig;
+  if (uSkyOn > 0.5) {
+    int cols = int(uSkyCols);
+    float fx = (vUV.x * 0.5 + 0.5) * uSkyCols - 0.5;
+    int c0 = clamp(int(floor(fx)), 0, cols - 1), c1 = min(c0 + 1, cols - 1);
+    float f = clamp(fx - floor(fx), 0.0, 1.0);
+    float pix = 2.0 * uFov / uRes.y;                       // vertical retina units per pixel
+    float center = mix(skyAt(c0, int(uSkyCenter)), skyAt(c1, int(uSkyCenter)), f);
+    for (int k = 0; k < 8; k++) {
+      if (k >= int(uSkyN) || k == int(uSkyCenter)) continue;
+      float sk = mix(skyAt(c0, k), skyAt(c1, k), f);
+      if (sk < -1.95 || sk > 1.95) continue;
+      float d = abs(q.y - sk) / pix;
+      float a = (1.0 - smoothstep(0.7, 1.7, d)) * uSkyA[k] * (sk < center ? 0.55 : 1.0);
+      col = mix(col, uSkyCol[k], a);
+    }
+  }
+  outColor = vec4(col, 1.0);
 }`;
 
 // 4D eye: one layer of the creature's 3D retina. Layers step through the ana direction.
@@ -576,4 +598,31 @@ void main() {
     if (perp2 < r * r) col = mix(col, uMarkCol[i], 0.8);
   }
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`;
+
+// ANA SKYLINES. A 4D eye's retina is 3D: right, up and ana tilt. The slice view is its middle layer.
+// For a few other layers (tilted toward ana or kata) we find the true skyline, the top edge of the ground,
+// in every screen column by binary search on the vertical retina coordinate, and draw it over the slice.
+export const SKYLINE_FRAG = COMMON + `
+uniform float uCols, uFovX;
+uniform float uTilt[8];       // tan(ana tilt) per layer
+out vec4 outColor;
+bool ground(vec4 rd) {
+  float Rw = uPR + uSea;
+  float b = dot(uEye, rd), c = dot(uEye, uEye) - Rw * Rw;
+  if (c < 0.0) return true;
+  if (b < 0.0 && b * b - c > 0.0) return true;            // the sea surface counts as ground
+  return marchTerrain(uEye, rd) > 0.0;
+}
+void main() {
+  int layer = int(gl_FragCoord.y);
+  float x = ((gl_FragCoord.x) / uCols * 2.0 - 1.0) * uFovX;
+  float z = uTilt[layer];
+  float lo = -2.0, hi = 2.0;
+  for (int i = 0; i < 11; i++) {
+    float mid = 0.5 * (lo + hi);
+    if (ground(normalize(uF + x * uR + mid * uU + z * uA))) lo = mid; else hi = mid;
+  }
+  float v = clamp((0.5 * (lo + hi) + 2.0) / 4.0, 0.0, 1.0) * 255.0;
+  outColor = vec4(floor(v) / 255.0, fract(v), 1.0, 1.0);
 }`;
