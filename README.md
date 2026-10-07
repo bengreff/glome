@@ -39,6 +39,8 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 - **One fetch per step:** the atlas is pre-smoothed with the cubic B-spline kernel, so a single hardware-trilinear fetch per ray-march step tracks the smooth surface. The median difference is about 1 cm.
 - **Detail without geometry:** bump-mapped normals and albedo variation come from a tileable 3D gradient-noise texture, sampled through two different projections of the 4D point. That way no 4D direction leaves the pattern constant.
 - **Resolution:** dynamic resolution holds about 60 fps, and a contrast-adaptive sharpening pass upscales the image to full screen resolution.
+- **Radar:** each frame the heights inside the ball are baked into an 80³ half-float 3D texture (one cheap pass), then the ball is ray-marched through that texture, one fetch per step. Summits are found on the CPU (local maxima on a coarse grid, then hill-climbed), and picking in the radar marches the same heights on the CPU.
+- **Boulders:** 4D balls, intersected analytically per pixel (the nearest 32, faded out before they leave the list), with soft 4D shadows from their closest approach to the sun ray.
 - **The 4D eye:** renders a 64³ retina into a 3D texture, layer by layer, then volume-renders it.
 
 No build step: plain ES modules. To run locally, serve the folder with any static server.

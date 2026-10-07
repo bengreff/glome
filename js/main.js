@@ -487,6 +487,7 @@ function pickRadar([x, y]) {
   let best = null, bd = 16 * k;
   for (const m of radar.marks) { const d = Math.hypot(m.x - x, m.y - y); if (d < bd) { bd = d; best = m; } }
   if (best) return { n: best.n, h: best.h, kind: 'summit' };
+  for (const r of radar.rocks || []) if (Math.hypot(r.x - x, r.y - y) < Math.max(r.rad, 5 * k)) return { n: r.b.n, h: r.b.r, kind: 'boulder', b: r.b };
   const { rect, cv, B, RB, discN, u } = last;
   const qx = ((x - rect.x) / rect.s * 2 - 1) * RADAR_FOV, qy = -((y - rect.y) / rect.s * 2 - 1) * RADAR_FOV;
   const rd = norm3([0, 1, 2].map(i => cv.F[i] + qx * cv.R[i] + qy * cv.U[i])), ro = cv.pos;
@@ -508,7 +509,7 @@ function pickRadar([x, y]) {
 }
 function faceMarkAt(p) {
   const hit = pickRadar(p);
-  if (hit && headingTo(hit.n).dist > 2) { state.facing = hit.n; state.facingWhat = hit.kind === 'summit' ? `summit ${Math.round(hit.h)} m` : hit.kind === 'mountain' ? 'mountain' : hit.h < SEA ? 'water' : 'this ground'; }
+  if (hit && headingTo(hit.n).dist > 2) { state.facing = hit.n; state.facingWhat = hit.kind === 'summit' ? `summit ${Math.round(hit.h)} m` : hit.kind === 'boulder' ? 'boulder' : hit.kind === 'mountain' ? 'mountain' : hit.h < SEA ? 'water' : 'this ground'; }
 }
 
 const hypsCSS = h => h < 0 ? [70, 140, 220] : h < 4 ? [220, 205, 150] : h < 12 ? [110, 190, 100] : h < 24 ? [200, 175, 90] : h < 30 ? [215, 160, 120] : [245, 245, 255];
@@ -556,12 +557,14 @@ function drawRadarOverlay(r, sun) {
   for (const b of boulders.all) {
     if (vec4.dot(b.n, u) < Math.cos(RB / PLANET_R)) continue;
     const m = logMap(b.n, B, u), d = Math.hypot(...m);
-    if (d < RB * 0.97) bs.push({ m, d, r: b.r });
+    if (d < RB * 0.97) bs.push({ m, d, r: b.r, b });
   }
   bs.sort((a, b) => a.d - b.d);
+  radar.rocks = [];
   for (const b of bs.slice(0, 80)) {
     const P = proj(b.m), Pr = proj(b.m.map((v, i) => v + cv.R[i] * b.r)), rad = Math.max(1.6 * k, Math.hypot(Pr[0] - P[0], Pr[1] - P[1]));
-    const cut = Math.abs(dot3(b.m, discN)) < b.r;
+    const cut = Math.abs(vec4.dot(b.b.c, player.A)) < b.r;
+    radar.rocks.push({ x: P[0], y: P[1], rad, b: b.b });
     octx.fillStyle = cut ? 'rgba(235, 228, 215, 0.95)' : 'rgba(160, 155, 148, 0.75)';
     octx.beginPath(); octx.arc(P[0], P[1], rad, 0, 7); octx.fill();
     if (cut) { octx.strokeStyle = '#fff'; octx.lineWidth = 1.4 * k; octx.stroke(); }
@@ -631,9 +634,14 @@ function drawRadarOverlay(r, sun) {
   if (hv) {
     const { dist, dir } = headingTo(hv.n);
     const ana = Math.atan2(vec4.dot(dir, player.A), Math.hypot(vec4.dot(dir, player.F), vec4.dot(dir, player.R))) * 180 / Math.PI;
-    const what = hv.kind === 'summit' ? `summit ${Math.round(hv.h)} m high` : hv.h < SEA ? `water ${Math.round(SEA - hv.h)} m deep` : `ground ${Math.round(hv.h)} m high`;
-    const lines = [`${what} · ${Math.round(dist)} m away`,
-      Math.abs(ana) < 2 ? 'in your slice' : `${Math.round(Math.abs(ana))}° toward ${ana > 0 ? 'ana' : 'kata'} from your slice`, 'click to turn and face it'];
+    const what = hv.kind === 'summit' ? `summit ${Math.round(hv.h)} m high` : hv.kind === 'boulder' ? `boulder, radius ${hv.h.toFixed(1)} m`
+      : hv.h < SEA ? `water ${Math.round(SEA - hv.h)} m deep` : `ground ${Math.round(hv.h)} m high`;
+    let where = Math.abs(ana) < 2 ? 'in your slice' : `${Math.round(Math.abs(ana))}° toward ${ana > 0 ? 'ana' : 'kata'} from your slice`;
+    if (hv.kind === 'boulder') {                            // how much of it your slice cuts: a 3D ball of radius sqrt(r² - a²)
+      const a = Math.abs(vec4.dot(hv.b.c, player.A)), r = hv.b.r;    // distance of its centre from your slice
+      where = a < r ? `your slice cuts it: a ball of radius ${Math.sqrt(r * r - a * a).toFixed(1)} m` : `${(a - r).toFixed(1)} m outside your slice: invisible`;
+    }
+    const lines = [`${what} · ${Math.round(dist)} m away`, where, 'click to turn and face it'];
     octx.font = mono(500, 11); octx.textAlign = 'left';
     const [hx, hy] = radar.hover;
     octx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; octx.lineWidth = 1.5 * k;
