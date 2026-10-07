@@ -125,6 +125,23 @@ const state = {
   eyeYaw: 0, eyePitch: 0.3, eyeAuto: true,
 };
 const RATIOS = { double: 1.6180339887, isoclinic: 1 };
+// Remember view settings between visits (a convenience; everything works without storage).
+const SAVED = ['view', 'shadows', 'anaTint', 'rotation', 'eyeAuto'];
+const RADAR_SAVED = ['big', 'range', 'compass', 'layers', 'hidden', 'yaw', 'el'];
+try {
+  const s = JSON.parse(localStorage.getItem('hoop.settings') || '{}');
+  for (const key of SAVED) if (key in s) state[key] = s[key];
+  for (const key of RADAR_SAVED) if (s.radar && key in s.radar) state.radar[key] = s.radar[key];
+  state.radar.grow = state.radar.big ? 1 : 0;
+} catch {}
+function saveSettings() {
+  try {
+    const s = Object.fromEntries(SAVED.map(key => [key, state[key]]));
+    s.radar = Object.fromEntries(RADAR_SAVED.map(key => [key, state.radar[key]]));
+    localStorage.setItem('hoop.settings', JSON.stringify(s));
+  } catch {}
+}
+setInterval(saveSettings, 2000);
 
 // The planet double-rotates; in the planet's own frame the sun circles in two planes at once.
 function sunDir(t) {
@@ -266,7 +283,7 @@ const RADAR_LAYERS = [                     // L cycles what the ball shows
 ];
 const VN = 80;                             // resolution of the baked height volume
 const radar = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, volFbo: gl.createFramebuffer(), vol: null, enc: 0,
-                trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], rect: null, hover: null, drag: null };
+                trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], rect: null, hover: null, drag: null, gaze: null };
 function ensureRadar(w, h) {
   if (radar.tex && radar.w === w && radar.h === h) return;
   if (radar.tex) gl.deleteTexture(radar.tex);
@@ -520,11 +537,18 @@ function drawRadarOverlay(r, sun) {
   pts.forEach((p, i) => { if (i % 4 || Math.hypot(...p.m) > RB) return; const a = proj(p.m), b = proj(foot(p.m)); octx.moveTo(...a); octx.lineTo(...b); });
   octx.stroke();
   octx.lineWidth = 2.2 * k;
+  const runs = new Map();                                   // one path per colour and age band
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i];
     if (Math.hypot(...a.m) > RB || Math.hypot(...b.m) > RB) continue;
-    octx.strokeStyle = `rgba(${hypsCSS(b.h).join(',')}, ${0.35 + 0.6 * i / pts.length})`;
-    octx.beginPath(); octx.moveTo(...proj(a.m)); octx.lineTo(...proj(b.m)); octx.stroke();
+    const key = `rgba(${hypsCSS(b.h).join(',')}, ${(0.35 + 0.6 * Math.ceil(4 * i / pts.length) / 4).toFixed(2)})`;
+    if (!runs.has(key)) runs.set(key, []);
+    runs.get(key).push(proj(a.m), proj(b.m));
+  }
+  for (const [style, seg] of runs) {
+    octx.strokeStyle = style; octx.beginPath();
+    for (let j = 0; j < seg.length; j += 2) { octx.moveTo(...seg[j]); octx.lineTo(...seg[j + 1]); }
+    octx.stroke();
   }
 
   // summits, each on a stalk down to your slice's ground (above = toward ana, below = toward kata)
@@ -569,6 +593,20 @@ function drawRadarOverlay(r, sun) {
     octx.beginPath(); octx.arc(P[0], P[1], (el > 0 ? 5 : 3.5) * k, 0, 7); octx.fill();
     octx.font = mono(500, 10); octx.textAlign = 'center';
     octx.fillText(`sun ${Math.round(el)}°`, P[0], P[1] - 8 * k);
+  }
+
+  // your line of sight: where the centre of the slice view lands, on the disc
+  if (radar.gaze) {
+    const g = logMap(radar.gaze.n, B, u);
+    if (Math.hypot(...g) < RB) {
+      const P = proj(g), C = proj([0, 0, 0]), pulse = 1 + 0.25 * Math.sin(performance.now() / 220);
+      octx.setLineDash([3 * k, 3 * k]); octx.strokeStyle = 'rgba(255, 255, 255, 0.75)'; octx.lineWidth = 1.2 * k;
+      octx.beginPath(); octx.moveTo(...C); octx.lineTo(...P); octx.stroke(); octx.setLineDash([]);
+      octx.lineWidth = 2 * k; octx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      octx.beginPath(); octx.ellipse(P[0], P[1], 6 * k * pulse, 3.5 * k * pulse, 0, 0, 7); octx.stroke();
+      octx.font = mono(500, 10); octx.textAlign = 'left'; octx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      octx.fillText(`${Math.round(radar.gaze.t)} m`, P[0] + 9 * k, P[1] - 4 * k);
+    }
   }
 
   // hover: what is under the cursor, and how to reach it
@@ -774,6 +812,25 @@ function drawTriptychOverlay(cam, t) {
   octx.fillStyle = 'rgba(236, 240, 246, 0.95)'; octx.fillText('your slice', side + 12 * k, H - 16 * k);
   octx.fillStyle = 'rgba(255, 170, 90, 0.95)'; octx.fillText(`turned ${TRIP}° toward ana →`, side + mid + 12 * k, H - 16 * k);
 }
+// Where your line of sight (the centre of the slice view) meets the ground or water: marched on the CPU with
+// the same heights the GPU draws, so the radar can show what you are looking at.
+function gazePoint(cam) {
+  const hf = player.hf, under = vec4.len(cam.eye) < PLANET_R + SEA, seaR = under ? 0 : PLANET_R + SEA;   // underwater: see through to the bed
+  const gap = t => { const p = vec4.add(cam.eye, vec4.scale(cam.F, t)), r = vec4.len(p); return r - Math.max(seaR, PLANET_R + hf.heightAt(vec4.scale(p, 1 / r))); };
+  let t = 0.3, prev = t;
+  for (let i = 0; i < 160 && t < 400; i++) {
+    const g = gap(t);
+    if (g < 0) {
+      let a = prev, b = t;
+      for (let j = 0; j < 12; j++) { const mid = 0.5 * (a + b); if (gap(mid) < 0) b = mid; else a = mid; }
+      const p = vec4.add(cam.eye, vec4.scale(cam.F, b));
+      return { n: vec4.norm(p), t: b, water: vec4.len(p) <= seaR + 0.05 };
+    }
+    prev = t; t += Math.max(0.25, g * 0.6);
+  }
+  return null;
+}
+
 // After you turn to face a summit from the radar, mark it in the slice view for a few seconds.
 function drawFaced(cam) {
   const f = state.faced;
@@ -792,6 +849,21 @@ function drawFaced(cam) {
   octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const t = `${f.what || 'here'} · ${Math.round(headingTo(f.n).dist)} m ahead`;
   const w = octx.measureText(t).width + 12 * k; octx.fillRect(X - w / 2, Y - 30 * k, w, 17 * k);
   octx.fillStyle = '#fff'; octx.fillText(t, X, Y - 17 * k);
+  octx.restore();
+}
+
+// A small dot at the centre of the slice view: the point the radar's ring shows.
+function drawGazeDot() {
+  const W = overlay.width, H = overlay.height, k = W / innerWidth;
+  octx.save();
+  octx.strokeStyle = 'rgba(0, 0, 0, 0.45)'; octx.lineWidth = 3 * k;
+  octx.beginPath(); octx.arc(W / 2, H / 2, 3 * k, 0, 7); octx.stroke();
+  octx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; octx.lineWidth = 1.4 * k;
+  octx.beginPath(); octx.arc(W / 2, H / 2, 3 * k, 0, 7); octx.stroke();
+  if (radar.gaze && !state.radar.hidden) {
+    octx.font = `500 ${10.5 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    octx.fillText(`${Math.round(radar.gaze.t)} m`, W / 2 + 8 * k, H / 2 + 4 * k);
+  }
   octx.restore();
 }
 
@@ -862,7 +934,8 @@ function frame(now) {
   else if (state.view === 'triptych') { const t = drawTriptych(cam, sun); drawTriptychOverlay(cam, t); if (!state.radar.hidden) rad = drawRadar(cam, sun, simT, FOV * t.mid / scene.h); }
   else { const r = drawEye(cam, sun, simT); drawCubeOverlay(r.cv, r); }
   present();
-  if (state.view === 'slice') drawFaced(cam);
+  radar.gaze = state.view !== 'eye' ? gazePoint(cam) : null;
+  if (state.view === 'slice') { drawFaced(cam); drawGazeDot(); }
   if (rad) { blitRadar(rad); drawRadarOverlay(rad, sun); } else radar.rect = null;
   updateHUD(dt, cam, sun);
   requestAnimationFrame(frame);
