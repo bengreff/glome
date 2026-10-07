@@ -1,4 +1,4 @@
-import { VERT, SLICE_FRAG, RETINA_FRAG, EDGE_FRAG, VOLUME_FRAG, UPSCALE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js';
+import { VERT, SLICE_FRAG, RETINA_FRAG, EDGE_FRAG, VOLUME_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js';
 import { PLANET_R, SEA, HeightField, prefilter } from './world.js';
 import { Player, vec4 } from './player.js';
 
@@ -33,7 +33,7 @@ function program(fragSrc) {
   p.u = name => (name in locs) ? locs[name] : (locs[name] = gl.getUniformLocation(p, name));
   return p;
 }
-const progSlice = program(SLICE_FRAG), progRetina = program(RETINA_FRAG), progEdge = program(EDGE_FRAG), progVol = program(VOLUME_FRAG), progUp = program(UPSCALE_FRAG), progRadar = program(RADAR_FRAG), progBlit = program(BLIT_FRAG);
+const progSlice = program(SLICE_FRAG), progRetina = program(RETINA_FRAG), progEdge = program(EDGE_FRAG), progVol = program(VOLUME_FRAG), progUp = program(UPSCALE_FRAG), progRadar = program(RADAR_FRAG), progBake = program(RADAR_BAKE_FRAG), progBlit = program(BLIT_FRAG);
 const vao = gl.createVertexArray();
 
 function tex3D(w, h, d, internal, format, type, filter, data = null) {
@@ -121,7 +121,7 @@ const DAY1 = 300;                       // seconds for one turn in the first rot
 const state = {
   view: 'slice', time: 0, timeScale: 1, paused: false, rotation: 'double',
   shadows: true, retinaM: 64, help: false, anaTint: false,
-  radar: { big: false, range: 90, compass: false },
+  radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42 }, facing: null, faced: null,
   eyeYaw: 0, eyePitch: 0.3, eyeAuto: true,
 };
 const RATIOS = { double: 1.6180339887, isoclinic: 1 };
@@ -182,7 +182,7 @@ let mouseDX = 0, mouseDY = 0, mouseAlt = false, dragging = false;
 const SENS = 0.0022;
 
 addEventListener('keydown', e => {
-  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+  if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   switch (e.code) {
     case 'KeyV':
@@ -190,9 +190,6 @@ addEventListener('keydown', e => {
       else state.view = state.view === 'slice' ? 'triptych' : 'slice';
       break;
     case 'Tab': state.radar.big = !state.radar.big; break;
-    case 'KeyR': setAnchor('pin'); break;
-    case 'Minus': state.radar.range = RANGES[Math.max(0, RANGES.indexOf(state.radar.range) - 1)]; break;
-    case 'Equal': state.radar.range = RANGES[Math.min(RANGES.length - 1, RANGES.indexOf(state.radar.range) + 1)]; break;
     case 'BracketRight': state.timeScale = Math.min(state.timeScale * 2, 256); break;
     case 'BracketLeft': state.timeScale = Math.max(state.timeScale / 2, 1 / 8); break;
     case 'KeyP': state.paused = !state.paused; break;
@@ -214,19 +211,36 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+// With the mouse free (Esc), the radar can be spun by dragging, and a click on a summit turns you to face it.
+const devPx = e => { const k = overlay.width / innerWidth; return [e.clientX * k, e.clientY * k]; };
+const inRadar = ([x, y]) => { const r = radar.rect; return r && state.view !== 'eye' && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.s; };
 canvas.addEventListener('mousedown', e => {
-  if (document.pointerLockElement !== canvas && e.button === 0) {
-    canvas.requestPointerLock?.();
-    dragging = true;
-  }
+  if (document.pointerLockElement === canvas || e.button !== 0) return;
+  const p = devPx(e);
+  if (inRadar(p)) { radar.drag = { p, moved: false }; return; }
+  canvas.requestPointerLock?.();
+  dragging = true;
 });
-addEventListener('mouseup', () => { dragging = false; });
+addEventListener('mouseup', e => {
+  dragging = false;
+  if (radar.drag && !radar.drag.moved) faceMarkAt(devPx(e));
+  radar.drag = null;
+});
 addEventListener('mousemove', e => {
   if (document.pointerLockElement === canvas || dragging) {
     mouseDX += e.movementX; mouseDY += e.movementY;
     mouseAlt = (e.buttons & 2) !== 0 || e.altKey;
+    radar.hover = null;
+    return;
+  }
+  radar.hover = devPx(e);
+  if (radar.drag) {
+    const k = overlay.width / innerWidth;
+    if (Math.hypot(radar.hover[0] - radar.drag.p[0], radar.hover[1] - radar.drag.p[1]) > 4 * k) radar.drag.moved = true;
+    if (radar.drag.moved) { orbitRadar(-e.movementX * 0.008, e.movementY * 0.008); }
   }
 });
+addEventListener('wheel', e => { zoomRadar(e.deltaY * 0.0012); }, { passive: true });
 document.addEventListener('pointerlockchange', () => {
   $('hint').hidden = document.pointerLockElement === canvas;
 });
@@ -242,11 +256,10 @@ function readInput() {
 // ---------- radar ----------
 // The ground of a 4D world is three-dimensional, so its minimap is a ball (see RADAR_FRAG). The disc through
 // the middle is the ground your slice view shows; everything above it lies toward ana, below toward kata.
-// The last range shows the whole planet as two balls, its near and far halves (see drawPlanetOverlay).
-const RANGES = [45, 90, 180, 'planet'];
-const RADAR_FOV = 0.4;
-const HALF = Math.PI * PLANET_R / 2;   // a quarter lap (393 m): the radius of each half of the planet
-const radar = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, trail: [], peaks: [], peaksAt: null, peaksRange: 0, summits: null, anchor: null };
+const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = 320;
+const VN = 80;                             // resolution of the baked height volume
+const radar = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, volFbo: gl.createFramebuffer(), vol: null, enc: 0,
+                trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], rect: null, hover: null, drag: null };
 function ensureRadar(w, h) {
   if (radar.tex && radar.w === w && radar.h === h) return;
   if (radar.tex) gl.deleteTexture(radar.tex);
@@ -261,6 +274,21 @@ function ensureRadar(w, h) {
   gl.bindTexture(gl.TEXTURE_2D, null);
   gl.activeTexture(gl.TEXTURE0);
   radar.w = w; radar.h = h;
+}
+// Heights inside the ball, baked each frame: half floats where the GPU can render them, else 8 bits.
+function makeRadarVolume() {
+  const make = (internal, format, type) => {
+    const t = tex3D(VN, VN, VN, internal, format, type, gl.LINEAR);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, radar.volFbo);
+    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, t, 0, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) gl.deleteTexture(t);
+    return ok ? t : null;
+  };
+  radar.vol = gl.getExtension('EXT_color_buffer_float') ? make(gl.R16F, gl.RED, gl.HALF_FLOAT) : null;
+  radar.enc = radar.vol ? 0 : 1;
+  if (!radar.vol) radar.vol = make(gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE);
 }
 
 // Unlike a 2-sphere, the 3-sphere can carry a compass with no poles: multiplying your position (as a unit
@@ -288,6 +316,12 @@ function logMap(n, B = radarBasis(), u = player.up()) {
   const k = Math.acos(c) * PLANET_R / l;
   return B.map(b => vec4.dot(v, b) * k);
 }
+// Unit direction along the ground from you toward n, and the walking distance.
+function headingTo(n) {
+  const u = player.up(), c = Math.max(-1, Math.min(1, vec4.dot(u, n)));
+  const v = vec4.sub(n, vec4.scale(u, c)), l = vec4.len(v);
+  return { dir: l > 1e-9 ? vec4.scale(v, 1 / l) : player.F, dist: Math.acos(c) * PLANET_R };
+}
 
 function recordTrail() {
   const u = player.up(), t = radar.trail;
@@ -297,13 +331,13 @@ function recordTrail() {
 }
 
 // Summits within reach: local maxima of the height on a coarse 3D grid, then climbed to the top.
-function findPeaks(RB) {
+function findPeaks(RS) {
   const u = player.up(), B = [player.F, player.R, player.A], hf = player.hf;
-  const G = 9, g = RB * 1.25 / G, n = 2 * G + 1, H = new Float32Array(n * n * n).fill(-Infinity);
+  const G = 9, g = RS / G, n = 2 * G + 1, H = new Float32Array(n * n * n).fill(-Infinity);
   const at = (i, j, k) => H[(i * n + j) * n + k];
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) for (let k = 0; k < n; k++) {
     const m = [(i - G) * g, (j - G) * g, (k - G) * g];
-    if (Math.hypot(...m) <= RB * 1.3) H[(i * n + j) * n + k] = hf.heightAt(expMap(m, B, u));
+    if (Math.hypot(...m) <= RS * 1.05) H[(i * n + j) * n + k] = hf.heightAt(expMap(m, B, u));
   }
   const found = [];
   for (let i = 1; i < n - 1; i++) for (let j = 1; j < n - 1; j++) for (let k = 1; k < n - 1; k++) {
@@ -328,115 +362,80 @@ function findPeaks(RB) {
   found.sort((a, b) => b.h - a.h);
   const out = [];
   for (const p of found) if (!out.some(q => vec4.dot(q.n, p.n) > Math.cos(2 * g / PLANET_R))) out.push(p);
-  return out.slice(0, 5);
+  return out;
 }
+// Re-search when you have walked a fair way, or the range has grown past (or shrunk well inside) the search.
 function updatePeaks() {
-  const RB = state.radar.range, u = player.up();
-  if (radar.peaksAt && radar.peaksRange === RB && vec4.dot(radar.peaksAt, u) > Math.cos(RB / 5 / PLANET_R)) return;
-  radar.peaks = findPeaks(RB); radar.peaksAt = u; radar.peaksRange = RB;
+  const need = state.radar.range * 1.15, u = player.up();
+  if (radar.peaksAt && need <= radar.peaksR && need > radar.peaksR * 0.45 && vec4.dot(radar.peaksAt, u) > Math.cos(radar.peaksR / 6 / PLANET_R)) return;
+  radar.peaksR = need * 1.3;
+  radar.peaks = findPeaks(radar.peaksR); radar.peaksAt = u;
 }
-
-// The planet's highest summits, found once: climb from many random high points, keep the distinct tops.
-function findSummits() {
-  const hf = player.hf, found = [];
-  let seed = 7;
-  const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
-  const gauss = () => rand() + rand() + rand() + rand() - 2;
-  for (let k = 0, tries = 0; k < 500 && tries < 30000; tries++) {
-    let n = vec4.norm([gauss(), gauss(), gauss(), gauss()]), h = hf.heightAt(n);
-    if (h < 14) continue;
-    k++;
-    const B = [];                                         // ground directions at the start point
-    for (const e of [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]) {
-      let v = vec4.sub(e, vec4.scale(n, vec4.dot(e, n)));
-      for (const b of B) v = vec4.sub(v, vec4.scale(b, vec4.dot(v, b)));
-      if (vec4.len(v) > 0.3 && B.length < 3) B.push(vec4.norm(v));
-    }
-    let step = 12 / PLANET_R;
-    for (let it = 0; it < 40 && step > 0.3 / PLANET_R; it++) {
-      let moved = false;
-      for (const b of B) for (const sg of [-1, 1]) {
-        const n2 = vec4.norm(vec4.add(n, vec4.scale(b, sg * step))), h2 = hf.heightAt(n2);
-        if (h2 > h) { h = h2; n = n2; moved = true; }
-      }
-      if (!moved) step *= 0.5;
-    }
-    if (h > 24) found.push({ n, h });
-  }
-  found.sort((a, b) => b.h - a.h);
-  const out = [];
-  for (const p of found) if (!out.some(q => vec4.dot(q.n, p.n) > Math.cos(50 / PLANET_R))) out.push(p);
-  return out.slice(0, 16);
-}
-// The planet map is fixed to a pin (your start, or wherever you press R) so you can watch yourself move.
-function setAnchor(label) { radar.anchor = { n: player.up(), B: [player.F, player.R, player.A], label }; }
 
 const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const norm3 = a => { const l = Math.hypot(a[0], a[1], a[2]); return a.map(v => v / l); };
 const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-function radarCamera(RB, t, yaw0 = 0) {
-  const yaw = yaw0 + (state.eyeAuto ? 0.26 * Math.sin(t * 2 * Math.PI / 16) : 0), el = 0.42, D = RB * 3.0;
+function radarCamera(RB, t) {
+  const yaw = state.radar.yaw + (state.eyeAuto ? 0.22 * Math.sin(t * 2 * Math.PI / 16) : 0), el = state.radar.el, D = RB * 3.0;
   const pos = [-Math.cos(el) * Math.cos(yaw) * D, -Math.cos(el) * Math.sin(yaw) * D, Math.sin(el) * D];
   const F = pos.map(v => -v / D), R = norm3(cross3([0, 0, 1], F)), U = cross3(F, R);
   return { pos, F, R, U };
 }
+const orbitRadar = (dy, de) => { state.radar.yaw += dy; state.radar.el = Math.max(-1.3, Math.min(1.35, state.radar.el + de)); };
+const zoomRadar = d => { state.radar.range = Math.max(RANGE_MIN, Math.min(RANGE_MAX, state.radar.range * Math.exp(d))); };
 function radarRect() {
-  const W = overlay.width, H = overlay.height, k = W / innerWidth, m = Math.round(10 * k);
-  const n = state.radar.range === 'planet' ? 2 : 1, big = state.radar.big;
-  const s = Math.round(n === 2 ? (big ? Math.min(H * 0.8, W * 0.47) : Math.min(H * 0.36, W * 0.22))
-                               : (big ? Math.min(H * 0.92, W * 0.6) : Math.min(H * 0.42, W * 0.32)));
-  return { x: W - n * s - m, y: big && n === 1 ? Math.round((H - s) / 2) : H - s - m, s, w: n * s };
+  const W = overlay.width, H = overlay.height, k = W / innerWidth, m = Math.round(10 * k), big = state.radar.big;
+  const s = Math.round(big ? Math.min(H * 0.92, W * 0.6) : Math.min(H * 0.42, W * 0.32));
+  return { x: W - s - m, y: big ? Math.round((H - s) / 2) : H - s - m, s, w: s };
 }
-function renderBall(vx, S, o) {
-  const p = progRadar, cv = o.cv;
-  gl.viewport(vx, 0, S, S);
+function drawRadar(cam, sun, t, fovX) {
+  const rect = radar.rect = radarRect(), RB = state.radar.range, B = radarBasis(), u = player.up();
+  const S = Math.max(96, Math.min(state.radar.big ? 720 : 520, Math.round(rect.s * Math.min(0.85, Math.max(0.5, dyn.scale * 1.15)))));
+  ensureRadar(S, S);
+  updatePeaks();
+  const cv = radarCamera(RB, t);
+  const inB = v => B.map(b => vec4.dot(v, b)), discN = inB(player.A);
+  const shared = p => {
+    setWorld(p, cam, sun);
+    gl.uniform4fv(p.u('uU0'), u);
+    gl.uniform4fv(p.u('uB1'), B[0]);
+    gl.uniform4fv(p.u('uB2'), B[1]);
+    gl.uniform4fv(p.u('uB3'), B[2]);
+    gl.uniform1f(p.u('uRB'), RB);
+    gl.uniform1f(p.u('uVN'), VN);
+    gl.uniform1f(p.u('uEnc'), radar.enc);
+  };
+  // 1. bake the heights inside the ball
+  gl.bindFramebuffer(gl.FRAMEBUFFER, radar.volFbo);
+  gl.viewport(0, 0, VN, VN);
+  gl.useProgram(progBake);
+  shared(progBake);
+  for (let l = 0; l < VN; l++) {
+    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, radar.vol, 0, l);
+    gl.uniform1f(progBake.u('uLayer'), l);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  // 2. march the ball
+  const p = progRadar;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, radar.fbo);
+  gl.viewport(0, 0, S, S);
+  gl.useProgram(p);
+  shared(p);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, radar.vol); gl.activeTexture(gl.TEXTURE0);
+  gl.uniform1i(p.u('uVol'), 3);
   gl.uniform2f(p.u('uRes'), S, S);
-  gl.uniform4fv(p.u('uU0'), o.center);
-  gl.uniform4fv(p.u('uB1'), o.B[0]);
-  gl.uniform4fv(p.u('uB2'), o.B[1]);
-  gl.uniform4fv(p.u('uB3'), o.B[2]);
-  gl.uniform1f(p.u('uRB'), o.RB);
+  gl.uniform1f(p.u('uFov'), RADAR_FOV);
   gl.uniform3fv(p.u('uCam'), cv.pos);
   gl.uniform3fv(p.u('uCamF'), cv.F);
   gl.uniform3fv(p.u('uCamR'), cv.R);
   gl.uniform3fv(p.u('uCamU'), cv.U);
   gl.uniform3fv(p.u('uLight'), norm3([0, 1, 2].map(i => 0.8 * cv.U[i] - 0.5 * cv.R[i] - 0.4 * cv.F[i])));
-  gl.uniform3fv(p.u('uDiscN'), o.disc);
-  gl.uniform3fv(p.u('uFwd'), o.fwd);
-  gl.uniform3fv(p.u('uRight'), o.right);
-  gl.uniform1f(p.u('uYou'), o.you ? 1 : 0);
-  gl.uniform1i(p.u('uSteps'), o.steps);
-  gl.uniform3fv(p.u('uShellL'), o.shellL);
-  gl.uniform3fv(p.u('uShellA'), o.shellA);
-  gl.uniform1f(p.u('uWater'), o.water);
-  gl.uniform1f(p.u('uLand'), o.land || 0);
+  gl.uniform3fv(p.u('uDiscN'), discN);
+  gl.uniform3fv(p.u('uFwd'), inB(player.F));
+  gl.uniform3fv(p.u('uRight'), inB(player.R));
+  gl.uniform1f(p.u('uFovX'), fovX);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-}
-function drawRadar(cam, sun, t) {
-  const rect = radarRect(), planet = state.radar.range === 'planet';
-  const S = Math.max(96, Math.min(planet ? 440 : 640, Math.round(rect.s * Math.min(0.7, Math.max(0.4, dyn.scale)))));
-  ensureRadar(planet ? 2 * S : S, S);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, radar.fbo);
-  gl.useProgram(progRadar);
-  setWorld(progRadar, cam, sun);
-  gl.uniform1f(progRadar.u('uFov'), RADAR_FOV);
-  gl.uniform1f(progRadar.u('uFovX'), FOV * scene.w / scene.h);
-  if (planet) {
-    // Two balls, like a two-hemisphere world map: the half of the planet within a quarter lap of the pin, and
-    // the half around the pin's antipode. The far ball uses the negated axes (the 4D rotation x -> -x), so
-    // leaving either ball through any point brings you into the other through the opposite point.
-    if (!radar.summits) radar.summits = findSummits();
-    const a = radar.anchor, cv = radarCamera(HALF, t, 0.55);
-    const balls = [{ center: a.n, B: a.B }, { center: vec4.scale(a.n, -1), B: a.B.map(b => vec4.scale(b, -1)) }];
-    const look = { RB: HALF, cv, you: false, disc: [0, 0, 0], fwd: [1, 0, 0], right: [0, 1, 0], steps: 150, shellL: [0.5, 12, 27], shellA: [0, 0, 0.9], water: 0.1, land: 0.0024 };
-    balls.forEach((b, i) => renderBall(i * S, S, { ...look, ...b }));
-    return { rect, cv, planet: true, balls };
-  }
-  updatePeaks();
-  const RB = state.radar.range, B = radarBasis(), cv = radarCamera(RB, t);
-  const inB = v => B.map(b => vec4.dot(v, b));
-  const discN = inB(player.A);
-  renderBall(0, S, { center: player.up(), B, RB, cv, you: true, disc: discN, fwd: inB(player.F), right: inB(player.R), steps: 96, shellL: [0.5, 12, 24], shellA: [0.13, 0.2, 0.72], water: 1 });
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, null); gl.activeTexture(gl.TEXTURE0);
   return { rect, cv, B, RB, discN };
 }
 function blitRadar(r) {
@@ -450,6 +449,13 @@ function blitRadar(r) {
   gl.disable(gl.BLEND);
   gl.activeTexture(gl.TEXTURE0);
 }
+// A click on a summit in the radar turns you (smoothly, in the plane of forward and the summit) to face it.
+function faceMarkAt([x, y]) {
+  const k = overlay.width / innerWidth;
+  let best = null, bd = 16 * k;
+  for (const m of radar.marks) { const d = Math.hypot(m.x - x, m.y - y); if (d < bd) { bd = d; best = m; } }
+  if (best) state.facing = best.n;
+}
 
 const hypsCSS = h => h < 0 ? [70, 140, 220] : h < 4 ? [220, 205, 150] : h < 12 ? [110, 190, 100] : h < 24 ? [200, 175, 90] : h < 30 ? [215, 160, 120] : [245, 245, 255];
 function drawRadarOverlay(r, sun) {
@@ -460,8 +466,15 @@ function drawRadarOverlay(r, sun) {
     return [rect.x + (dot3(d, cv.R) / z / RADAR_FOV * 0.5 + 0.5) * rect.s, rect.y + (0.5 - dot3(d, cv.U) / z / RADAR_FOV * 0.5) * rect.s];
   };
   const foot = m => { const a = dot3(m, discN); return [m[0] - a * discN[0], m[1] - a * discN[1], m[2] - a * discN[2]]; };
+  const mono = (w, px) => `${w} ${px * k}px "IBM Plex Mono", ui-monospace, monospace`;
+  const inB = v => B.map(b => vec4.dot(v, b));
   octx.save();
   octx.lineCap = 'round'; octx.lineJoin = 'round';
+
+  // distance rings on the disc
+  octx.font = mono(500, 9.5); octx.fillStyle = 'rgba(210, 225, 245, 0.8)'; octx.textAlign = 'center';
+  const rgt = inB(player.R);
+  for (const f of [1 / 3, 2 / 3]) { const P = proj(rgt.map(v => v * RB * f)); octx.fillText(`${Math.round(RB * f)} m`, P[0], P[1] + 12 * k); }
 
   // your trail: where you have walked, in all three ground directions, coloured by height
   const pts = radar.trail.map(p => ({ m: logMap(p.n, B, u), h: p.h }));
@@ -473,29 +486,29 @@ function drawRadarOverlay(r, sun) {
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i];
     if (Math.hypot(...a.m) > RB || Math.hypot(...b.m) > RB) continue;
-    const c = hypsCSS(b.h);
-    octx.strokeStyle = `rgba(${c.join(',')}, ${0.35 + 0.6 * i / pts.length})`;
+    octx.strokeStyle = `rgba(${hypsCSS(b.h).join(',')}, ${0.35 + 0.6 * i / pts.length})`;
     octx.beginPath(); octx.moveTo(...proj(a.m)); octx.lineTo(...proj(b.m)); octx.stroke();
   }
 
   // summits, each on a stalk down to your slice's ground (above = toward ana, below = toward kata)
-  octx.font = `500 ${10.5 * k}px "IBM Plex Mono", ui-monospace, monospace`;
+  radar.marks = [];
+  const shown = radar.peaks.map(p => ({ ...p, m: logMap(p.n, B, u) })).filter(p => Math.hypot(...p.m) < RB * 0.97).slice(0, 7);
   octx.textAlign = 'left';
-  for (const p of radar.peaks) {
-    const m = logMap(p.n, B, u);
-    if (Math.hypot(...m) > RB * 0.98) continue;
-    const off = dot3(m, discN), P = proj(m), Q = proj(foot(m)), inSlice = Math.abs(off) < 4;
+  for (const p of shown) {
+    const off = dot3(p.m, discN), P = proj(p.m), Q = proj(foot(p.m)), inSlice = Math.abs(off) < Math.max(3, RB * 0.03);
+    const target = state.facing && vec4.dot(state.facing, p.n) > 0.99999;
     octx.strokeStyle = off >= 0 ? 'rgba(255, 190, 120, 0.8)' : 'rgba(140, 190, 255, 0.8)';
     octx.lineWidth = 1.4 * k;
     octx.beginPath(); octx.moveTo(...Q); octx.lineTo(...P); octx.stroke();
     octx.beginPath(); octx.ellipse(Q[0], Q[1], 3 * k, 1.6 * k, 0, 0, 7); octx.stroke();
-    const s = 5.5 * k;
+    const sz = 5.5 * k;
     octx.fillStyle = `rgb(${hypsCSS(p.h).join(',')})`;
-    octx.strokeStyle = inSlice ? '#fff' : 'rgba(10, 12, 18, 0.9)';
-    octx.lineWidth = (inSlice ? 2 : 1) * k;
-    octx.beginPath(); octx.moveTo(P[0], P[1] - s); octx.lineTo(P[0] + s * 0.9, P[1] + s * 0.6); octx.lineTo(P[0] - s * 0.9, P[1] + s * 0.6); octx.closePath(); octx.fill(); octx.stroke();
-    octx.fillStyle = 'rgba(236, 240, 246, 0.92)';
+    octx.strokeStyle = inSlice || target ? '#fff' : 'rgba(10, 12, 18, 0.9)';
+    octx.lineWidth = (inSlice || target ? 2 : 1) * k;
+    octx.beginPath(); octx.moveTo(P[0], P[1] - sz); octx.lineTo(P[0] + sz * 0.9, P[1] + sz * 0.6); octx.lineTo(P[0] - sz * 0.9, P[1] + sz * 0.6); octx.closePath(); octx.fill(); octx.stroke();
+    octx.font = mono(500, 10.5); octx.fillStyle = 'rgba(236, 240, 246, 0.92)';
     octx.fillText(`${Math.round(p.h)} m`, P[0] + 8 * k, P[1] + 3 * k);
+    radar.marks.push({ x: P[0], y: P[1], n: p.n, h: p.h, off });
   }
 
   // the rim: ana and kata, the sun, and the compass
@@ -503,34 +516,54 @@ function drawRadarOverlay(r, sun) {
     const l = Math.hypot(...dir); if (l < 1e-6) return;
     const m = dir.map(v => v / l * RB * scale), P = proj(m);
     const front = dot3(norm3(m), cv.F) < 0.25;
-    octx.font = `${front ? 600 : 500} ${size * k}px "IBM Plex Mono", ui-monospace, monospace`;
+    octx.font = mono(front ? 600 : 500, size);
     octx.fillStyle = color; octx.globalAlpha = front ? 1 : 0.5;
     octx.textAlign = 'center'; octx.fillText(txt, P[0], P[1] + 4 * k); octx.globalAlpha = 1;
   };
   rimLabel(discN, 'ana', 'rgba(255, 180, 110, 0.95)', 11, 1.13);
   rimLabel(discN.map(v => -v), 'kata', 'rgba(130, 185, 255, 0.95)', 11, 1.13);
-  const C = compassAt(u), inB = v => B.map(b => vec4.dot(v, b));
-  [['i', '#ff8a7a'], ['j', '#9be88f'], ['k', '#8fb8ff']].forEach(([n, col], i) => {
-    rimLabel(inB(C[i]), n, col, 10.5, 1.05);
-  });
+  const C = compassAt(u);
+  [['i', '#ff8a7a'], ['j', '#9be88f'], ['k', '#8fb8ff']].forEach(([n, col], i) => rimLabel(inB(C[i]), n, col, 10.5, 1.05));
   const su = vec4.dot(sun, u), sh = vec4.sub(sun, vec4.scale(u, su));
   if (vec4.len(sh) > 1e-3) {
     const d = inB(sh), l = Math.hypot(...d), P = proj(d.map(v => v / l * RB * 1.2));
     const el = Math.asin(Math.max(-1, Math.min(1, su))) * 180 / Math.PI;
     octx.fillStyle = el > 0 ? 'rgba(255, 220, 120, 0.95)' : 'rgba(150, 160, 190, 0.6)';
     octx.beginPath(); octx.arc(P[0], P[1], (el > 0 ? 5 : 3.5) * k, 0, 7); octx.fill();
-    octx.font = `500 ${10 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'center';
+    octx.font = mono(500, 10); octx.textAlign = 'center';
     octx.fillText(`sun ${Math.round(el)}°`, P[0], P[1] - 8 * k);
+  }
+
+  // hover: what a summit is, and how to reach it
+  const hv = radar.hover && radar.marks.reduce((best, m) => {
+    const d = Math.hypot(m.x - radar.hover[0], m.y - radar.hover[1]);
+    return d < 16 * k && (!best || d < best.d) ? { ...m, d } : best;
+  }, null);
+  if (hv) {
+    const { dist, dir } = headingTo(hv.n);
+    const ana = Math.atan2(vec4.dot(dir, player.A), Math.hypot(vec4.dot(dir, player.F), vec4.dot(dir, player.R))) * 180 / Math.PI;
+    const lines = [`summit ${Math.round(hv.h)} m high · ${Math.round(dist)} m away`,
+      Math.abs(ana) < 2 ? 'in your slice' : `${Math.round(Math.abs(ana))}° toward ${ana > 0 ? 'ana' : 'kata'} from your slice`, 'click to turn and face it'];
+    octx.font = mono(500, 11); octx.textAlign = 'left';
+    const w = Math.max(...lines.map(t => octx.measureText(t).width)) + 16 * k, x0 = Math.min(hv.x + 12 * k, overlay.width - w - 4 * k), y0 = hv.y - 52 * k;
+    octx.fillStyle = 'rgba(11, 14, 20, 0.88)'; octx.fillRect(x0, y0, w, 50 * k);
+    lines.forEach((t, i) => { octx.fillStyle = i === 2 ? 'rgba(141, 154, 176, 0.95)' : 'rgba(236, 240, 246, 0.95)'; octx.fillText(t, x0 + 8 * k, y0 + (15 + 15 * i) * k); });
   }
 
   // caption
   octx.textAlign = 'left';
-  octx.font = `500 ${10.5 * k}px "IBM Plex Mono", ui-monospace, monospace`;
-  octx.fillStyle = 'rgba(160, 172, 194, 0.95)';
-  octx.fillText(`RADAR ${RB} m · ${state.radar.compass ? 'compass-up' : 'heading-up'} · = zoom out`, rect.x + 8 * k, rect.y + 14 * k);
+  octx.font = mono(500, 10.5);
+  const caption = (lines, x, y) => {
+    const w = Math.max(...lines.map(t => octx.measureText(t).width)) + 12 * k;
+    octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; octx.fillRect(x - 6 * k, y - 12 * k, w, lines.length * 15 * k + 5 * k);
+    octx.fillStyle = 'rgba(170, 182, 204, 0.95)'; lines.forEach((t, i) => octx.fillText(t, x, y + i * 15 * k));
+  };
+  caption([`RADAR ${Math.round(RB)} m · ${state.radar.compass ? 'compass-up' : 'heading-up'}`], rect.x + 8 * k, rect.y + 14 * k);
   if (state.radar.big) {
-    ['disc: the ground your slice shows', 'shells: coast · 12 m · 24 m', '▲ summits · line: your trail', '', 'Tab smaller · −/= range', 'M heading/compass-up · O rock']
-      .forEach((txt, i) => octx.fillText(txt, rect.x + 8 * k, rect.y + rect.s - (88 - 15 * i) * k));
+    const lines = ['disc: the ground your slice shows', 'shells: coast · 12 m · 24 m', '▲ summits · line: your trail',
+      'wheel or −/= zoom · Tab smaller', 'arrows, or Esc then drag: spin', 'Esc, then click a ▲: face it', 'M heading/compass-up · O rock'];
+    const w = Math.max(...lines.map(t => octx.measureText(t).width));
+    caption(lines, Math.max(8 * k, rect.x - w - 18 * k), rect.y + rect.s - 150 * k);
   }
   octx.restore();
 }
@@ -702,83 +735,24 @@ function drawTriptychOverlay(cam, t) {
   octx.fillStyle = 'rgba(236, 240, 246, 0.95)'; octx.fillText('your slice', side + 12 * k, H - 16 * k);
   octx.fillStyle = 'rgba(255, 170, 90, 0.95)'; octx.fillText(`turned ${TRIP}° toward ana →`, side + mid + 12 * k, H - 16 * k);
 }
-// The whole planet: you, your trail, the summits, and the straight line you are facing, across both halves.
-function drawPlanetOverlay(r) {
-  const { rect, cv, balls } = r, k = overlay.width / innerWidth, s = rect.s, u = player.up();
-  const proj = (m, i) => {
-    const d = [m[0] - cv.pos[0], m[1] - cv.pos[1], m[2] - cv.pos[2]], z = dot3(d, cv.F);
-    return [rect.x + i * s + (dot3(d, cv.R) / z / RADAR_FOV * 0.5 + 0.5) * s, rect.y + (0.5 - dot3(d, cv.U) / z / RADAR_FOV * 0.5) * s];
-  };
-  const place = n => { const i = vec4.dot(n, balls[0].center) >= 0 ? 0 : 1; return { i, P: proj(logMap(n, balls[i].B, balls[i].center), i) }; };
-  const mono = (w, px) => `${w} ${px * k}px "IBM Plex Mono", ui-monospace, monospace`;
-  const path = (pts, style) => {                          // a polyline that breaks where it crosses between balls
-    for (let j = 1; j < pts.length; j++) {
-      if (pts[j].i !== pts[j - 1].i) continue;
-      style(j); octx.beginPath(); octx.moveTo(...pts[j - 1].P); octx.lineTo(...pts[j].P); octx.stroke();
-    }
-  };
+// After you turn to face a summit from the radar, mark it in the slice view for a few seconds.
+function drawFaced(cam) {
+  const f = state.faced;
+  if (!f || simT > f.until) return;
+  const h = player.hf.heightAt(f.n), p = vec4.scale(f.n, PLANET_R + h), d = vec4.sub(p, cam.eye);
+  const z = vec4.dot(d, cam.F); if (z < 1) return;
+  const W = overlay.width, H = overlay.height, k = W / innerWidth;
+  const x = vec4.dot(d, cam.R) / z / (FOV * W / H), y = vec4.dot(d, cam.U) / z / FOV;
+  if (Math.abs(x) > 0.95 || Math.abs(y) > 0.95) return;
+  const X = (x * 0.5 + 0.5) * W, Y = (0.5 - y * 0.5) * H - 10 * k, a = Math.min(1, (f.until - simT) / 1.5);
   octx.save();
-  octx.lineCap = 'round';
-
-  // the summits
-  radar.summits.forEach((p, j) => {
-    const { P } = place(p.n), sz = (j < 3 ? 6 : 4.5) * k;
-    octx.fillStyle = `rgb(${hypsCSS(p.h).join(',')})`; octx.strokeStyle = 'rgba(10, 12, 18, 0.9)'; octx.lineWidth = 1 * k;
-    octx.beginPath(); octx.moveTo(P[0], P[1] - sz); octx.lineTo(P[0] + sz * 0.9, P[1] + sz * 0.6); octx.lineTo(P[0] - sz * 0.9, P[1] + sz * 0.6); octx.closePath(); octx.fill(); octx.stroke();
-    if (j < (state.radar.big ? 3 : 1)) { octx.font = mono(500, 10); octx.fillStyle = 'rgba(236, 240, 246, 0.9)'; octx.fillText(`${Math.round(p.h)} m`, P[0] + 7 * k, P[1] + 3 * k); }
-  });
-
-  // the pin and its antipode, at the two centres
-  octx.strokeStyle = 'rgba(236, 240, 246, 0.9)'; octx.lineWidth = 1.5 * k; octx.font = mono(500, 10); octx.fillStyle = 'rgba(236, 240, 246, 0.85)';
-  const c0 = proj([0, 0, 0], 0), c1 = proj([0, 0, 0], 1);
-  octx.strokeRect(c0[0] - 3.5 * k, c0[1] - 3.5 * k, 7 * k, 7 * k); octx.fillText(radar.anchor.label, c0[0] + 7 * k, c0[1] - 6 * k);
-  octx.beginPath(); octx.arc(c1[0], c1[1], 4 * k, 0, 7); octx.stroke(); octx.fillText('its antipode', c1[0] + 7 * k, c1[1] - 6 * k);
-
-  // straight ahead: the great circle you are facing, all the way round (dots every 100 m)
-  const N = 320, ring = [];
-  for (let j = 0; j <= N; j++) { const t = j / N * 2 * Math.PI; ring.push(place(vec4.add(vec4.scale(u, Math.cos(t)), vec4.scale(player.F, Math.sin(t))))); }
-  octx.setLineDash([6 * k, 4 * k]); octx.lineWidth = 1.6 * k; octx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-  octx.beginPath();
-  ring.forEach((q, j) => { if (j === 0 || q.i !== ring[j - 1].i) octx.moveTo(...q.P); else octx.lineTo(...q.P); });
-  octx.stroke();
-  octx.setLineDash([]);
-  octx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-  for (let d = 100; d < 2 * HALF * 2; d += 100) { const P = place(vec4.add(vec4.scale(u, Math.cos(d / PLANET_R)), vec4.scale(player.F, Math.sin(d / PLANET_R)))).P; octx.beginPath(); octx.arc(P[0], P[1], 1.8 * k, 0, 7); octx.fill(); }
-  const anti = place(vec4.scale(u, -1)).P;
-  octx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; octx.lineWidth = 1.4 * k;
-  octx.beginPath(); octx.arc(anti[0], anti[1], 3.5 * k, 0, 7); octx.stroke();
-  octx.font = mono(500, 9.5); octx.fillText('half a lap', anti[0] + 6 * k, anti[1] + 12 * k);
-
-  // your trail
-  const trail = radar.trail.map(p => ({ ...place(p.n), h: p.h }));
-  octx.lineWidth = 2.6 * k;
-  path(trail, j => { octx.strokeStyle = `rgba(${hypsCSS(trail[j].h).join(',')}, ${0.35 + 0.65 * j / trail.length})`; });
-
-  // you, with your forward (white) and ana (orange) directions
-  const me = place(u), arrow = (dir, col) => {
-    const q = place(vec4.add(vec4.scale(u, Math.cos(40 / PLANET_R)), vec4.scale(dir, Math.sin(40 / PLANET_R))));
-    if (q.i !== me.i) return;
-    octx.strokeStyle = col; octx.lineWidth = 2.4 * k;
-    octx.beginPath(); octx.moveTo(...me.P); octx.lineTo(...q.P); octx.stroke();
-  };
-  arrow(player.A, 'rgba(255, 170, 90, 0.95)');
-  arrow(player.F, 'rgba(255, 255, 255, 0.95)');
-  const pulse = 1 + 0.35 * Math.sin(performance.now() / 260);
-  octx.strokeStyle = 'rgba(90, 240, 255, 0.55)'; octx.lineWidth = 2 * k;
-  octx.beginPath(); octx.arc(me.P[0], me.P[1], 10 * k * pulse, 0, 7); octx.stroke();
-  octx.fillStyle = 'rgb(90, 240, 255)'; octx.strokeStyle = 'rgba(5, 10, 16, 0.95)'; octx.lineWidth = 1.5 * k;
-  octx.beginPath(); octx.arc(me.P[0], me.P[1], 5 * k, 0, 7); octx.fill(); octx.stroke();
-
-  // captions
-  const dist = Math.acos(Math.max(-1, Math.min(1, vec4.dot(u, radar.anchor.n)))) * PLANET_R;
-  octx.font = mono(500, 10.5); octx.fillStyle = 'rgba(170, 182, 204, 0.95)';
-  octx.fillText(`NEAR HALF · within ${Math.round(HALF)} m of the ${radar.anchor.label}`, rect.x + 8 * k, rect.y + 14 * k);
-  octx.fillText('FAR HALF · around its antipode', rect.x + s + 8 * k, rect.y + 14 * k);
-  octx.fillText(`you are ${Math.round(dist)} m from the ${radar.anchor.label}`, rect.x + 8 * k, rect.y + 29 * k);
-  const lines = state.radar.big
-    ? ['leave either ball anywhere: you enter the other at the opposite point', '- - - straight ahead, dots every 100 m · ▲ highest summits · R: pin here · −/= range · Tab']
-    : ['leave one ball: enter the other at the opposite point'];
-  lines.forEach((txt, j) => octx.fillText(txt, rect.x + 8 * k, rect.y + s - (lines.length - j) * 15 * k + 4 * k));
+  octx.globalAlpha = a;
+  octx.strokeStyle = '#fff'; octx.lineWidth = 2 * k; octx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  octx.beginPath(); octx.moveTo(X, Y - 9 * k); octx.lineTo(X + 8 * k, Y + 5 * k); octx.lineTo(X - 8 * k, Y + 5 * k); octx.closePath(); octx.fill(); octx.stroke();
+  octx.font = `500 ${12 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'center';
+  octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const t = `summit ${Math.round(h)} m · ${Math.round(headingTo(f.n).dist)} m ahead`;
+  const w = octx.measureText(t).width + 12 * k; octx.fillRect(X - w / 2, Y - 30 * k, w, 17 * k);
+  octx.fillStyle = '#fff'; octx.fillText(t, X, Y - 17 * k);
   octx.restore();
 }
 
@@ -819,9 +793,14 @@ function frame(now) {
     player.rotate('FR', mouseDX * SENS);
     player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - mouseDY * SENS));
   }
+  if (mouseDX || mouseDY) state.facing = null;            // looking around cancels an automatic turn
   mouseDX = mouseDY = 0;
   const turnKeys = (keys.has('KeyC') ? 1 : 0) - (keys.has('KeyZ') ? 1 : 0);
   if (turnKeys) player.rotate('FA', turnKeys * 1.2 * dt);
+  if (state.facing && player.turnToward(headingTo(state.facing).dir, 2.2 * dt)) { state.faced = { n: state.facing, until: simT + 5 }; state.facing = null; }
+  const k = c => keys.has(c) ? 1 : 0;
+  if (state.view !== 'eye') orbitRadar((k('ArrowLeft') - k('ArrowRight')) * 1.6 * dt, (k('ArrowUp') - k('ArrowDown')) * 1.2 * dt);
+  zoomRadar((k('Minus') - k('Equal')) * 1.3 * dt);
   if (state.view === 'eye') {
     if (keys.has('KeyJ')) state.eyeYaw -= dt; if (keys.has('KeyL')) state.eyeYaw += dt;
     if (keys.has('KeyI')) state.eyePitch = Math.min(1.2, state.eyePitch + dt);
@@ -839,11 +818,11 @@ function frame(now) {
   const cam = player.camera(), sun = sunDir(state.time);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
-  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h); rad = drawRadar(cam, sun, simT); }
-  else if (state.view === 'triptych') { const t = drawTriptych(cam, sun); drawTriptychOverlay(cam, t); }
+  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h); rad = drawRadar(cam, sun, simT, FOV * scene.w / scene.h); }
+  else if (state.view === 'triptych') { const t = drawTriptych(cam, sun); drawTriptychOverlay(cam, t); rad = drawRadar(cam, sun, simT, FOV * t.mid / scene.h); }
   else { const r = drawEye(cam, sun, simT); drawCubeOverlay(r.cv, r); }
   present();
-  if (rad) { blitRadar(rad); if (rad.planet) drawPlanetOverlay(rad); else drawRadarOverlay(rad, sun); }
+  if (rad) { if (state.view === 'slice') drawFaced(cam); blitRadar(rad); drawRadarOverlay(rad, sun); } else radar.rect = null;
   updateHUD(dt, cam, sun);
   requestAnimationFrame(frame);
 }
@@ -861,7 +840,7 @@ function frame(now) {
     let seed = 20261006;
     const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
     player.spawn(rand);
-    setAnchor('start');
+    makeRadarVolume();
     // start in the morning: sun about 20° up and rising
     const up = player.up();
     for (let t = 0; t < 20000; t += 0.5) {
@@ -873,7 +852,7 @@ function frame(now) {
     $('hint').hidden = false;
     if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches)
       $('hint').textContent = 'Hoop needs a keyboard and mouse to explore.';
-    window.__hoop = { state, player, keys, sunDir, dyn, radar, compassAt, logMap, recordTrail };   // handle for debugging from the console
+    window.__hoop = { state, player, keys, sunDir, dyn, radar, compassAt, logMap, recordTrail, dbg: { gl, drawRadar, drawSlice, scene } };   // handle for debugging from the console
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);
