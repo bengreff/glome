@@ -121,7 +121,7 @@ const DAY1 = 300;                       // seconds for one turn in the first rot
 const RATIO = 1.6180339887;            // the second rotation plane turns φ times faster: days never repeat
 const state = {
   time: 0, help: false,
-  radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42, layers: 0, hidden: false, grow: 0, spunAt: -1e9 },
+  radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42, layers: 0, hidden: false, grow: 0 },
   facing: null, faced: null,
 };
 // Remember radar settings between visits (a convenience; everything works without storage).
@@ -154,12 +154,12 @@ function updateDyn(dt) {
   dyn.acc += dt; dyn.n++;
   if (dyn.acc < 0.35) return;
   const avg = dyn.acc / dyn.n; dyn.acc = 0; dyn.n = 0;
-  if (!dyn.auto) return;
-  // drop quickly when frames are slow, climb only after a sustained run of fast frames (no flip-flopping)
+  if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
+  // drop quickly when frames are slow, climb back after a short run of fast frames (no flip-flopping)
   dyn.slow = avg > 1 / 50 ? dyn.slow + 1 : 0;
   dyn.fast = avg < 1 / 58 ? dyn.fast + 1 : 0;
   if (dyn.slow >= 1) { dyn.scale = Math.max(0.3, dyn.scale * (avg > 1 / 35 ? 0.8 : 0.9)); dyn.slow = 0; }
-  else if (dyn.fast >= 4) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.06); dyn.fast = 0; }
+  else if (dyn.fast >= 2) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.08); dyn.fast = 0; }
 }
 const scene = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
 function ensureScene(w, h) {
@@ -255,7 +255,7 @@ const VN_SMALL = 80, VN_BIG = 128, BIG_RANGE = 330;   // baked volume resolution
 const radar = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, volFbo: gl.createFramebuffer(), vols: {}, enc: 0, bakeKey: '', summits: null,
                 trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], rect: null, hover: null, drag: null, gaze: null };
 function ensureRadar(w, h) {
-  if (radar.tex && radar.w === w && radar.h === h) return;
+  if (radar.tex && radar.w === w && radar.h === h) return false;
   if (radar.tex) gl.deleteTexture(radar.tex);
   radar.tex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE7);
@@ -268,6 +268,7 @@ function ensureRadar(w, h) {
   gl.bindTexture(gl.TEXTURE_2D, null);
   gl.activeTexture(gl.TEXTURE0);
   radar.w = w; radar.h = h;
+  return true;
 }
 // Heights inside the ball, baked each frame: half floats where the GPU can render them, else 8 bits.
 function makeRadarVolume() {
@@ -405,13 +406,12 @@ const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], 
 const norm3 = a => { const l = Math.hypot(a[0], a[1], a[2]); return a.map(v => v / l); };
 const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 function radarCamera(RB, t) {
-  const rock = Math.min(1, Math.max(0, (t - state.radar.spunAt - 8) / 4));   // gentle rocking for depth, paused after you spin it
-  const yaw = state.radar.yaw + rock * 0.22 * Math.sin(t * 2 * Math.PI / 16), el = state.radar.el, D = RB * 3.0;
+  const yaw = state.radar.yaw, el = state.radar.el, D = RB * 3.0;     // the ball only turns when you spin it
   const pos = [-Math.cos(el) * Math.cos(yaw) * D, -Math.cos(el) * Math.sin(yaw) * D, Math.sin(el) * D];
   const F = pos.map(v => -v / D), R = norm3(cross3([0, 0, 1], F)), U = cross3(F, R);
   return { pos, F, R, U };
 }
-const orbitRadar = (dy, de) => { if (dy || de) state.radar.spunAt = simT; state.radar.yaw += dy; state.radar.el = Math.max(-1.3, Math.min(1.35, state.radar.el + de)); };
+const orbitRadar = (dy, de) => { state.radar.yaw += dy; state.radar.el = Math.max(-1.3, Math.min(1.35, state.radar.el + de)); };
 const zoomRadar = d => { state.radar.range = Math.max(RANGE_MIN, Math.min(RANGE_MAX, state.radar.range * Math.exp(d))); };
 // Small in the corner or big beside the slice; Tab animates between them.
 function radarRect() {
@@ -424,8 +424,9 @@ function drawRadar(cam, sun, t, fovX) {
   const rect = radar.rect = radarRect(), RB = state.radar.range, pin = state.radar.pin;
   const u = pin ? pin.n : player.up(), B = pin ? pin.B : radarBasis();   // pinned: fixed; else centred on you
   const VN = RB > BIG_RANGE ? VN_BIG : VN_SMALL, vol = radar.vols[VN];
-  const S = Math.max(96, Math.min(state.radar.grow > 0.5 ? 720 : 520, Math.round(rect.s * Math.min(0.85, Math.max(0.5, dyn.scale * 1.15)))));
-  ensureRadar(S, S);
+  // resolution follows the frame budget (in steps of 32 px, so the texture isn't reallocated all the time)
+  const S = 32 * Math.round(Math.max(160, Math.min(state.radar.grow > 0.5 ? 640 : 448, rect.s * Math.max(0.35, dyn.scale * 0.85))) / 32);
+  const fresh = ensureRadar(S, S);
   updatePeaks();
   const cv = radarCamera(RB, t);
   const inB = v => B.map(b => vec4.dot(v, b)), discN = inB(player.A);
@@ -439,8 +440,13 @@ function drawRadar(cam, sun, t, fovX) {
     gl.uniform1f(p.u('uVN'), VN);
     gl.uniform1f(p.u('uEnc'), radar.enc);
   };
-  // 1. bake the heights inside the ball (only when the ball has moved, turned or changed size)
+  // Redraw only if something in the ball has changed, and then at most every other frame: it is an inset.
   const key = [VN, RB, ...u, ...B.flat()].map(x => x.toFixed(5)).join();
+  const look = [key, S, ...cv.pos, fovX, state.radar.layers, ...player.A, ...player.F].map(x => typeof x === 'number' ? x.toFixed(4) : x).join();
+  radar.age = (radar.age || 0) + 1;
+  if (!fresh && (look === radar.lookKey || radar.age < 2)) return { rect, cv, B, RB, discN, u, pinned: !!pin };
+  radar.lookKey = look; radar.age = 0;
+  // 1. bake the heights inside the ball (only when the ball has moved, turned or changed size)
   if (key !== radar.bakeKey) {
     radar.bakeKey = key;
     gl.bindFramebuffer(gl.FRAMEBUFFER, radar.volFbo);
@@ -709,7 +715,7 @@ function drawRadarOverlay(r, sun) {
 // Scattered 4D balls, partly buried. The nearest MAXB go to the GPU each frame; the far ones shrink to
 // nothing before they drop out of the list, so they never pop.
 const MAXB = 32, B_FAR = 140;
-const boulders = { all: [], near: [], C: new Float32Array(MAXB * 4), R: new Float32Array(MAXB) };
+const boulders = { all: [], near: [], cut: 0, C: new Float32Array(MAXB * 4), R: new Float32Array(MAXB) };
 function makeBoulders(rand) {
   const gauss = () => rand() + rand() + rand() + rand() - 2, home = player.up();
   for (let i = 0; i < 3400; i++) {
@@ -729,6 +735,10 @@ function updateBoulders(eye) {
   cand.sort((x, y) => x.d - y.d);
   const near = cand.slice(0, MAXB);
   const cut = Math.min(B_FAR, near.length === MAXB ? near[MAXB - 1].d : B_FAR);
+  // a ray of the slice view never leaves your slice, so it can only hit boulders the slice cuts: put them first
+  const A = player.A, inSlice = x => Math.abs(vec4.dot(x.b.c, A)) < x.b.r;
+  near.sort((x, y) => inSlice(y) - inSlice(x));
+  boulders.cut = near.filter(inSlice).length;
   boulders.C.fill(0); boulders.R.fill(0);
   near.forEach(({ b, d }, i) => {
     boulders.C.set(b.c, 4 * i);
@@ -793,6 +803,7 @@ function setWorld(p, cam, sun) {
   gl.uniform4fv(p.u('uBC'), boulders.C);
   gl.uniform1fv(p.u('uBR'), boulders.R);
   gl.uniform1i(p.u('uBN'), boulders.near.length);
+  gl.uniform1i(p.u('uBCut'), boulders.cut);
 }
 
 const FOV = Math.tan(38 * Math.PI / 180);

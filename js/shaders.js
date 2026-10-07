@@ -27,7 +27,8 @@ uniform float uShadows;
 const int MAXB = 32;
 uniform vec4 uBC[MAXB];     // boulders near you: 4D balls (centres) ...
 uniform float uBR[MAXB];    // ... and radii
-uniform int uBN;
+uniform int uBN;            // all of them cast shadows ...
+uniform int uBCut;          // ... but only the first uBCut cross your slice, so only those can be seen
 
 const float MAXT = 900.0;
 const float SHELL = 48.0;   // terrain lies within uPR-20 .. uPR+SHELL
@@ -136,7 +137,7 @@ float softShadow(vec4 ro, vec4 rd) {
 float hitBoulder(vec4 ro, vec4 rd, float tMax, out int idx) {
   float best = tMax; idx = -1;
   for (int i = 0; i < MAXB; i++) {
-    if (i >= uBN) break;
+    if (i >= uBCut) break;
     vec4 oc = ro - uBC[i];
     float b = dot(oc, rd), c = dot(oc, oc) - uBR[i] * uBR[i], d = b * b - c;
     if (d > 0.0) { float t = -b - sqrt(d); if (t > 0.0 && t < best) { best = t; idx = i; } }
@@ -261,7 +262,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float sunEl = dot(uSun, up);
   float dif = max(dot(nb, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
   float sh = 1.0;
-  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) sh = min(softShadow(p + n * 0.08, uSun), boulderShadow(p + n * 0.08, uSun));
+  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) { sh = softShadow(p + n * 0.08, uSun); if (sh > 0.02) sh = min(sh, boulderShadow(p + n * 0.08, uSun)); }
   float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
@@ -286,7 +287,7 @@ vec3 shadeBoulder(vec4 p, vec4 n, float t) {
   float sunEl = dot(uSun, up);
   float dif = max(dot(nb, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
   float sh = 1.0;
-  if (dif > 0.0 && uShadows > 0.5) sh = min(softShadow(p + n * 0.08, uSun), boulderShadow(p + n * 0.08, uSun));
+  if (dif > 0.0 && uShadows > 0.5) { sh = softShadow(p + n * 0.08, uSun); if (sh > 0.02) sh = min(sh, boulderShadow(p + n * 0.08, uSun)); }
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
   vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);
@@ -525,7 +526,7 @@ void main() {
   float tD = uPinned < 0.5 && abs(dn) > 1e-5 ? -dot(ro, uDiscN) / dn : -1.0;
   float sPrev = uPinned > 0.5 ? dot(planetPoint(ro + rd * t0), uSliceA) : 0.0;
   float span = t1 - t0;
-  int steps = int(clamp(1.3 * uVN * span / (2.0 * uRB), 8.0, 200.0));
+  int steps = int(clamp(1.05 * uVN * span / (2.0 * uRB), 8.0, 200.0));
   float ds = span / float(steps);
   float t = t0, hPrev = hVol(ro + rd * t0);
   for (int i = 0; i < 200; i++) {
