@@ -551,6 +551,22 @@ function drawRadarOverlay(r, sun) {
     octx.stroke();
   }
 
+  // boulders: dots sized by radius; outlined where your slice cuts them (those are the ones you can see)
+  const bs = [];
+  for (const b of boulders.all) {
+    if (vec4.dot(b.n, u) < Math.cos(RB / PLANET_R)) continue;
+    const m = logMap(b.n, B, u), d = Math.hypot(...m);
+    if (d < RB * 0.97) bs.push({ m, d, r: b.r });
+  }
+  bs.sort((a, b) => a.d - b.d);
+  for (const b of bs.slice(0, 80)) {
+    const P = proj(b.m), Pr = proj(b.m.map((v, i) => v + cv.R[i] * b.r)), rad = Math.max(1.6 * k, Math.hypot(Pr[0] - P[0], Pr[1] - P[1]));
+    const cut = Math.abs(dot3(b.m, discN)) < b.r;
+    octx.fillStyle = cut ? 'rgba(235, 228, 215, 0.95)' : 'rgba(160, 155, 148, 0.75)';
+    octx.beginPath(); octx.arc(P[0], P[1], rad, 0, 7); octx.fill();
+    if (cut) { octx.strokeStyle = '#fff'; octx.lineWidth = 1.4 * k; octx.stroke(); }
+  }
+
   // summits, each on a stalk down to your slice's ground (above = toward ana, below = toward kata)
   radar.marks = [];
   const shown = radar.peaks.map(p => ({ ...p, m: logMap(p.n, B, u) })).filter(p => Math.hypot(...p.m) < RB * 0.97).slice(0, 7);
@@ -637,12 +653,56 @@ function drawRadarOverlay(r, sun) {
   };
   caption([`RADAR ${Math.round(RB)} m · ${state.radar.compass ? 'compass-up' : 'heading-up'} · ${RADAR_LAYERS[state.radar.layers].name}`], rect.x + 8 * k, rect.y + 14 * k);
   if (state.radar.grow > 0.99) {
-    const lines = ['disc: the ground your slice shows', RADAR_LAYERS[state.radar.layers].legend, 'disc tint: mountains toward ana / kata', '▲ summits · line: your trail', 'L layers · K hide radar',
+    const lines = ['disc: the ground your slice shows', RADAR_LAYERS[state.radar.layers].legend, 'disc tint: mountains toward ana / kata', '▲ summits · ● boulders (ringed: cut by your slice)', 'line: your trail', 'L layers · K hide radar',
       'wheel or −/= zoom · Tab smaller', 'arrows, or Esc then drag: spin', 'Esc, then hover / click: inspect / face', 'M heading/compass-up · O rock'];
     const w = Math.max(...lines.map(t => octx.measureText(t).width));
     caption(lines, Math.max(8 * k, rect.x - w - 18 * k), rect.y + rect.s - 150 * k);
   }
   octx.restore();
+}
+
+// ---------- boulders ----------
+// Scattered 4D balls, partly buried. The nearest MAXB go to the GPU each frame; the far ones shrink to
+// nothing before they drop out of the list, so they never pop.
+const MAXB = 32, B_FAR = 140;
+const boulders = { all: [], near: [], C: new Float32Array(MAXB * 4), R: new Float32Array(MAXB) };
+function makeBoulders(rand) {
+  const gauss = () => rand() + rand() + rand() + rand() - 2, home = player.up();
+  for (let i = 0; i < 3400; i++) {
+    const n = vec4.norm([gauss(), gauss(), gauss(), gauss()]), h = player.hf.heightAt(n);
+    if (h < 0.8) continue;
+    const r = 1.4 + 3.6 * rand() ** 2;
+    if (Math.acos(Math.min(1, vec4.dot(n, home))) * PLANET_R < r + 6) continue;   // keep the start clear
+    boulders.all.push({ n, r, c: vec4.scale(n, PLANET_R + h + 0.3 * r) });
+  }
+}
+function updateBoulders(eye) {
+  const cand = [];
+  for (const b of boulders.all) {
+    const d = vec4.len(vec4.sub(b.c, eye));
+    if (d < B_FAR + b.r) cand.push({ b, d });
+  }
+  cand.sort((x, y) => x.d - y.d);
+  const near = cand.slice(0, MAXB);
+  const cut = Math.min(B_FAR, near.length === MAXB ? near[MAXB - 1].d : B_FAR);
+  boulders.C.fill(0); boulders.R.fill(0);
+  near.forEach(({ b, d }, i) => {
+    boulders.C.set(b.c, 4 * i);
+    boulders.R[i] = b.r * Math.min(1, Math.max(0, (cut - d) / (0.15 * cut)));   // fade out toward the cut-off
+  });
+  boulders.near = near.map(x => x.b);
+}
+// Boulders are solid: push the walker out of them, and let them stand on top.
+function collideBoulders() {
+  for (const b of boulders.near) {
+    const d = vec4.sub(player.pos, b.c), l = vec4.len(d), R = b.r + 0.3;
+    if (l >= R || l < 1e-6) continue;
+    const nrm = vec4.scale(d, 1 / l);
+    player.pos = vec4.add(b.c, vec4.scale(nrm, R));
+    const vn = vec4.dot(player.vel, nrm);
+    if (vn < 0) player.vel = vec4.sub(player.vel, vec4.scale(nrm, vn));
+    if (vec4.dot(nrm, player.up()) > 0.6) player.grounded = true;
+  }
 }
 
 // ---------- rendering ----------
@@ -671,6 +731,9 @@ function setWorld(p, cam, sun) {
   gl.uniform1f(p.u('uTime'), performance.now() / 1000);
   gl.uniform1f(p.u('uShadows'), state.shadows ? 1 : 0);
   gl.uniform1f(p.u('uAnaTint'), state.anaTint ? 1 : 0);
+  gl.uniform4fv(p.u('uBC'), boulders.C);
+  gl.uniform1fv(p.u('uBR'), boulders.R);
+  gl.uniform1i(p.u('uBN'), boulders.near.length);
 }
 
 const FOV = Math.tan(38 * Math.PI / 180);
@@ -921,7 +984,8 @@ function frame(now) {
 
   const input = readInput();
   const sub = 3;
-  for (let i = 0; i < sub; i++) player.update(dt / sub, input);
+  updateBoulders(player.camera().eye);
+  for (let i = 0; i < sub; i++) { player.update(dt / sub, input); collideBoulders(); }
   recordTrail();
   if (!state.paused) state.time += dt * state.timeScale;
 
@@ -955,6 +1019,7 @@ function frame(now) {
     const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
     player.spawn(rand);
     makeRadarVolume();
+    makeBoulders(rand);
     // start in the morning: sun about 20° up and rising
     const up = player.up();
     for (let t = 0; t < 20000; t += 0.5) {
@@ -966,7 +1031,7 @@ function frame(now) {
     $('hint').hidden = false;
     if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches)
       $('hint').textContent = 'Hoop needs a keyboard and mouse to explore.';
-    window.__hoop = { state, player, keys, sunDir, dyn, radar, compassAt, logMap, recordTrail, dbg: { gl, drawRadar, drawSlice, scene } };   // handle for debugging from the console
+    window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, compassAt, logMap, recordTrail, dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, collideBoulders } };   // handle for debugging from the console
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

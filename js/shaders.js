@@ -24,6 +24,10 @@ uniform vec4 uF, uR, uU, uA;// view basis: forward, right, up (pitched) and ana
 uniform vec4 uSun;          // unit direction toward the sun
 uniform float uTime;
 uniform float uShadows;
+const int MAXB = 32;
+uniform vec4 uBC[MAXB];     // boulders near you: 4D balls (centres) ...
+uniform float uBR[MAXB];    // ... and radii
+uniform int uBN;
 uniform float uAnaTint;    // optional cue: tint slopes that climb toward ana (warm) or kata (cool)
 
 const float MAXT = 900.0;
@@ -126,6 +130,32 @@ float softShadow(vec4 ro, vec4 rd) {
     if (t > 260.0 || (dot(p, p) > rOut * rOut && dot(p, rd) > 0.0)) break;
   }
   return clamp(res, 0.0, 1.0);
+}
+
+// Boulders are 4D balls, intersected analytically. Your slice cuts each one in a 3D ball of radius
+// sqrt(r^2 - a^2), where a is how far its centre lies toward ana or kata: they swell and vanish as you turn.
+float hitBoulder(vec4 ro, vec4 rd, float tMax, out int idx) {
+  float best = tMax; idx = -1;
+  for (int i = 0; i < MAXB; i++) {
+    if (i >= uBN) break;
+    vec4 oc = ro - uBC[i];
+    float b = dot(oc, rd), c = dot(oc, oc) - uBR[i] * uBR[i], d = b * b - c;
+    if (d > 0.0) { float t = -b - sqrt(d); if (t > 0.0 && t < best) { best = t; idx = i; } }
+  }
+  return best;
+}
+// Soft shadow from the boulders along a ray toward the sun.
+float boulderShadow(vec4 ro, vec4 rd) {
+  float res = 1.0;
+  for (int i = 0; i < MAXB; i++) {
+    if (i >= uBN) break;
+    vec4 oc = uBC[i] - ro;
+    float t = dot(oc, rd);
+    if (t <= 0.0) continue;
+    float miss = sqrt(max(dot(oc, oc) - t * t, 0.0)) - uBR[i];
+    res = min(res, clamp(6.0 * miss / t + 0.5, 0.0, 1.0));
+  }
+  return res;
 }
 
 // Cheap ambient occlusion: how much the bounding surface crowds in along the normal.
@@ -233,7 +263,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float sunEl = dot(uSun, up);
   float dif = max(dot(nb, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
   float sh = 1.0;
-  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) sh = softShadow(p + n * 0.08, uSun);
+  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) sh = min(softShadow(p + n * 0.08, uSun), boulderShadow(p + n * 0.08, uSun));
   float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
@@ -241,6 +271,29 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec3 bounce = alb * vec3(0.9, 0.8, 0.6) * 0.14 * day;
   float skyVis = 0.5 + 0.5 * dot(nb, up);
   return alb * (sunCol * dif * sh * 1.6 + (sky * skyVis + bounce) * ao * ao);
+}
+
+vec3 shadeBoulder(vec4 p, vec4 n, float t) {
+  vec4 up = normalize(p);
+  vec4 g1, g2, g3;
+  float d1 = detail(p, 0.7, g1), d2 = detail(p, 2.6, g2);
+  float f3 = 1.0 - smoothstep(4.0, 16.0, t);
+  float d3 = f3 > 0.0 ? detail(p, 9.0, g3) : 0.0;
+  if (f3 <= 0.0) g3 = vec4(0.0);
+  vec4 bump = g1 * 0.25 + g2 * 0.08 + g3 * 0.025 * f3;
+  vec4 nb = normalize(n - (bump - n * dot(bump, n)) * 0.6);
+  vec3 alb = mix(vec3(0.38, 0.36, 0.33), vec3(0.50, 0.47, 0.43), 0.5 + 0.3 * d1) * (0.88 + 0.12 * d2 + 0.12 * d3 * f3);
+  alb *= 1.0 - 0.25 * smoothstep(0.06, 0.0, abs(d2)) * f3;                                        // fine cracks up close
+  alb = mix(alb, vec3(0.22, 0.31, 0.12), smoothstep(0.6, 0.9, dot(n, up) + 0.2 * d2) * 0.5);   // moss on top
+  float sunEl = dot(uSun, up);
+  float dif = max(dot(nb, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
+  float sh = 1.0;
+  if (dif > 0.0 && uShadows > 0.5) sh = min(softShadow(p + n * 0.08, uSun), boulderShadow(p + n * 0.08, uSun));
+  float day = dayFactor(up);
+  vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
+  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);
+  float skyVis = 0.5 + 0.5 * dot(nb, up);
+  return alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.6 + 0.4 * skyVis));
 }
 
 vec3 applyFog(vec3 col, vec4 upEye, float t) {
@@ -287,6 +340,14 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
     else tW = -b + s;
   }
   float tT = marchTerrain(ro, rd);
+  int bi;
+  float tB = hitBoulder(ro, rd, tT > 0.0 ? tT : MAXT, bi);
+  if (bi >= 0 && (under || tW < 0.0 || tB < tW)) {             // a boulder in front of everything else
+    tOut = tB;
+    vec4 p = ro + rd * tB;
+    vec3 col = shadeBoulder(p, (p - uBC[bi]) / uBR[bi], tB);
+    return under ? mix(col, vec3(0.015, 0.10, 0.13), 1.0 - exp(-tB * 0.09)) : applyFog(col, upE, tB);
+  }
   vec3 col;
   if (!under && tW > 0.0 && (tT < 0.0 || tW < tT)) {
     tOut = tW;
