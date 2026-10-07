@@ -95,11 +95,20 @@ float marchTerrain(vec4 ro, vec4 rd) {
     if (disc < 0.0 || b > 0.0) return -1.0;
     t = -b - sqrt(disc);
   }
+  float tPrev = t;
   for (int i = 0; i < 260; i++) {
     vec4 p = ro + rd * t;
     float d = sdTerrain(p);
-    if (d < 0.0012 * t + 0.002) return t;
-    t += max(d, 0.0008 * t);
+    if (d < 0.0012 * t + 0.002) {
+      if (d < 0.0 && i > 0) {                // overshot (over-relaxed step): bisect back to the surface
+        float a = tPrev, z = t;
+        for (int j = 0; j < 6; j++) { float m = 0.5 * (a + z); if (sdTerrain(ro + rd * m) < 0.0) z = m; else a = m; }
+        return z;
+      }
+      return t;
+    }
+    tPrev = t;
+    t += max(d * 1.4, 0.0008 * t);          // over-relaxed: the 0.6 slope bound is conservative almost everywhere
     if (t > MAXT) break;
     if (dot(p, p) > rOut * rOut && dot(p, rd) > 0.0) break;
   }

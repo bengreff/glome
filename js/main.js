@@ -436,6 +436,7 @@ function drawRadar(cam, sun, t, fovX) {
   gl.uniform1f(p.u('uFovX'), fovX);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, null); gl.activeTexture(gl.TEXTURE0);
+  radar.last = { rect, cv, B, RB, discN, u };
   return { rect, cv, B, RB, discN };
 }
 function blitRadar(r) {
@@ -449,12 +450,36 @@ function blitRadar(r) {
   gl.disable(gl.BLEND);
   gl.activeTexture(gl.TEXTURE0);
 }
-// A click on a summit in the radar turns you (smoothly, in the plane of forward and the summit) to face it.
-function faceMarkAt([x, y]) {
-  const k = overlay.width / innerWidth;
+// What is under the cursor in the radar: a summit marker, else the first mountain or the disc along the
+// line of sight through the ball (marched on the CPU with the same heights the GPU uses).
+function pickRadar([x, y]) {
+  const k = overlay.width / innerWidth, last = radar.last;
+  if (!last) return null;
   let best = null, bd = 16 * k;
   for (const m of radar.marks) { const d = Math.hypot(m.x - x, m.y - y); if (d < bd) { bd = d; best = m; } }
-  if (best) state.facing = best.n;
+  if (best) return { n: best.n, h: best.h, kind: 'summit' };
+  const { rect, cv, B, RB, discN, u } = last;
+  const qx = ((x - rect.x) / rect.s * 2 - 1) * RADAR_FOV, qy = -((y - rect.y) / rect.s * 2 - 1) * RADAR_FOV;
+  const rd = norm3([0, 1, 2].map(i => cv.F[i] + qx * cv.R[i] + qy * cv.U[i])), ro = cv.pos;
+  const b = dot3(ro, rd), c = dot3(ro, ro) - RB * RB, disc = b * b - c;
+  if (disc <= 0) return null;
+  const t0 = -b - Math.sqrt(disc), t1 = -b + Math.sqrt(disc), ds = RB / 70;
+  let sPrev = null;
+  for (let t = t0; t <= t1; t += ds) {
+    const m = ro.map((v, i) => v + rd[i] * t), sd = dot3(m, discN);
+    if (sPrev !== null && Math.sign(sd) !== Math.sign(sPrev)) {
+      const mm = m.map((v, i) => v - rd[i] * ds * sd / (sd - sPrev)), n = expMap(mm, B, u);
+      return { n, h: player.hf.heightAt(n), kind: 'disc' };
+    }
+    sPrev = sd;
+    const n = expMap(m, B, u), h = player.hf.heightAt(n);
+    if (h >= 24) return { n, h, kind: 'mountain' };
+  }
+  return null;
+}
+function faceMarkAt(p) {
+  const hit = pickRadar(p);
+  if (hit && headingTo(hit.n).dist > 2) { state.facing = hit.n; state.facingWhat = hit.kind === 'summit' ? `summit ${Math.round(hit.h)} m` : hit.kind === 'mountain' ? 'mountain' : hit.h < SEA ? 'water' : 'this ground'; }
 }
 
 const hypsCSS = h => h < 0 ? [70, 140, 220] : h < 4 ? [220, 205, 150] : h < 12 ? [110, 190, 100] : h < 24 ? [200, 175, 90] : h < 30 ? [215, 160, 120] : [245, 245, 255];
@@ -534,18 +559,20 @@ function drawRadarOverlay(r, sun) {
     octx.fillText(`sun ${Math.round(el)}°`, P[0], P[1] - 8 * k);
   }
 
-  // hover: what a summit is, and how to reach it
-  const hv = radar.hover && radar.marks.reduce((best, m) => {
-    const d = Math.hypot(m.x - radar.hover[0], m.y - radar.hover[1]);
-    return d < 16 * k && (!best || d < best.d) ? { ...m, d } : best;
-  }, null);
+  // hover: what is under the cursor, and how to reach it
+  radar.last = { rect, cv, B, RB, discN, u };
+  const hv = radar.hover && pickRadar(radar.hover);
   if (hv) {
     const { dist, dir } = headingTo(hv.n);
     const ana = Math.atan2(vec4.dot(dir, player.A), Math.hypot(vec4.dot(dir, player.F), vec4.dot(dir, player.R))) * 180 / Math.PI;
-    const lines = [`summit ${Math.round(hv.h)} m high · ${Math.round(dist)} m away`,
+    const what = hv.kind === 'summit' ? `summit ${Math.round(hv.h)} m high` : hv.h < SEA ? `water ${Math.round(SEA - hv.h)} m deep` : `ground ${Math.round(hv.h)} m high`;
+    const lines = [`${what} · ${Math.round(dist)} m away`,
       Math.abs(ana) < 2 ? 'in your slice' : `${Math.round(Math.abs(ana))}° toward ${ana > 0 ? 'ana' : 'kata'} from your slice`, 'click to turn and face it'];
     octx.font = mono(500, 11); octx.textAlign = 'left';
-    const w = Math.max(...lines.map(t => octx.measureText(t).width)) + 16 * k, x0 = Math.min(hv.x + 12 * k, overlay.width - w - 4 * k), y0 = hv.y - 52 * k;
+    const [hx, hy] = radar.hover;
+    octx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; octx.lineWidth = 1.5 * k;
+    octx.beginPath(); octx.arc(hx, hy, 5 * k, 0, 7); octx.stroke();
+    const w = Math.max(...lines.map(t => octx.measureText(t).width)) + 16 * k, x0 = Math.min(hx + 12 * k, overlay.width - w - 4 * k), y0 = hy - 52 * k;
     octx.fillStyle = 'rgba(11, 14, 20, 0.88)'; octx.fillRect(x0, y0, w, 50 * k);
     lines.forEach((t, i) => { octx.fillStyle = i === 2 ? 'rgba(141, 154, 176, 0.95)' : 'rgba(236, 240, 246, 0.95)'; octx.fillText(t, x0 + 8 * k, y0 + (15 + 15 * i) * k); });
   }
@@ -561,7 +588,7 @@ function drawRadarOverlay(r, sun) {
   caption([`RADAR ${Math.round(RB)} m · ${state.radar.compass ? 'compass-up' : 'heading-up'}`], rect.x + 8 * k, rect.y + 14 * k);
   if (state.radar.big) {
     const lines = ['disc: the ground your slice shows', 'shells: coast · 12 m · 24 m', '▲ summits · line: your trail',
-      'wheel or −/= zoom · Tab smaller', 'arrows, or Esc then drag: spin', 'Esc, then click a ▲: face it', 'M heading/compass-up · O rock'];
+      'wheel or −/= zoom · Tab smaller', 'arrows, or Esc then drag: spin', 'Esc, then hover / click: inspect / face', 'M heading/compass-up · O rock'];
     const w = Math.max(...lines.map(t => octx.measureText(t).width));
     caption(lines, Math.max(8 * k, rect.x - w - 18 * k), rect.y + rect.s - 150 * k);
   }
@@ -739,7 +766,7 @@ function drawTriptychOverlay(cam, t) {
 function drawFaced(cam) {
   const f = state.faced;
   if (!f || simT > f.until) return;
-  const h = player.hf.heightAt(f.n), p = vec4.scale(f.n, PLANET_R + h), d = vec4.sub(p, cam.eye);
+  const h = Math.max(SEA, player.hf.heightAt(f.n)), p = vec4.scale(f.n, PLANET_R + h), d = vec4.sub(p, cam.eye);
   const z = vec4.dot(d, cam.F); if (z < 1) return;
   const W = overlay.width, H = overlay.height, k = W / innerWidth;
   const x = vec4.dot(d, cam.R) / z / (FOV * W / H), y = vec4.dot(d, cam.U) / z / FOV;
@@ -750,7 +777,7 @@ function drawFaced(cam) {
   octx.strokeStyle = '#fff'; octx.lineWidth = 2 * k; octx.fillStyle = 'rgba(255, 255, 255, 0.25)';
   octx.beginPath(); octx.moveTo(X, Y - 9 * k); octx.lineTo(X + 8 * k, Y + 5 * k); octx.lineTo(X - 8 * k, Y + 5 * k); octx.closePath(); octx.fill(); octx.stroke();
   octx.font = `500 ${12 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'center';
-  octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const t = `summit ${Math.round(h)} m · ${Math.round(headingTo(f.n).dist)} m ahead`;
+  octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const t = `${f.what || 'here'} · ${Math.round(headingTo(f.n).dist)} m ahead`;
   const w = octx.measureText(t).width + 12 * k; octx.fillRect(X - w / 2, Y - 30 * k, w, 17 * k);
   octx.fillStyle = '#fff'; octx.fillText(t, X, Y - 17 * k);
   octx.restore();
@@ -797,7 +824,7 @@ function frame(now) {
   mouseDX = mouseDY = 0;
   const turnKeys = (keys.has('KeyC') ? 1 : 0) - (keys.has('KeyZ') ? 1 : 0);
   if (turnKeys) player.rotate('FA', turnKeys * 1.2 * dt);
-  if (state.facing && player.turnToward(headingTo(state.facing).dir, 2.2 * dt)) { state.faced = { n: state.facing, until: simT + 5 }; state.facing = null; }
+  if (state.facing && player.turnToward(headingTo(state.facing).dir, 2.2 * dt)) { state.faced = { n: state.facing, what: state.facingWhat, until: simT + 5 }; state.facing = null; }
   const k = c => keys.has(c) ? 1 : 0;
   if (state.view !== 'eye') orbitRadar((k('ArrowLeft') - k('ArrowRight')) * 1.6 * dt, (k('ArrowUp') - k('ArrowDown')) * 1.2 * dt);
   zoomRadar((k('Minus') - k('Equal')) * 1.3 * dt);
