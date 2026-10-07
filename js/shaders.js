@@ -467,6 +467,8 @@ uniform vec3 uCam, uCamF, uCamR, uCamU, uLight;
 uniform vec3 uDiscN, uFwd, uRight;   // your slice's ground, forward and right, in ball coordinates
 uniform float uFovX;           // half-width (tan) of the slice view, for the view wedge
 uniform sampler3D uVol;
+uniform vec3 uShellA;          // opacity of the coast, hill and mountain shells (layers can be switched off)
+uniform float uWater;
 in vec2 vUV;
 out vec4 outColor;
 
@@ -487,6 +489,18 @@ vec3 gradVol(vec3 m) {
               hVol(m + vec3(0, e, 0)) - hVol(m - vec3(0, e, 0)),
               hVol(m + vec3(0, 0, e)) - hVol(m - vec3(0, 0, e))) / (2.0 * e);
 }
+// Mountains off to either side of your slice, projected onto the disc: orange where one lies toward ana,
+// blue toward kata. The disc then shows everything that a turn or a step through ana would bring into view.
+vec2 footprint(vec3 sp) {
+  float reach = sqrt(max(uRB * uRB - dot(sp, sp), 0.0));
+  float up = 0.0, dn = 0.0;
+  for (int i = 1; i <= 10; i++) {
+    float o = reach * float(i) / 10.0;
+    up = max(up, smoothstep(21.0, 25.0, hVol(sp + uDiscN * o)));
+    dn = max(dn, smoothstep(21.0, 25.0, hVol(sp - uDiscN * o)));
+  }
+  return vec2(up, dn);
+}
 vec3 topo(vec3 sp) {           // the disc: a topographic map of exactly the ground in your slice (exact heights)
   float hs = heightAt(planetPoint(sp));
   float minor = 1.0 - smoothstep(0.0, 0.10, abs(fract(hs / 4.0 + 0.5) - 0.5) * 4.0);
@@ -496,7 +510,6 @@ vec3 topo(vec3 sp) {           // the disc: a topographic map of exactly the gro
 }
 
 const vec3 SHELL_L = vec3(0.5, 12.0, 24.0);     // coast, hills, mountains
-const vec3 SHELL_A = vec3(0.13, 0.2, 0.75);
 vec3 shellCol(int k) { return k == 0 ? vec3(0.62, 0.82, 0.98) : k == 1 ? vec3(0.42, 0.80, 0.40) : vec3(0.92, 0.72, 0.52); }
 
 void main() {
@@ -543,6 +556,11 @@ void main() {
       float inView = fx > 0.0 && abs(fy) < uFovX * fx ? 1.0 : 0.0;
       float edge = fx > 0.0 ? 1.0 - smoothstep(0.0, 0.006 * uRB, abs(abs(fy) - uFovX * fx) / sqrt(1.0 + uFovX * uFovX)) : 0.0;
       vec3 dc = topo(sp) * mix(0.62, 1.05, inView);
+      if (uShellA.z > 0.0) {
+        vec2 fp = footprint(sp);
+        dc = mix(dc, vec3(1.0, 0.62, 0.28), fp.x * 0.38);
+        dc = mix(dc, vec3(0.35, 0.62, 1.0), fp.y * 0.38);
+      }
       float ring = max(1.0 - smoothstep(0.0, 0.006, abs(r - 1.0 / 3.0)), 1.0 - smoothstep(0.0, 0.006, abs(r - 2.0 / 3.0)));
       dc = mix(dc, vec3(0.85, 0.92, 1.0), ring * 0.35 + edge * 0.7);
       dc = mix(dc, vec3(0.85, 0.92, 1.0), 1.0 - smoothstep(0.0, 0.012, 0.99 - r));   // disc rim
@@ -555,20 +573,20 @@ void main() {
     float h = hVol(m);
     float fade = 1.0 - 0.45 * (t - t0) / (2.0 * uRB);        // a touch of depth haze inside the ball
     if (h < uSea) {                                          // water: blue haze, thicker where deeper
-      float k = (0.0035 + 0.0006 * (uSea - h)) * ds * (90.0 / uRB);
+      float k = (0.0035 + 0.0006 * (uSea - h)) * ds * (90.0 / uRB) * uWater;
       col += T * (1.0 - exp(-k)) * vec3(0.16, 0.42, 0.78) * fade;
       T *= exp(-k);
     }
     for (int s = 0; s < 3; s++) {
       float L = SHELL_L[s];
-      if ((hPrev - L) * (h - L) < 0.0) {                     // a contour shell: lit, brighter where seen edge-on
+      if (uShellA[s] > 0.0 && (hPrev - L) * (h - L) < 0.0) {                     // a contour shell: lit, brighter where seen edge-on
         vec3 mc = m - rd * ds * (h - L) / (h - hPrev);
         vec3 n = normalize(gradVol(mc) + 1e-6);
         if (dot(n, rd) > 0.0) n = -n;
         float edgeOn = 1.0 - abs(dot(n, rd));
         float shade = 0.36 + 0.64 * max(dot(n, uLight), 0.0) + 0.3 * pow(edgeOn, 3.0);
         shade += s == 2 ? 0.25 * pow(max(dot(reflect(-uLight, n), -rd), 0.0), 12.0) : 0.0;
-        float a = clamp(SHELL_A[s] * (0.55 + 0.9 * edgeOn * edgeOn), 0.0, 0.92);
+        float a = clamp(uShellA[s] * (0.55 + 0.9 * edgeOn * edgeOn), 0.0, 0.92);
         col += T * a * shellCol(s) * shade * fade; T *= 1.0 - a;
       }
     }

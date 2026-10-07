@@ -121,7 +121,7 @@ const DAY1 = 300;                       // seconds for one turn in the first rot
 const state = {
   view: 'slice', time: 0, timeScale: 1, paused: false, rotation: 'double',
   shadows: true, retinaM: 64, help: false, anaTint: false,
-  radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42 }, facing: null, faced: null,
+  radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42, layers: 0, hidden: false, grow: 0 }, facing: null, faced: null,
   eyeYaw: 0, eyePitch: 0.3, eyeAuto: true,
 };
 const RATIOS = { double: 1.6180339887, isoclinic: 1 };
@@ -190,6 +190,8 @@ addEventListener('keydown', e => {
       else state.view = state.view === 'slice' ? 'triptych' : 'slice';
       break;
     case 'Tab': state.radar.big = !state.radar.big; break;
+    case 'KeyL': state.radar.layers = (state.radar.layers + 1) % RADAR_LAYERS.length; break;
+    case 'KeyK': if (state.view !== 'eye') state.radar.hidden = !state.radar.hidden; break;
     case 'BracketRight': state.timeScale = Math.min(state.timeScale * 2, 256); break;
     case 'BracketLeft': state.timeScale = Math.max(state.timeScale / 2, 1 / 8); break;
     case 'KeyP': state.paused = !state.paused; break;
@@ -257,6 +259,11 @@ function readInput() {
 // The ground of a 4D world is three-dimensional, so its minimap is a ball (see RADAR_FRAG). The disc through
 // the middle is the ground your slice view shows; everything above it lies toward ana, below toward kata.
 const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = 320;
+const RADAR_LAYERS = [                     // L cycles what the ball shows
+  { name: 'mountains + water', shells: [0, 0, 0.8], water: 1, legend: 'solid: ground above 24 m · blue: water' },
+  { name: 'all shells', shells: [0.13, 0.2, 0.75], water: 1, legend: 'shells: coast · 12 m · 24 m' },
+  { name: 'mountains only', shells: [0, 0, 0.85], water: 0, legend: 'solid: ground above 24 m' },
+];
 const VN = 80;                             // resolution of the baked height volume
 const radar = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, volFbo: gl.createFramebuffer(), vol: null, enc: 0,
                 trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], rect: null, hover: null, drag: null };
@@ -383,14 +390,16 @@ function radarCamera(RB, t) {
 }
 const orbitRadar = (dy, de) => { state.radar.yaw += dy; state.radar.el = Math.max(-1.3, Math.min(1.35, state.radar.el + de)); };
 const zoomRadar = d => { state.radar.range = Math.max(RANGE_MIN, Math.min(RANGE_MAX, state.radar.range * Math.exp(d))); };
+// Small in the corner or big beside the slice; Tab animates between them.
 function radarRect() {
-  const W = overlay.width, H = overlay.height, k = W / innerWidth, m = Math.round(10 * k), big = state.radar.big;
-  const s = Math.round(big ? Math.min(H * 0.92, W * 0.6) : Math.min(H * 0.42, W * 0.32));
-  return { x: W - s - m, y: big ? Math.round((H - s) / 2) : H - s - m, s, w: s };
+  const W = overlay.width, H = overlay.height, k = W / innerWidth, m = Math.round(10 * k), g = state.radar.grow;
+  const e = g * g * (3 - 2 * g), lerp = (a, b) => a + (b - a) * e;
+  const s = Math.round(lerp(Math.min(H * 0.42, W * 0.32), Math.min(H * 0.92, W * 0.6)));
+  return { x: W - s - m, y: Math.round(lerp(H - s - m, (H - s) / 2)), s, w: s };
 }
 function drawRadar(cam, sun, t, fovX) {
   const rect = radar.rect = radarRect(), RB = state.radar.range, B = radarBasis(), u = player.up();
-  const S = Math.max(96, Math.min(state.radar.big ? 720 : 520, Math.round(rect.s * Math.min(0.85, Math.max(0.5, dyn.scale * 1.15)))));
+  const S = Math.max(96, Math.min(state.radar.grow > 0.5 ? 720 : 520, Math.round(rect.s * Math.min(0.85, Math.max(0.5, dyn.scale * 1.15)))));
   ensureRadar(S, S);
   updatePeaks();
   const cv = radarCamera(RB, t);
@@ -434,6 +443,9 @@ function drawRadar(cam, sun, t, fovX) {
   gl.uniform3fv(p.u('uFwd'), inB(player.F));
   gl.uniform3fv(p.u('uRight'), inB(player.R));
   gl.uniform1f(p.u('uFovX'), fovX);
+  const L = RADAR_LAYERS[state.radar.layers];
+  gl.uniform3fv(p.u('uShellA'), L.shells);
+  gl.uniform1f(p.u('uWater'), L.water);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, null); gl.activeTexture(gl.TEXTURE0);
   radar.last = { rect, cv, B, RB, discN, u };
@@ -585,9 +597,9 @@ function drawRadarOverlay(r, sun) {
     octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; octx.fillRect(x - 6 * k, y - 12 * k, w, lines.length * 15 * k + 5 * k);
     octx.fillStyle = 'rgba(170, 182, 204, 0.95)'; lines.forEach((t, i) => octx.fillText(t, x, y + i * 15 * k));
   };
-  caption([`RADAR ${Math.round(RB)} m · ${state.radar.compass ? 'compass-up' : 'heading-up'}`], rect.x + 8 * k, rect.y + 14 * k);
-  if (state.radar.big) {
-    const lines = ['disc: the ground your slice shows', 'shells: coast · 12 m · 24 m', '▲ summits · line: your trail',
+  caption([`RADAR ${Math.round(RB)} m · ${state.radar.compass ? 'compass-up' : 'heading-up'} · ${RADAR_LAYERS[state.radar.layers].name}`], rect.x + 8 * k, rect.y + 14 * k);
+  if (state.radar.grow > 0.99) {
+    const lines = ['disc: the ground your slice shows', RADAR_LAYERS[state.radar.layers].legend, 'disc tint: mountains toward ana / kata', '▲ summits · line: your trail', 'L layers · K hide radar',
       'wheel or −/= zoom · Tab smaller', 'arrows, or Esc then drag: spin', 'Esc, then hover / click: inspect / face', 'M heading/compass-up · O rock'];
     const w = Math.max(...lines.map(t => octx.measureText(t).width));
     caption(lines, Math.max(8 * k, rect.x - w - 18 * k), rect.y + rect.s - 150 * k);
@@ -828,6 +840,7 @@ function frame(now) {
   const k = c => keys.has(c) ? 1 : 0;
   if (state.view !== 'eye') orbitRadar((k('ArrowLeft') - k('ArrowRight')) * 1.6 * dt, (k('ArrowUp') - k('ArrowDown')) * 1.2 * dt);
   zoomRadar((k('Minus') - k('Equal')) * 1.3 * dt);
+  state.radar.grow = Math.max(0, Math.min(1, state.radar.grow + (state.radar.big ? 1 : -1) * dt * 4));
   if (state.view === 'eye') {
     if (keys.has('KeyJ')) state.eyeYaw -= dt; if (keys.has('KeyL')) state.eyeYaw += dt;
     if (keys.has('KeyI')) state.eyePitch = Math.min(1.2, state.eyePitch + dt);
@@ -845,11 +858,12 @@ function frame(now) {
   const cam = player.camera(), sun = sunDir(state.time);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
-  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h); rad = drawRadar(cam, sun, simT, FOV * scene.w / scene.h); }
-  else if (state.view === 'triptych') { const t = drawTriptych(cam, sun); drawTriptychOverlay(cam, t); rad = drawRadar(cam, sun, simT, FOV * t.mid / scene.h); }
+  if (state.view === 'slice') { drawSlice(cam, sun, 0, 0, scene.w, scene.h); if (!state.radar.hidden) rad = drawRadar(cam, sun, simT, FOV * scene.w / scene.h); }
+  else if (state.view === 'triptych') { const t = drawTriptych(cam, sun); drawTriptychOverlay(cam, t); if (!state.radar.hidden) rad = drawRadar(cam, sun, simT, FOV * t.mid / scene.h); }
   else { const r = drawEye(cam, sun, simT); drawCubeOverlay(r.cv, r); }
   present();
-  if (rad) { if (state.view === 'slice') drawFaced(cam); blitRadar(rad); drawRadarOverlay(rad, sun); } else radar.rect = null;
+  if (state.view === 'slice') drawFaced(cam);
+  if (rad) { blitRadar(rad); drawRadarOverlay(rad, sun); } else radar.rect = null;
   updateHUD(dt, cam, sun);
   requestAnimationFrame(frame);
 }
