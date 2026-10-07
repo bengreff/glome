@@ -6,31 +6,26 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 
 ## What is real here
 - **The ground is a 3-sphere.** You can walk forward, sideways *and* along a third horizontal direction (ana/kata). Walk straight in any direction and you return to where you started, about 1.6 km later.
-- **Slice view (default).** The 3D cross-section through your eyes, which is what a 3D visitor would perceive. Turning toward ana sweeps the slice through the landscape. 
-- **Radar.** The ground is three-dimensional, so the minimap is a glass ball. The disc through its centre is exactly the ground your slice shows; above the disc is ana, below is kata. Ground above 24 m is solid, so mountains float in the ball as objects; water is blue haze (<kbd>L</kbd> adds contour shells); the disc is tinted where mountains lie toward ana or kata; summits on stalks down to the disc, and your trail as a line through all three ground directions. <kbd>Tab</kbd> enlarges it.
-- **Spin it, zoom it, use it.** Arrow keys (or Esc and drag) spin the ball, the mouse wheel zooms from 25 to 320 m, and with the mouse free a click on a summit turns you smoothly until it lies in your slice, straight ahead.
+- **Slice view.** The 3D cross-section through your eyes, which is what a 3D visitor would perceive. Turning toward ana sweeps the slice through the landscape.
+- **Radar: the ground as a ball.** The ground is three-dimensional, so the minimap is a glass ball with you at its centre. The disc through it is exactly the ground your slice shows; above the disc is ana, below is kata. Mountains float in it as solid shapes, water is blue haze, the disc is tinted where mountains lie toward ana or kata, summits sit on stalks, and your trail traces your walk through all three ground directions. The point at the centre of your view is marked on the disc.
+- **The whole planet.** Zoomed all the way out (785 m), the ball holds the entire planet, and its whole outer surface is a single point: your antipode. <kbd>P</kbd> pins it in place, so you watch yourself move through the planet, and your slice shows up as a curved sheet, a great 2-sphere through you and your antipode.
+- **Inspect and face anything.** With the mouse free, hovering any point in the ball says what is there and how far out of your slice it lies; clicking turns you smoothly until it is straight ahead.
 - **A compass with no poles.** The 3-sphere is parallelizable: multiplying your position (as a unit quaternion) by i, j and k gives three perpendicular directions along the ground everywhere. Walking straight keeps your compass heading fixed while the other two needles roll around it, once per lap of the planet. <kbd>M</kbd> switches the radar between heading-up and compass-up.
-- **Triptych** (<kbd>V</kbd>). A 4D creature's retina is three-dimensional (right, up, ana); your slice is its middle layer. The triptych shows three of its layers side by side: kata 25° · slice · ana 25°.
-- **Boulders that swell and vanish.** Boulders are 4D balls, intersected analytically. A slice cuts one in a 3D ball of radius √(r² − a²), where a is how far its centre lies toward ana, so turning makes them grow out of nothing and disappear. They cast 4D shadows and are solid to walk into; the radar shows them all and rings the ones your slice cuts.
+- **Boulders that swell and vanish.** Boulders are 4D balls, intersected analytically. A slice cuts one in a 3D ball of radius √(r² − a²), where a is how far its centre lies toward ana, so turning makes them grow out of nothing and disappear. They cast 4D shadows. Contact is full 4D with Coulomb friction: a push within about 42° of head-on stops you, a glancing one slides you round (through ana if that is where the surface leans), and holding Space climbs the 4D surface.
 - **Shadows from places you can't see.** Lighting uses the full 4D sun direction, so hills that lie beside you in ana, outside the slice, still cast shadows into it.
-- **No poles, irregular days.** The planet spins in two planes at once (a double rotation), so every place gets day and night, and day lengths vary. Press <kbd>T</kbd> for an isoclinic spin, where both rates are equal.
+- **No poles, days that never repeat.** The planet spins in two planes at once, at rates in the golden ratio, so every place gets day and night and no two days are alike.
 - **Stars are points on a 3-sphere of directions.** In the slice view you only see the ones close to your slice, so they fade in and out as you turn through ana.
 
 ## Controls
 | | |
 |---|---|
-| <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> | walk |
-| <kbd>Q</kbd> <kbd>E</kbd> | step kata / ana |
-| <kbd>Space</kbd> <kbd>Shift</kbd> | jump or swim up · run |
+| <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd> <kbd>E</kbd> | walk · step kata / ana |
+| <kbd>Space</kbd> <kbd>Shift</kbd> | jump, swim up or climb a boulder · run |
 | mouse | turn, look up and down |
-| right-drag or <kbd>Alt</kbd>+mouse | turn toward ana · twist |
-| <kbd>Z</kbd> <kbd>C</kbd> | turn toward kata / ana |
-| <kbd>V</kbd> <kbd>Shift</kbd>+<kbd>V</kbd> | slice ↔ triptych · 4D-eye cube |
-| <kbd>Tab</kbd> <kbd>−</kbd> <kbd>=</kbd> <kbd>M</kbd> <kbd>O</kbd> | radar: enlarge · zoom (or wheel) · heading-up / compass-up · rocking |
-| arrows · <kbd>Esc</kbd> + drag / click | spin the radar · click a summit to face it |
-| <kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd> | time slower / faster · pause |
-| <kbd>X</kbd> | tint slopes by the way they climb in ana |
-| <kbd>0</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>G</kbd> | automatic / fixed resolution · shadows |
+| right-drag or <kbd>Alt</kbd>+mouse · <kbd>Z</kbd> <kbd>C</kbd> | turn toward ana / kata, twist |
+| <kbd>Tab</kbd> · wheel or <kbd>−</kbd> <kbd>=</kbd> | radar big / small · zoom, out to the whole planet |
+| <kbd>M</kbd> <kbd>P</kbd> <kbd>L</kbd> <kbd>K</kbd> · arrows | radar: heading/compass-up · pin · layers · hide · spin |
+| <kbd>Esc</kbd>, then mouse | drag the radar to spin · hover to inspect · click to face |
 | <kbd>H</kbd> | help |
 
 ## How it works
@@ -39,14 +34,13 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 - **One fetch per step:** the atlas is pre-smoothed with the cubic B-spline kernel, so a single hardware-trilinear fetch per ray-march step tracks the smooth surface. The median difference is about 1 cm.
 - **Detail without geometry:** bump-mapped normals and albedo variation come from a tileable 3D gradient-noise texture, sampled through two different projections of the 4D point. That way no 4D direction leaves the pattern constant.
 - **Resolution:** dynamic resolution holds about 60 fps, and a contrast-adaptive sharpening pass upscales the image to full screen resolution.
-- **Radar:** each frame the heights inside the ball are baked into an 80³ half-float 3D texture (one cheap pass), then the ball is ray-marched through that texture, one fetch per step. Summits are found on the CPU (local maxima on a coarse grid, then hill-climbed), and picking in the radar marches the same heights on the CPU.
+- **Radar:** the heights inside the ball are baked into a half-float 3D texture (80³, or 128³ for the far ranges) whenever the ball moves, turns or changes size, then the ball is ray-marched through that texture, one fetch per step. Summits are found on the CPU (local maxima on a coarse grid, then hill-climbed), and picking in the radar marches the same heights on the CPU.
 - **Boulders:** 4D balls, intersected analytically per pixel (the nearest 32, faded out before they leave the list), with soft 4D shadows from their closest approach to the sun ray.
-- **The 4D eye:** renders a 64³ retina into a 3D texture, layer by layer, then volume-renders it.
 
 No build step: plain ES modules. To run locally, serve the folder with any static server.
 
 ## Roadmap
-1. ✅ Walk the planet: terrain, water, sun, day and night, gravity, slice view and 4D eye.
+1. ✅ Walk the planet: terrain, water, sun, day and night, gravity, slice view, radar, boulders.
 2. Things: rocks to throw and spin with true 4D rigid-body rotation, trees branching in three horizontal directions, buildings with 3D walls.
 3. Sky: the w-direction becomes a circle (the "hoop"), giving stable orbits, a sun that appears as a band across the sky, and your own planet seen again along w.
 4. Ropes that can't hold knots, flowing water, sound with its 4D wake, creatures.

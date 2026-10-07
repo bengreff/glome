@@ -19,7 +19,7 @@
   <div id="where"></div>
   <div id="alt"></div>
   <div id="sun"></div>
-  <div class="dim"><span id="clock"></span> · <span id="fps"></span></div>
+  <div class="dim"><span id="fps"></span></div>
 </div>
 
 <div class="hint" id="hint" hidden>Click to look around · <kbd>Tab</kbd> big radar · <kbd>H</kbd> controls</div>
@@ -27,30 +27,25 @@
 <section class="panel help" id="help" hidden>
   <h2>Moving in four dimensions</h2>
   <dl>
-    <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>walk forward, left, back, right</dd>
-    <dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>step kata / ana: the third direction along the ground</dd>
-    <dt><kbd>Space</kbd> <kbd>Shift</kbd></dt><dd>jump (or swim up) · run</dd>
+    <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd> <kbd>E</kbd></dt><dd>walk forward, left, back, right · step kata / ana, the third direction along the ground</dd>
+    <dt><kbd>Space</kbd> <kbd>Shift</kbd></dt><dd>jump, swim up, or climb a boulder you are walking into · run</dd>
     <dt>mouse</dt><dd>turn left and right, look up and down</dd>
-    <dt>right-drag or <kbd>Alt</kbd>+mouse</dt><dd>turn toward ana (left–right) · twist (up–down)</dd>
-    <dt><kbd>Z</kbd> <kbd>C</kbd></dt><dd>turn toward kata / ana from the keyboard</dd>
-    <dt><kbd>V</kbd></dt><dd>slice view ↔ triptych (kata · slice · ana) · <kbd>Shift</kbd>+<kbd>V</kbd>: 4D-eye cube</dd>
-    <dt><kbd>Tab</kbd> <kbd>−</kbd> <kbd>=</kbd> <kbd>M</kbd></dt><dd>radar: enlarge · zoom out / in (or the mouse wheel), 25–320 m · heading-up or compass-up</dd>
-    <dt><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd></dt><dd>spin the radar to see it from another side</dd>
-    <dt><kbd>L</kbd> <kbd>K</kbd></dt><dd>radar layers: mountains + water · all contour shells · mountains only · hide the radar</dd>
-    <dt><kbd>Esc</kbd>, then mouse</dt><dd>drag the radar to spin it · hover a ▲ to see what it is · click it to turn and face it</dd>
-    <dt><kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd></dt><dd>slow down / speed up time · pause</dd>
-    <dt><kbd>T</kbd></dt><dd>planet spin: double or isoclinic</dd>
-    <dt><kbd>X</kbd></dt><dd>tint slopes by which way they climb: warm toward ana, cool toward kata</dd>
-    <dt><kbd>0</kbd> <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> <kbd>G</kbd></dt><dd>automatic / fixed resolution · shadows on/off</dd>
-    <dt><kbd>O</kbd> <kbd>Shift</kbd>+<kbd>M</kbd> <kbd>IJKL</kbd></dt><dd>gentle rocking of the radar and cube on/off · cube: retina resolution · rotate</dd>
+    <dt>right-drag or <kbd>Alt</kbd>+mouse · <kbd>Z</kbd> <kbd>C</kbd></dt><dd>turn toward ana or kata (and twist) · the same from the keyboard</dd>
+  </dl>
+  <h2>The radar</h2>
+  <dl>
+    <dt><kbd>Tab</kbd> · wheel or <kbd>−</kbd> <kbd>=</kbd></dt><dd>big or small · zoom from 25 m out to the whole planet</dd>
+    <dt><kbd>M</kbd> <kbd>P</kbd></dt><dd>turn with you or keep to the compass · pin it here and watch yourself move through it</dd>
+    <dt><kbd>L</kbd> <kbd>K</kbd> · arrows</dt><dd>layers · hide · spin it to see from another side</dd>
+    <dt><kbd>Esc</kbd>, then mouse</dt><dd>drag to spin · hover anything to see what it is · click to turn and face it</dd>
   </dl>
   <h2>What you are seeing</h2>
-  <p><b>Slice view</b> is the 3D cross-section of the 4D world through your eyes, the way a 3D visitor would see it. Turning toward ana sweeps the slice through the landscape. Lighting and shadows are computed in full 4D, so you will see shadows cast by hills that are beside you in ana and not in the slice at all.</p>
-  <p><b>Radar.</b> The ground of a 4D world is three-dimensional, so its minimap is a ball. You are at the centre. The disc through the middle is exactly the ground your slice view shows (the bright wedge is what is on screen); everything above the disc lies toward ana, everything below toward kata. Ground above 24 m is drawn solid, so mountains float in the ball as objects, and blue haze is water (<kbd>L</kbd> adds contour shells at the coast and 12 m). On the disc, an orange tint marks mountains that lie toward ana from that spot and a blue tint mountains toward kata. Summits sit on stalks that drop to the disc, and your own trail shows how your walk has curved through all three ground directions.</p>
-  <p><b>Compass.</b> Unlike Earth, a 3-sphere can carry a compass with no poles: three perpendicular directions (±i, ±j, ±k, after the quaternion units) defined everywhere. Walking straight keeps your compass heading fixed but slowly rolls the other two around it, one full turn per lap of the planet. <kbd>M</kbd> locks the radar to the compass instead of to your body, so you can watch your slice tilt when you turn toward ana.</p>
-  <p><b>Triptych</b> (<kbd>V</kbd>). A 4D creature's retina is three-dimensional: right, up and ana. Your slice is only its middle layer. The triptych shows three layers of that retina side by side, kata 25° · your slice · ana 25°, like peripheral vision.</p>
-  <p><b>Boulders</b> are 4D balls. Your slice cuts each one in an ordinary 3D sphere whose size depends on how far its centre lies toward ana or kata, so as you turn they swell out of nothing, shrink and vanish. The radar shows all of them; the ringed ones are those your slice is cutting, the only ones you can see. They cast shadows in 4D, and you can't walk through them.</p>
-  <p>The ground is a 3-sphere: walk straight in any direction and you come back to where you started, about 1.6 km later. The planet spins in two planes at once, so there are no poles and the days are irregular.</p>
+  <p><b>Slice view</b> is the 3D cross-section of the 4D world through your eyes, the way a 3D visitor would see it. Turning toward ana sweeps the slice through the landscape. Lighting and shadows are computed in full 4D, so hills beside you in ana, outside the slice, still cast shadows into it.</p>
+  <p><b>Radar.</b> The ground of a 4D world is three-dimensional, so its minimap is a ball, with you at the centre. The disc through the middle is exactly the ground your slice shows (the bright wedge is what is on screen); above the disc is ana, below is kata. Ground above 24 m is solid, so mountains float in the ball, and blue haze is water. On the disc, orange marks mountains lying toward ana from that spot and blue toward kata. The dot in the middle of your view and the ring on the disc are the same point.</p>
+  <p><b>The whole planet.</b> Zoom all the way out and the ball holds the entire planet: its whole outer surface is a single point, your antipode, 785 m away by any straight walk. <kbd>P</kbd> pins the ball where you stand; walk and you move through it as a dot, and your slice becomes a curved sheet, a great 2-sphere through you and your antipode.</p>
+  <p><b>Compass.</b> Unlike Earth, a 3-sphere can carry a compass with no poles: three perpendicular directions (i, j, k, after the quaternion units) defined everywhere. Walking straight keeps your compass heading fixed but slowly rolls the other two around it, once per lap of the planet.</p>
+  <p><b>Boulders</b> are 4D balls. Your slice cuts each in an ordinary sphere whose size depends on how far its centre lies toward ana or kata, so as you turn they swell out of nothing, shrink and vanish. The radar shows them all and rings the ones your slice cuts. They are solid, with friction: push into one and you stop; hold <kbd>Space</kbd> and you climb its surface (which can carry you toward its centre in ana).</p>
+  <p>The ground is a 3-sphere: walk straight in any direction and you come back to where you started, about 1.6 km later. The planet spins in two planes at once, so there are no poles and the days never repeat.</p>
 </section>
 
 <section class="panel loading" id="loading">

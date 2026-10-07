@@ -28,7 +28,6 @@ const int MAXB = 32;
 uniform vec4 uBC[MAXB];     // boulders near you: 4D balls (centres) ...
 uniform float uBR[MAXB];    // ... and radii
 uniform int uBN;
-uniform float uAnaTint;    // optional cue: tint slopes that climb toward ana (warm) or kata (cool)
 
 const float MAXT = 900.0;
 const float SHELL = 48.0;   // terrain lies within uPR-20 .. uPR+SHELL
@@ -258,7 +257,6 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec3 alb = mix(grass, sand, sandy);
   alb = mix(alb, rock, rocky);
   alb = mix(alb, snow, snowy);
-  if (uAnaTint > 0.5) { float an = dot(n, uA); alb = mix(alb, an > 0.0 ? vec3(0.95, 0.62, 0.30) : vec3(0.32, 0.70, 0.95), min(1.0, abs(an) * 2.2) * 0.75); }
 
   float sunEl = dot(uSun, up);
   float dif = max(dot(nb, uSun), 0.0) * smoothstep(-0.04, 0.06, sunEl);
@@ -389,87 +387,6 @@ void main() {
   outColor = vec4(col, 1.0);
 }`;
 
-// 4D eye: one layer of the creature's 3D retina. Layers step through the ana direction.
-export const RETINA_FRAG = COMMON + `
-uniform float uLayer, uM, uFov;
-in vec2 vUV;
-out vec4 outColor;
-void main() {
-  float z = ((uLayer + 0.5) / uM * 2.0 - 1.0) * uFov;
-  vec4 rd = normalize(uF + vUV.x * uFov * uR + vUV.y * uFov * uU + z * uA);
-  float t;
-  vec3 col = post(render(uEye, rd, t) * mix(2.2, 1.0, dayFactor(normalize(uEye))));
-  float depth = t < 0.0 ? 1.0 : min(log(1.0 + t) / log(1.0 + MAXT), 0.995);
-  outColor = vec4(col, depth);
-}`;
-
-// Opacity for the retina volume: show where depth jumps (silhouettes, ridges, the horizon).
-export const EDGE_FRAG = COMMON + `
-uniform highp sampler3D uRetina;
-uniform float uLayer, uM, uFov;
-out vec4 outColor;
-void main() {
-  int M = int(uM);
-  ivec3 c = ivec3(int(gl_FragCoord.x), int(gl_FragCoord.y), int(uLayer));
-  vec4 s0 = texelFetch(uRetina, c, 0);
-  float e = 0.0, ec = 0.0;
-  ivec3 offs[6] = ivec3[6](ivec3(1,0,0), ivec3(-1,0,0), ivec3(0,1,0), ivec3(0,-1,0), ivec3(0,0,1), ivec3(0,0,-1));
-  for (int k = 0; k < 6; k++) {
-    vec4 sn = texelFetch(uRetina, clamp(c + offs[k], ivec3(0), ivec3(M - 1)), 0);
-    e = max(e, abs(sn.a - s0.a));
-    ec = max(ec, length(sn.rgb - s0.rgb));
-  }
-  // depth is stored in 8 bits, so ignore one-step jumps; real silhouettes jump much further
-  float edge = smoothstep(0.012, 0.06, e);
-  float tone = smoothstep(0.2, 0.45, ec) * 0.25;
-  float op;
-  if (s0.a > 0.999) {
-    vec3 g = (vec3(c) + 0.5) / uM * 2.0 - 1.0;
-    vec4 rd = normalize(uF + g.x * uFov * uR + g.y * uFov * uU + g.z * uFov * uA);
-    op = max(smoothstep(0.9993, 0.9998, dot(rd, uSun)), edge * 0.25);
-  } else {
-    op = max(max(edge, tone), 0.006);
-  }
-  outColor = vec4(s0.rgb, op);
-}`;
-
-// Render the retina volume as a translucent cube seen from outside.
-export const VOLUME_FRAG = `#version 300 es
-precision highp float;
-precision highp sampler3D;
-uniform sampler3D uVol;
-uniform vec2 uRes;
-uniform vec3 uCamPos, uCamR, uCamU, uCamF;
-uniform float uM;
-in vec2 vUV;
-out vec4 outColor;
-void main() {
-  vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * 0.52;
-  vec3 ro = uCamPos, rd = normalize(uCamF + q.x * uCamR + q.y * uCamU);
-  vec3 inv = 1.0 / rd, t0 = (-1.0 - ro) * inv, t1 = (1.0 - ro) * inv;
-  vec3 tn = min(t0, t1), tf = max(t0, t1);
-  float a = max(max(tn.x, tn.y), tn.z), b = min(min(tf.x, tf.y), tf.z);
-  vec3 bg = vec3(0.035, 0.04, 0.055) * (1.0 - 0.3 * dot(vUV, vUV));
-  vec3 col = bg;
-  if (b > max(a, 0.0)) {
-    float t = max(a, 0.0);
-    const int STEPS = 128;
-    float dt = (b - t) / float(STEPS);
-    float k = dt * uM * 0.5;
-    vec4 acc = vec4(0.0);
-    for (int i = 0; i < STEPS; i++) {
-      vec3 p = ro + rd * (t + (float(i) + 0.5) * dt);
-      vec4 s = texture(uVol, p * 0.5 + 0.5);
-      float al = 1.0 - pow(1.0 - clamp(s.a, 0.0, 0.999), k);
-      acc.rgb += (1.0 - acc.a) * al * s.rgb;
-      acc.a += (1.0 - acc.a) * al;
-      if (acc.a > 0.985) break;
-    }
-    col = acc.rgb + (1.0 - acc.a) * bg;
-  }
-  outColor = vec4(col, 1.0);
-}`;
-
 // Upscale the internal render to the screen with contrast-adaptive sharpening (after AMD's CAS).
 export const UPSCALE_FRAG = `#version 300 es
 precision highp float;
@@ -530,6 +447,8 @@ uniform float uFovX;           // half-width (tan) of the slice view, for the vi
 uniform sampler3D uVol;
 uniform vec3 uShellA;          // opacity of the coast, hill and mountain shells (layers can be switched off)
 uniform float uWater;
+uniform float uPinned;         // 1: the ball is fixed to a pin, not to you; your slice is then a curved sheet
+uniform vec4 uSliceA;          // your ana direction in 4D: your slice is the set of points with dot(x, uSliceA) = 0
 in vec2 vUV;
 out vec4 outColor;
 
@@ -594,7 +513,7 @@ void main() {
 
   // you: a small cyan body with a nose along your forward direction
   float tHit = 1e9;
-  {
+  if (uPinned < 0.5) {
     float r0 = 0.024 * uRB, r1 = 0.014 * uRB;
     float bb = dot(ro, rd), cc = dot(ro, ro) - r0 * r0, dd = bb * bb - cc;
     if (dd > 0.0) tHit = -bb - sqrt(dd);
@@ -603,7 +522,8 @@ void main() {
   }
 
   float dn = dot(rd, uDiscN);
-  float tD = abs(dn) > 1e-5 ? -dot(ro, uDiscN) / dn : -1.0;
+  float tD = uPinned < 0.5 && abs(dn) > 1e-5 ? -dot(ro, uDiscN) / dn : -1.0;
+  float sPrev = uPinned > 0.5 ? dot(planetPoint(ro + rd * t0), uSliceA) : 0.0;
   float span = t1 - t0;
   int steps = int(clamp(1.3 * uVN * span / (2.0 * uRB), 8.0, 200.0));
   float ds = span / float(steps);
@@ -633,6 +553,15 @@ void main() {
     vec3 m = ro + rd * t;
     float h = hVol(m);
     float fade = 1.0 - 0.45 * (t - t0) / (2.0 * uRB);        // a touch of depth haze inside the ball
+    if (uPinned > 0.5) {                                     // your slice, seen from a pin: a curved sheet (a great 2-sphere)
+      float sNow = dot(planetPoint(m), uSliceA);
+      if (sNow * sPrev < 0.0) {
+        vec3 mc = m - rd * ds * sNow / (sNow - sPrev);
+        float a = 0.42;
+        col += T * a * topo(mc) * fade; T *= 1.0 - a;
+      }
+      sPrev = sNow;
+    }
     if (h < uSea) {                                          // water: blue haze, thicker where deeper
       float k = (0.0035 + 0.0006 * (uSea - h)) * ds * (90.0 / uRB) * uWater;
       col += T * (1.0 - exp(-k)) * vec3(0.16, 0.42, 0.78) * fade;

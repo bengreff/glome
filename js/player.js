@@ -118,6 +118,8 @@ export class Player {
       if (input.jump && this.grounded) { nvr = JUMP; this.grounded = false; }
     }
     this.vel = add(nh, scale(u, nvr));
+    this.supported = false;
+    this.contact?.(this, dt, input);                       // obstacles: contact forces before the step
     this.pos = add(this.pos, scale(this.vel, dt));
 
     // ground collision
@@ -129,7 +131,7 @@ export class Player {
       if (v2 < 0) this.vel = sub(this.vel, scale(n, v2));
       this.grounded = true;
     } else {
-      this.grounded = len(this.pos) < g + 0.05;
+      this.grounded = len(this.pos) < g + 0.05 || this.supported;
     }
     this.settleFrame();
   }
