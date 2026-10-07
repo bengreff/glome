@@ -434,6 +434,9 @@ uniform float uRB;             // ball radius (m)
 uniform vec3 uCam, uCamF, uCamR, uCamU, uLight;
 uniform vec3 uDiscN, uFwd, uRight;   // your slice's ground, forward and right, in ball coordinates
 uniform float uFovX;           // half-width (tan) of the slice view, for the view wedge
+uniform float uYou, uWater, uLand;   // draw your marker at the centre · water haze · land haze (per metre)
+uniform int uSteps;            // march steps across the full diameter
+uniform vec3 uShellL, uShellA; // contour shell heights (m) and opacities: coast, hills, mountains
 in vec2 vUV;
 out vec4 outColor;
 
@@ -467,9 +470,9 @@ vec3 topo(vec3 sp) {           // the disc: a topographic map of exactly the gro
 }
 
 const int NSHELL = 3;
-float shellL(int k) { return k == 0 ? 0.5 : k == 1 ? 12.0 : 24.0; }     // coast, hills, mountains
+float shellL(int k) { return uShellL[k]; }
 vec3 shellCol(int k) { return k == 0 ? vec3(0.62, 0.82, 0.98) : k == 1 ? vec3(0.42, 0.80, 0.40) : vec3(0.92, 0.72, 0.52); }
-float shellA(int k)   { return k == 0 ? 0.13 : k == 1 ? 0.2 : 0.72; }
+float shellA(int k)   { return uShellA[k]; }
 
 void main() {
   vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
@@ -492,7 +495,7 @@ void main() {
 
   // you: a small cyan body with a nose along your forward direction
   float tHit = 1e9;
-  {
+  if (uYou > 0.5) {
     float r0 = 0.024 * uRB, r1 = 0.014 * uRB;
     float bb = dot(ro, rd), cc = dot(ro, ro) - r0 * r0, dd = bb * bb - cc;
     if (dd > 0.0) tHit = -bb - sqrt(dd);
@@ -503,11 +506,11 @@ void main() {
   float dn = dot(rd, uDiscN);
   float tD = abs(dn) > 1e-5 ? -dot(ro, uDiscN) / dn : -1.0;
   float span = t1 - t0;
-  int steps = int(clamp(96.0 * span / (2.0 * uRB), 12.0, 96.0));
+  int steps = int(clamp(float(uSteps) * span / (2.0 * uRB), 12.0, float(uSteps)));
   float ds = span / float(steps);
   float t = t0, hPrev = hMap(ro + rd * t0);
   int lit = 0;
-  for (int i = 0; i < 96; i++) {
+  for (int i = 0; i < 180; i++) {
     if (i >= steps || T < 0.02) break;
     if (tD > t && tD <= t + ds && tD < tHit) {               // the disc
       vec3 sp = ro + rd * tD;
@@ -528,12 +531,18 @@ void main() {
     float h = hMap(m);
     float fade = 1.0 - 0.45 * (t - t0) / (2.0 * uRB);        // a touch of depth haze inside the ball
     if (h < uSea) {                                          // water: blue haze, thicker where deeper
-      float k = (0.0035 + 0.0006 * (uSea - h)) * ds * (90.0 / uRB);
+      float k = (0.0035 + 0.0006 * (uSea - h)) * ds * (90.0 / uRB) * uWater;
       col += T * (1.0 - exp(-k)) * vec3(0.16, 0.42, 0.78) * fade;
+      T *= exp(-k);
+    }
+    if (h > uSea && uLand > 0.0) {                          // land: a soft green haze, so continents read as volumes
+      float k = uLand * ds * (0.6 + 0.04 * min(h, 20.0));
+      col += T * (1.0 - exp(-k)) * mix(vec3(0.30, 0.55, 0.28), vec3(0.62, 0.66, 0.36), smoothstep(4.0, 22.0, h)) * fade;
       T *= exp(-k);
     }
     for (int s = 0; s < NSHELL; s++) {
       float L = shellL(s);
+      if (shellA(s) <= 0.0) continue;
       if ((hPrev - L) * (h - L) < 0.0) {
         float edgeOn = 0.5, shade = 0.8;
         if (lit < 4) {                                       // light the nearest crossings so shells read as solid

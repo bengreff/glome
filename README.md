@@ -8,6 +8,7 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 - **The ground is a 3-sphere.** You can walk forward, sideways *and* along a third horizontal direction (ana/kata). Walk straight in any direction and you return to where you started, about 1.6 km later.
 - **Slice view (default).** The 3D cross-section through your eyes, which is what a 3D visitor would perceive. Turning toward ana sweeps the slice through the landscape. 
 - **Radar.** The ground is three-dimensional, so the minimap is a glass ball. The disc through its centre is exactly the ground your slice shows; above the disc is ana, below is kata. Height is drawn as nested contour shells (coast, 12 m, 24 m), water as blue haze, summits on stalks down to the disc, and your trail as a line through all three ground directions. <kbd>Tab</kbd> enlarges it.
+- **The whole planet.** Zoomed all the way out, the radar becomes a fixed two-ball map, like a two-hemisphere world map: the half of the planet within 393 m (a quarter lap) of a pin, and the half around the pin's antipode. Leave either ball through any point and you enter the other through the opposite point. It shows you moving, your trail, the straight line you are facing all the way round, and the highest summits. <kbd>R</kbd> moves the pin to you.
 - **A compass with no poles.** The 3-sphere is parallelizable: multiplying your position (as a unit quaternion) by i, j and k gives three perpendicular directions along the ground everywhere. Walking straight keeps your compass heading fixed while the other two needles roll around it, once per lap of the planet. <kbd>M</kbd> switches the radar between heading-up and compass-up.
 - **Triptych** (<kbd>V</kbd>). A 4D creature's retina is three-dimensional (right, up, ana); your slice is its middle layer. The triptych shows three of its layers side by side: kata 25° · slice · ana 25°.
 - **Shadows from places you can't see.** Lighting uses the full 4D sun direction, so hills that lie beside you in ana, outside the slice, still cast shadows into it.
@@ -24,7 +25,7 @@ Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D
 | right-drag or <kbd>Alt</kbd>+mouse | turn toward ana · twist |
 | <kbd>Z</kbd> <kbd>C</kbd> | turn toward kata / ana |
 | <kbd>V</kbd> <kbd>Shift</kbd>+<kbd>V</kbd> | slice ↔ triptych · 4D-eye cube |
-| <kbd>Tab</kbd> <kbd>−</kbd> <kbd>=</kbd> <kbd>M</kbd> <kbd>O</kbd> | radar: enlarge · range · heading-up / compass-up · rocking |
+| <kbd>Tab</kbd> <kbd>−</kbd> <kbd>=</kbd> <kbd>M</kbd> <kbd>R</kbd> <kbd>O</kbd> | radar: enlarge · range (up to the whole planet) · heading-up / compass-up · pin the planet map here · rocking |
 | <kbd>[</kbd> <kbd>]</kbd> <kbd>P</kbd> | time slower / faster · pause |
 | <kbd>X</kbd> | tint slopes by the way they climb in ana |
 | <kbd>0</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>G</kbd> | automatic / fixed resolution · shadows |
