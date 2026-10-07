@@ -420,19 +420,20 @@ void main() {
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
 
-// MAP VIEW: a 3D map of the ground you can stand inside. Its three axes are your three walking directions
-// (forward, right, ana). Map points are geodesic normal coordinates around you (the exponential map), so
-// straight lines from you are straight walks on the planet. Height, the one direction not shown, is encoded
-// by nested contour shells and colour.
-export const MAP_FRAG = COMMON + `
+// RADAR: a glass ball holding the ground around you. The ground of a 4D world is three-dimensional, so its
+// minimap is a 3D object. Ball coordinates are geodesic normal coordinates (the exponential map) along three
+// horizontal axes, so a straight line from the centre is a straight walk on the planet. Height, the one
+// direction the ball cannot show, is drawn as nested contour shells, water as blue haze. The disc through the
+// centre is the ground your slice view shows.
+export const RADAR_FRAG = COMMON + `
 uniform vec2 uRes;
 uniform float uFov;
 uniform vec4 uU0;              // up at the player
-uniform vec4 uMF, uMR, uMA;    // map axes at the player: forward, right, ana
-uniform float uPH;             // ground height under the player (m above sea)
-uniform int uStyle;            // 0 floor + contour shells, 1 stacked floors
-uniform vec3 uCam;             // camera position in map coordinates (metres)
-uniform vec3 uCamF, uCamR, uCamU;
+uniform vec4 uB1, uB2, uB3;    // the ball's axes as 4D directions along the ground
+uniform float uRB;             // ball radius (m)
+uniform vec3 uCam, uCamF, uCamR, uCamU, uLight;
+uniform vec3 uDiscN, uFwd, uRight;   // your slice's ground, forward and right, in ball coordinates
+uniform float uFovX;           // half-width (tan) of the slice view, for the view wedge
 in vec2 vUV;
 out vec4 outColor;
 
@@ -443,123 +444,126 @@ vec3 hyps(float h) {           // hypsometric tint: shore, lowland, upland, rock
   c = mix(c, vec3(0.96, 0.96, 1.0), smoothstep(26.0, 32.0, h));
   return c;
 }
-vec4 planetPoint(vec3 m) {     // map coordinates -> point on the unit 3-sphere
+vec4 planetPoint(vec3 m) {     // ball coordinates -> point on the unit 3-sphere
   float r = length(m);
   if (r < 1e-4) return uU0;
-  vec4 D = (m.x * uMF + m.y * uMR + m.z * uMA) / r;
+  vec4 D = (m.x * uB1 + m.y * uB2 + m.z * uB3) / r;
   float a = r / uPR;
   return cos(a) * uU0 + sin(a) * D;
 }
 float hMap(vec3 m) { return heightAt(planetPoint(m)); }
 vec3 gradMap(vec3 m) {
-  const float e = 1.2;
+  float e = 0.012 * uRB;
   return vec3(hMap(m + vec3(e, 0, 0)) - hMap(m - vec3(e, 0, 0)),
               hMap(m + vec3(0, e, 0)) - hMap(m - vec3(0, e, 0)),
               hMap(m + vec3(0, 0, e)) - hMap(m - vec3(0, 0, e))) / (2.0 * e);
 }
-
-// One horizontal map sheet (constant ana): a topographic map of the ground in that slice.
-vec3 topo(vec3 sp, float tS) {
+vec3 topo(vec3 sp) {           // the disc: a topographic map of exactly the ground in your slice
   float hs = hMap(sp);
-  float minor = 1.0 - smoothstep(0.0, 0.06 + 0.002 * tS, abs(fract(hs / 2.5 + 0.5) - 0.5) * 2.5);
-  float major = 1.0 - smoothstep(0.0, 0.10 + 0.003 * tS, abs(fract(hs / 10.0 + 0.5) - 0.5) * 10.0);
-  vec3 base = hs < uSea ? mix(vec3(0.20, 0.45, 0.70), vec3(0.08, 0.20, 0.40), smoothstep(0.0, 12.0, uSea - hs)) : hyps(hs);
-  return mix(base, base * 0.45, max(minor * 0.55, major));
+  float minor = 1.0 - smoothstep(0.0, 0.10, abs(fract(hs / 4.0 + 0.5) - 0.5) * 4.0);
+  float major = 1.0 - smoothstep(0.0, 0.18, abs(fract(hs / 12.0 + 0.5) - 0.5) * 12.0);
+  vec3 base = hs < uSea ? mix(vec3(0.22, 0.48, 0.72), vec3(0.08, 0.20, 0.42), smoothstep(0.0, 14.0, uSea - hs)) : hyps(hs);
+  return mix(base, base * 0.4, max(minor * 0.5, major * 0.9));
 }
-const float FLOOR_GAP = 18.0;
 
-const float SHELL0 = 0.5, SHELL1 = 10.0, SHELL2 = 22.0;   // coast, hills, mountains
-vec3 shellCol(int k) { return k == 0 ? vec3(0.88, 0.80, 0.52) : k == 1 ? vec3(0.36, 0.72, 0.34) : vec3(0.85, 0.66, 0.48); }
-float shellA(int k)   { return k == 0 ? 0.20 : k == 1 ? 0.26 : 0.55; }
+const int NSHELL = 3;
+float shellL(int k) { return k == 0 ? 0.5 : k == 1 ? 12.0 : 24.0; }     // coast, hills, mountains
+vec3 shellCol(int k) { return k == 0 ? vec3(0.62, 0.82, 0.98) : k == 1 ? vec3(0.42, 0.80, 0.40) : vec3(0.92, 0.72, 0.52); }
+float shellA(int k)   { return k == 0 ? 0.13 : k == 1 ? 0.2 : 0.72; }
 
 void main() {
   vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
   vec3 rd = normalize(uCamF + q.x * uCamR + q.y * uCamU);
   vec3 ro = uCam;
-  const float SMAX = 760.0;
+  float b = dot(ro, rd), c = dot(ro, ro) - uRB * uRB, disc = b * b - c;
+  float perp = sqrt(max(dot(ro, ro) - b * b, 0.0)) / uRB;
+  if (disc <= 0.0) {                                         // outside the ball: a soft shadow so it reads on any sky
+    outColor = vec4(0.0, 0.0, 0.0, 0.5 * (1.0 - smoothstep(1.0, 1.1, perp)));
+    return;
+  }
+  float t0 = -b - sqrt(disc), t1 = -b + sqrt(disc);
   vec3 col = vec3(0.0);
-  float T = 1.0, tHit = 1e9;
+  float T = 1.0;
 
-  // you: a cyan marker at the origin, nose pointing forward
+  // glass: a bright rim where the ray grazes the ball
+  vec3 nS = normalize(ro + rd * t0);
+  float rim = pow(1.0 - abs(dot(nS, rd)), 4.0);
+  col += vec3(0.55, 0.70, 0.95) * rim * 0.55; T *= 1.0 - rim * 0.45;
+
+  // you: a small cyan body with a nose along your forward direction
+  float tHit = 1e9;
   {
-    vec3 oc = ro; float b = dot(oc, rd), c = dot(oc, oc) - 0.81, d = b * b - c;
-    vec3 oc2 = ro - vec3(1.3, 0.0, 0.0); float b2 = dot(oc2, rd), c2 = dot(oc2, oc2) - 0.2, d2 = b2 * b2 - c2;
-    if (d > 0.0) tHit = -b - sqrt(d);
-    if (d2 > 0.0) tHit = min(tHit, -b2 - sqrt(d2));
+    float r0 = 0.024 * uRB, r1 = 0.014 * uRB;
+    float bb = dot(ro, rd), cc = dot(ro, ro) - r0 * r0, dd = bb * bb - cc;
+    if (dd > 0.0) tHit = -bb - sqrt(dd);
+    vec3 o2 = ro - uFwd * 0.05 * uRB; bb = dot(o2, rd); cc = dot(o2, o2) - r1 * r1; dd = bb * bb - cc;
+    if (dd > 0.0) tHit = min(tHit, -bb - sqrt(dd));
   }
 
-  if (uStyle == 1 && abs(rd.z) > 1e-4) {
-    // stacked floors are planes: intersect them directly, nearest first, no marching needed
-    float tk[5]; int kk[5]; int n = 0;
-    for (int k = -2; k <= 2; k++) {
-      float tt = (float(k) * FLOOR_GAP - ro.z) / rd.z;
-      if (tt > 0.0 && tt < 260.0) { tk[n] = tt; kk[n] = k; n++; }
-    }
-    for (int a = 0; a < 5; a++) for (int b = 0; b < 4; b++) {
-      if (b + 1 < n && tk[b + 1] < tk[b]) { float x = tk[b]; tk[b] = tk[b + 1]; tk[b + 1] = x; int y = kk[b]; kk[b] = kk[b + 1]; kk[b + 1] = y; }
-    }
-    for (int i = 0; i < 5; i++) {
-      if (i >= n || tk[i] > tHit || T < 0.02) break;
-      int k = kk[i];
-      float a = (k == 0 ? 0.56 : abs(k) == 1 ? 0.34 : 0.22) * (1.0 - smoothstep(60.0, 260.0, tk[i])) * smoothstep(2.0, 8.0, tk[i]);
-      col += T * a * topo(ro + rd * tk[i], tk[i]) * (k == 0 ? 1.0 : 0.85); T *= 1.0 - a;
-    }
-  }
-  float t = 0.6, hPrev = hMap(ro + rd * t);
-  float tSheet = abs(rd.z) > 1e-4 ? -ro.z / rd.z : -1.0;      // the sheet ana = 0: what your slice view shows
+  float dn = dot(rd, uDiscN);
+  float tD = abs(dn) > 1e-5 ? -dot(ro, uDiscN) / dn : -1.0;
+  float span = t1 - t0;
+  int steps = int(clamp(96.0 * span / (2.0 * uRB), 12.0, 96.0));
+  float ds = span / float(steps);
+  float t = t0, hPrev = hMap(ro + rd * t0);
   int lit = 0;
-  for (int i = 0; i < 320; i++) {
-    if (uStyle == 1) break;
-    float ds = 0.5 + 0.011 * t;
-    if (uStyle == 0) {
-      if (tSheet > t && tSheet <= t + ds && tSheet < 260.0) {   // the floor: a topo map of exactly what your slice shows
-        float a = 0.62 * (1.0 - smoothstep(70.0, 260.0, tSheet));
-        col += T * a * topo(ro + rd * tSheet, tSheet); T *= 1.0 - a;
-      }
+  for (int i = 0; i < 96; i++) {
+    if (i >= steps || T < 0.02) break;
+    if (tD > t && tD <= t + ds && tD < tHit) {               // the disc
+      vec3 sp = ro + rd * tD;
+      float r = length(sp) / uRB;
+      float fx = dot(sp, uFwd), fy = dot(sp, uRight);
+      float inView = fx > 0.0 && abs(fy) < uFovX * fx ? 1.0 : 0.0;
+      float edge = fx > 0.0 ? 1.0 - smoothstep(0.0, 0.006 * uRB, abs(abs(fy) - uFovX * fx) / sqrt(1.0 + uFovX * uFovX)) : 0.0;
+      vec3 dc = topo(sp) * mix(0.62, 1.05, inView);
+      float ring = max(1.0 - smoothstep(0.0, 0.006, abs(r - 1.0 / 3.0)), 1.0 - smoothstep(0.0, 0.006, abs(r - 2.0 / 3.0)));
+      dc = mix(dc, vec3(0.85, 0.92, 1.0), ring * 0.35 + edge * 0.7);
+      dc = mix(dc, vec3(0.85, 0.92, 1.0), 1.0 - smoothstep(0.0, 0.012, 0.99 - r));   // disc rim
+      float a = mix(0.55, 0.72, inView) * (0.55 + 0.45 * smoothstep(0.0, 0.25, abs(dn)));
+      col += T * a * dc; T *= 1.0 - a;
     }
     t += ds;
-    vec3 m = ro + rd * t;
-    if (length(m) > SMAX || t > 900.0) break;
     if (t > tHit) break;
+    vec3 m = ro + rd * t;
     float h = hMap(m);
-    float slope = abs(h - hPrev) / ds;
-    float fade = exp(-t * 0.004);
-    float near = smoothstep(1.5, 6.0, t);                    // keep the space right around the camera clear
-
-    if (uStyle == 0 && h < uSea) {                           // seas: blue volume
-      float k = (0.0035 + 0.0012 * (uSea - h)) * ds;
-      col += T * (1.0 - exp(-k)) * vec3(0.12, 0.36, 0.66);
+    float fade = 1.0 - 0.45 * (t - t0) / (2.0 * uRB);        // a touch of depth haze inside the ball
+    if (h < uSea) {                                          // water: blue haze, thicker where deeper
+      float k = (0.0035 + 0.0006 * (uSea - h)) * ds * (90.0 / uRB);
+      col += T * (1.0 - exp(-k)) * vec3(0.16, 0.42, 0.78) * fade;
       T *= exp(-k);
     }
-    if (uStyle == 0) {
-      for (int sI = 0; sI < 3; sI++) {
-        float L = sI == 0 ? SHELL0 : sI == 1 ? SHELL1 : SHELL2;
-        if ((hPrev - L) * (h - L) < 0.0) {
-          float edge = 1.0 - smoothstep(0.0, 1.2, slope);    // shells seen edge-on read as outlines
-          float a = clamp(shellA(sI) * (0.45 + 0.8 * edge), 0.0, 0.85) * (sI == 1 ? 0.35 : 0.6) * near * (0.25 + 0.75 * fade);
-          float shade = 0.75;
-          if (lit < 4) {                                     // light the nearest few crossings so shells read as surfaces
-            vec3 n = normalize(gradMap(m) + 1e-6);
-            if (dot(n, rd) > 0.0) n = -n;
-            shade = 0.35 + 0.55 * max(dot(n, normalize(vec3(-0.4, 0.45, 0.8))), 0.0) + 0.25 * pow(1.0 - abs(dot(n, rd)), 2.0);
-            lit++;
-          }
-          vec3 c = shellCol(sI) * shade * (0.45 + 0.55 * fade);
-          col += T * a * c; T *= 1.0 - a;
+    for (int s = 0; s < NSHELL; s++) {
+      float L = shellL(s);
+      if ((hPrev - L) * (h - L) < 0.0) {
+        float edgeOn = 0.5, shade = 0.8;
+        if (lit < 4) {                                       // light the nearest crossings so shells read as solid
+          vec3 mc = m - rd * ds * (h - L) / (h - hPrev);
+          vec3 n = normalize(gradMap(mc) + 1e-6);
+          if (dot(n, rd) > 0.0) n = -n;
+          edgeOn = 1.0 - abs(dot(n, rd));
+          shade = 0.38 + 0.62 * max(dot(n, uLight), 0.0) + 0.3 * pow(edgeOn, 3.0);
+          lit++;
         }
+        float a = clamp(shellA(s) * (0.55 + 0.9 * edgeOn * edgeOn), 0.0, 0.9);
+        col += T * a * shellCol(s) * shade * fade; T *= 1.0 - a;
       }
     }
     hPrev = h;
-    if (T < 0.02) break;
   }
-  vec3 bg = mix(vec3(0.05, 0.055, 0.075), rd.z > 0.0 ? vec3(0.12, 0.08, 0.05) : vec3(0.04, 0.075, 0.12), abs(rd.z) * 0.7);
   if (tHit < 1e8 && T > 0.0) {                               // your marker
     vec3 p = ro + rd * tHit;
-    vec3 n = normalize(p - (length(p - vec3(1.3, 0, 0)) < 0.6 ? vec3(1.3, 0, 0) : vec3(0)));
-    col += T * vec3(0.35, 0.95, 1.0) * (0.45 + 0.55 * max(dot(n, -rd), 0.0));
+    vec3 n = normalize(p - (length(p) < 0.03 * uRB ? vec3(0) : uFwd * 0.05 * uRB));
+    col += T * vec3(0.35, 0.95, 1.0) * (0.5 + 0.5 * max(dot(n, -rd), 0.0));
     T = 0.0;
   }
-  col += T * bg;
-
-  outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+  col += T * vec3(0.045, 0.055, 0.08);
+  outColor = vec4(col * 0.94, 0.94);                         // premultiplied
 }`;
+
+// Copies the radar (premultiplied alpha) onto the screen.
+export const BLIT_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+in vec2 vUV;
+out vec4 outColor;
+void main() { outColor = texture(uTex, vUV * 0.5 + 0.5); }`;
