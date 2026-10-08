@@ -76,7 +76,7 @@ export function tryLaunch(p, cam, jump) {
   const u = p.up(), dir = vec4.dot(cam.F, u) > 0.05 ? cam.F : u;
   p.vel = vec4.scale(dir, TIERS[launcher.tier]);
   p.pos = vec4.add(p.pos, vec4.scale(u, 0.3));
-  p.grounded = false;
+  p.grounded = false; p.airborneUntil = G.simT + 0.5;          // no footing for a moment: you are flying
   G.audio?.emit('launch', p.pos, 1.2);
   G.flags.launches = (G.flags.launches || 0) + 1;
   return true;

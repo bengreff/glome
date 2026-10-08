@@ -102,7 +102,8 @@ export function buildArtifacts() {
     const p = partOf(4), n = vec4.norm(p.pos);
     const vault = block(n, 1.0, { lift: -0.4, tag: 'vault4' }); freeze(p);
     const s0 = launcher.n, fr = frameAt(s0), bowl = off(s0, fr.s, 4.2), bf = frameAt(bowl);
-    for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) block(off(bowl, vec4.norm(vec4.add(vec4.scale(bf.f, x), vec4.scale(bf.a, y))), 0.9), 0.24, { mat: 2, glow: 0.15, tag: 'bowlpost' });
+    block(bowl, 1.5, { lift: -1.3, tag: 'bowlfloor' });       // a level stone floor, so what you leave stays put
+    for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) block(off(bowl, vec4.norm(vec4.add(vec4.scale(bf.f, x), vec4.scale(bf.a, y))), 0.9), 0.24, { lift: 0.2, mat: 2, glow: 0.15, tag: 'bowlpost' });
     for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const fv = frameAt(n); block(off(n, vec4.norm(vec4.add(vec4.scale(fv.f, x), vec4.scale(fv.a, y))), 1.5), 0.24, { mat: 2, glow: 0.15 }); }
     const bowlPos = vec4.scale(bowl, PLANET_R + G.player.hf.heightAt(bowl));
     artifacts.push({ id: 'antipode', name: 'the antipode', n, vault, part: p, bowl: bowlPos,

@@ -3,6 +3,7 @@
 // "Up" is always radial. The camera adds a pitch angle in the forward–up plane.
 import { PLANET_R, SEA } from './world.js';
 import { LAWS } from './laws.js';
+import { G } from './game.js';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 const len = a => Math.sqrt(dot(a, a));
@@ -143,6 +144,7 @@ export class Player {
     } else {
       this.grounded = len(this.pos) < gnd + 0.05 || this.supported;
     }
+    if (G.simT < this.airborneUntil) this.grounded = false;     // just launched
     if (this.grounded && this.depth === 0 && floor > seaR + 0.2) this.dry = { pos: this.pos.slice(), F: this.F, R: this.R, A: this.A, onB: this.onB ?? null };
     this.settleFrame();
   }

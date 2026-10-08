@@ -139,7 +139,7 @@ function tryLaunchB(p, jump) {
   if (!jump || p.onB == null || !p.grounded || floorOf(p.up()) !== B_PAD || G.simT - (tryLaunchB.last || -9) < 1.5) return false;
   tryLaunchB.last = G.simT;
   const c = p.camera(), u = p.up(), dir = vec4.dot(c.F, u) > 0.05 ? c.F : u;
-  p.vel = vec4.scale(dir, B_PAD_SPEED); p.pos = vec4.add(p.pos, vec4.scale(u, 0.3)); p.grounded = false;
+  p.vel = vec4.scale(dir, B_PAD_SPEED); p.pos = vec4.add(p.pos, vec4.scale(u, 0.3)); p.grounded = false; p.airborneUntil = G.simT + 0.5;
   G.audio?.emit('launch', p.pos, 1.0);
   return true;
 }
@@ -217,7 +217,7 @@ function frameBody(now) {
     }
     player.ride = null;
     if (!onB && !flight.active) playerContacts(player);
-    if (player.supported && !flight.active) player.grounded = true;         // standing on a thing is footing too
+    if (player.supported && !flight.active && !(G.simT < player.airborneUntil)) player.grounded = true;   // standing on a thing is footing too
     if (!onB) stepBoats(STEP, state.time);
     trackOrbit(flight, state.time);
     stepObjects(cameraNow());
