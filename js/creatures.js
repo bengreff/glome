@@ -130,7 +130,7 @@ function lifeAndDeath(hf) {
   for (const c of L) {
     if (c.energy > 1.6 && (c.kind === 'walker' ? walkers < 90 : rollers < 20)) {
       // crowding: a herd of more than eight within 30 m has no room for more young
-      if (c.kind === 'walker' && L.filter(o => o.kind === 'walker' && vec4.dot(o.n, c.n) > Math.cos(30 / PLANET_R)).length > 8) continue;
+      if (c.kind === 'walker' && L.filter(o => o !== c && o.kind === 'walker' && vec4.dot(o.n, c.n) > Math.cos(30 / PLANET_R)).length > 8) continue;
       if (c.kind === 'walker') walkers++; else rollers++;
       c.energy /= 2;
       const T = tangents(c.n), d = vec4.norm(vec4.add(vec4.scale(T[0], rnd() - 0.5), vec4.scale(T[1], rnd() - 0.5)));

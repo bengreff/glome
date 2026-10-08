@@ -345,7 +345,13 @@ export function createAudio() {
 
     _capVoices() {
       const now = this.ctx.currentTime;
-      this._voices = this._voices.filter(v => v.stopAt > now);
+      // finished voices are disconnected, not just forgotten: gains, filters and delays are not collected while
+      // connected, and a long walk fires thousands of footsteps
+      this._voices = this._voices.filter(v => {
+        if (v.stopAt > now) return true;
+        try { v.nodes.forEach(n => n.disconnect()); } catch (e) { /* already disconnected */ }
+        return false;
+      });
       while (this._voices.length >= MAX_VOICES) {
         const v = this._voices.shift();
         try { v.nodes.forEach(n => n.disconnect()); } catch (e) { /* already disconnected */ }

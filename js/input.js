@@ -75,7 +75,13 @@ export const pad = { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, j
 const dead = v => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85;
 export function pollPad() {
   const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected && g.mapping === 'standard');
-  if (!gp) { Object.assign(pad, { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0 }); return; }
+  if (!gp) {
+    // unplugged with X or RT held: let go of them, or a set-down or a throw would be left winding up for ever
+    if (pad.prev[2]) actions.fUp = true;
+    if (pad.prev[7]) actions.mUp = true;
+    Object.assign(pad, { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0, prev: [] });
+    return;
+  }
   const on = i => i === 6 || i === 7 ? (gp.buttons[i]?.value || 0) > 0.4 : !!gp.buttons[i]?.pressed;
   const now = gp.buttons.map((_, i) => on(i)), was = i => !!pad.prev[i], down = i => now[i] && !was(i), up = i => !now[i] && was(i);
   Object.assign(pad, { connected: true, lx: dead(gp.axes[0] || 0), ly: dead(gp.axes[1] || 0), rx: dead(gp.axes[2] || 0), ry: dead(gp.axes[3] || 0),
