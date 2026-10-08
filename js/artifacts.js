@@ -116,7 +116,7 @@ export function buildArtifacts() {
 function open(a, quiet) {
   if (a.vault) objects.world.remove(a.vault);
   if (a.part && !quiet) { a.part.kinematic = false; a.part.sleeping = false; }
-  else if (a.part) a.part.kinematic = false;
+  else if (a.part && !a.part.held) a.part.kinematic = false;              // (a part in your hand stays in your hand)
   if (!quiet) {
     const n = a.n, fr = frameAt(n);
     for (const sg of [-1, 1]) spawn('stone', off(n, fr.s, sg * 1.3));

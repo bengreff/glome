@@ -161,11 +161,12 @@ export function creatureDraw(eye, A, hf) {
     const n = c.n, g = PLANET_R + hf.heightAt(n), up = n;
     const f = c.heading, T = tangents(n);
     let s = vec4.norm(proj(proj(T[0], f), up)); if (!isFinite(s[0])) s = vec4.norm(proj(proj(T[1], f), up));
-    const an = vec4.norm(proj(proj(proj(T[2], f), up), s).some(Number.isNaN) ? T[1] : proj(proj(proj(T[2], f), up), s));
+    const a0 = proj(proj(proj(T[2], f), up), s), an = vec4.norm(vec4.len(a0) < 1e-6 ? proj(proj(proj(T[1], f), up), s) : a0);
     if (c.kind === 'walker') {
       const hb = WALKER.body / 2, ctr = vec4.scale(n, g + WALKER.height);
       items.push({ pos: ctr, rot: frameRot([f, s, an, up]), shape: 'tesseract', half: hb, size: WALKER.body, mat: 1, glow: 0.6 * c.alarm, d, creature: c });
-      if (caps.length / 2 < 64) for (let i = 0; i < 8; i++) {
+      // legs are thin: drawn only for the nearest few walkers (they share one bounding ball in the shader)
+      if (d < 25 && caps.length < 64) for (let i = 0; i < 8; i++) {
         const cx = i & 1 ? 1 : -1, cy = i & 2 ? 1 : -1, cz = i & 4 ? 1 : -1, tetA = cx * cy * cz > 0;
         const hip = vec4.add(ctr, vec4.add(vec4.scale(up, -hb), vec4.add(vec4.add(vec4.scale(f, cx * hb), vec4.scale(s, cy * hb)), vec4.scale(an, cz * hb))));
         const out = vec4.norm(vec4.add(vec4.add(vec4.scale(f, cx), vec4.scale(s, cy)), vec4.scale(an, cz)));

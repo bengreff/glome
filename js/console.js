@@ -9,8 +9,8 @@ import { LAWS, resetLaws, TRUE_LAWS } from './laws.js';
 import { vec4 } from './player.js';
 import { rot as R4 } from './so4.js';
 import { World, makeBody } from './bodies.js';
-import { NORMALS, B_IN } from './planetB.js';
-import { orbitOf, toBody, dirToBody, rebaseSpin } from './cosmos.js';
+import { NORMALS, B_IN, nearB } from './planetB.js';
+import { orbitOf, toBody, toInertial, dirToBody, rebaseSpin } from './cosmos.js';
 import { objects } from './objects.js';
 
 const $ = id => document.getElementById(id);
@@ -44,7 +44,8 @@ function fixDet(rows) {
 }
 // For the renderer: B's structures in A's frame (B's copy k round the hoop: the one you are near).
 export function bItems(eyeA, t) {
-  const p = G.player, k = p.onB ?? 0, o = orbitOf('B', t).c, base = [o[0], o[1], o[2], o[3] + k * LAWS.L];
+  // on B, the copy you stand on; otherwise the copy round the hoop nearest you
+  const p = G.player, k = p.onB ?? nearB(toInertial(eyeA, t), t).k, o = orbitOf('B', t).c, base = [o[0], o[1], o[2], o[3] + k * LAWS.L];
   const items = [];
   const cb = toBody(base, t);
   if (vec4.len(vec4.sub(cb, eyeA)) > 400) return items;

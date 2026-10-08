@@ -149,7 +149,8 @@ function flyStep(p, input, dt) {
   flight.active = false;
   const c = p.camera(), sp = 14;
   const dir = vec4.add(vec4.add(vec4.add(vec4.scale(c.F, input.fwd), vec4.scale(c.R, input.right)), vec4.scale(p.A, input.ana)), vec4.scale(p.up(), (input.jump ? 1 : 0) - (input.run ? 1 : 0)));
-  p.vel = vec4.scale(dir, sp);
+  const dl = vec4.len(dir);
+  p.vel = dl > 1e-9 ? vec4.scale(dir, sp / dl) : [0, 0, 0, 0];
   p.pos = vec4.add(p.pos, vec4.scale(p.vel, dt));
   const g = p.ground(p.up());
   if (vec4.len(p.pos) < g) p.pos = vec4.scale(p.up(), g);
