@@ -5,7 +5,7 @@ Everything to paste into the itch.io project page. The upload is `dist/glome-<ve
 ## Settings
 
 - **Kind of project:** HTML (the zip; "This file will be played in the browser").
-- **Viewport:** 1280 × 800, with "Fullscreen button" on and "Mobile friendly" off (it needs a keyboard and mouse, and WebGL 2).
+- **Viewport:** 1280 × 800, with "Fullscreen button" on and "Mobile friendly" off (it needs a keyboard and mouse or a gamepad, and WebGL 2).
 - **Classification:** Game. **Genre:** Exploration (also: Puzzle, Simulation). **Release status:** Released.
 - **Pricing:** No payments (or "pay what you want", owner's choice).
 - **Tags:** 4d, exploration, physics, puzzle, sandbox, space, procedural, atmospheric, singleplayer, webgl.
@@ -26,6 +26,8 @@ Nothing is explained. Everything is shown by the world behaving exactly as a 4D 
 - the sun is a row of suns, and sunlight is their sum;
 - a thrown tesseract tumbles in two planes at once, its slice changing shape as it turns;
 - what you carry turns with you, so carrying a thing through ana makes it its mirror image;
+- clouds drift in a layer your slice cuts in a sheet, so they change shape as you turn through ana;
+- a struck ball rings with the overtones of a 3-sphere;
 - a knot cannot hold; a raft floats on the four-volume it displaces;
 - orbits near a planet refuse to close, except the one the planet's own copies cradle.
 
