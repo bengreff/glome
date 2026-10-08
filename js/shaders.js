@@ -270,17 +270,21 @@ float marchTerrainFar(vec4 ro, vec4 rd) {
 
 // Twelve samples at geometric spacing, 0.3 m to 190 m: the penumbra estimate 8d/t widens as fast as the gaps,
 // and fixed-count loops run well in parallel.
-float softShadow(vec4 ro, vec4 rd) {
+// (n samples, each twice as far as the last: from 0.3 m out to 150 m with 10; distant ground, whose shadows are
+// broad, takes 7)
+float softShadow(vec4 ro, vec4 rd, int n) {
   float res = 1.0, t = 0.3, rOut = uPR + SHELL;
-  for (int i = 0; i < 12; i++) {
+  for (int i = 0; i < 10; i++) {
+    if (i >= n) break;
     vec4 p = ro + rd * t;
     if (dot(p, p) > rOut * rOut && dot(p, rd) > 0.0) break;
     res = min(res, 8.0 * sdTerrain(p) / t);
     if (res < 0.02) break;
-    t *= 1.8;
+    t *= 2.0;
   }
   return clamp(res, 0.0, 1.0);
 }
+float softShadow(vec4 ro, vec4 rd) { return softShadow(ro, rd, 10); }
 
 // Boulders are 4D balls, intersected analytically. Your slice cuts each one in a 3D ball of radius
 // sqrt(r^2 - a^2), where a is how far its centre lies toward ana or kata: they swell and vanish as you turn.
@@ -388,6 +392,7 @@ float objectShadow(vec4 ro, vec4 rd) {
       float miss = sqrt(max(dot(oc, oc) - t * t, 0.0)) - h * (uOP[i].x > 1.5 ? 1.2 : 1.0);
       res = min(res, clamp(6.0 * miss / t + 0.5, 0.0, 1.0));
     } else {
+      if (dot(oc, oc) - t * t > 4.0 * h * h) continue;      // the ray passes outside its bounding ball (radius 2h)
       vec4 o = -oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));
       vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
       float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
@@ -579,9 +584,9 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float dif = rowLight(p, nb, up);
   float sh = 1.0;
   if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5 && (uDebug & 2048) == 0) {
-    sh = softShadow(p + n * 0.08, uSun);
-    if (sh > 0.02) sh = min(sh, boulderShadow(p + n * 0.08, uSun));
-    if (sh > 0.02 && uON > 0 && t < 60.0) sh = min(sh, objectShadow(p + n * 0.08, uSun));   // (beyond 60 m too small to see)
+    sh = (uDebug & 8388608) == 0 ? softShadow(p + n * 0.08, uSun, t > 80.0 ? 7 : 10) : 1.0;
+    if (sh > 0.02 && t < 100.0 && (uDebug & 2097152) == 0) sh = min(sh, boulderShadow(p + n * 0.08, uSun));   // (beyond 100 m, specks)
+    if (sh > 0.02 && uON > 0 && t < 60.0 && (uDebug & 4194304) == 0) sh = min(sh, objectShadow(p + n * 0.08, uSun));   // (beyond 60 m too small to see)
   }
   float ao = withShadow && (uDebug & 8192) == 0 ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);

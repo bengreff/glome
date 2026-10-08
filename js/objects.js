@@ -162,6 +162,7 @@ function holdDrive(b, cam, w, kick) {
   let J = vec4.scale(vec4.sub(vec4.add(vT, vec4.scale(err, 1 / HOLD_TAU)), vec4.add(b.vel, vec4.scale(a, dt))), b.m);
   const Jl = vec4.len(J), Jmax = HOLD_F * dt;
   if (Jl > Jmax) J = vec4.scale(J, Jmax / Jl);
+  hold.strain = 0.9 * (hold.strain || 0) + 0.1 * Math.min(1, Jl / Jmax);   // how hard you are working (for the HUD)
   b.vel = vec4.add(b.vel, vec4.scale(J, b.invM));
   kick(vec4.scale(J, -1 / LAWS.PLAYER_M));
   // the turn: toward the attitude it should have in your view

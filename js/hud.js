@@ -58,13 +58,23 @@ export function drawFaced(cam) {
 }
 
 // A small dot at the centre of the slice view: the point the radar's ring shows.
+// It opens out in the accent colour when it rests on something you could take (F); holding something heavy, a faint
+// arc round it shows how hard you are straining.
+const gz = { open: 0 };
 export function drawGazeDot() {
   const W = overlay.width, H = overlay.height, k = W / innerWidth;
+  gz.open += ((G.canTake ? 1 : 0) - gz.open) * 0.25;
+  const r = (3 + 2.5 * gz.open) * k;
   octx.save();
   octx.strokeStyle = 'rgba(0, 0, 0, 0.45)'; octx.lineWidth = 3 * k;
-  octx.beginPath(); octx.arc(W / 2, H / 2, 3 * k, 0, 7); octx.stroke();
-  octx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; octx.lineWidth = 1.4 * k;
-  octx.beginPath(); octx.arc(W / 2, H / 2, 3 * k, 0, 7); octx.stroke();
+  octx.beginPath(); octx.arc(W / 2, H / 2, r, 0, 7); octx.stroke();
+  octx.strokeStyle = gz.open > 0.05 ? `rgba(${Math.round(255 - 173 * gz.open)}, ${Math.round(255 - 35 * gz.open)}, ${Math.round(255 - 55 * gz.open)}, 0.9)` : 'rgba(255, 255, 255, 0.85)';
+  octx.lineWidth = 1.4 * k;
+  octx.beginPath(); octx.arc(W / 2, H / 2, r, 0, 7); octx.stroke();
+  if ((G.strain || 0) > 0.35) {
+    octx.strokeStyle = `rgba(255, 255, 255, ${(0.5 * (G.strain - 0.35) / 0.65).toFixed(3)})`; octx.lineWidth = 1.2 * k;
+    octx.beginPath(); octx.arc(W / 2, H / 2, 13 * k, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * G.strain); octx.stroke();
+  }
   if (radar.gaze && !G.state.radar.hidden && G.state.help) {
     octx.font = `500 ${10.5 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     octx.fillText(`${Math.round(radar.gaze.t)} m`, W / 2 + 8 * k, H / 2 + 4 * k);

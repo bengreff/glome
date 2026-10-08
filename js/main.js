@@ -20,7 +20,7 @@ import { MASSIF } from './world.js';
 import { quality, updateSky, setFov } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
-         drawStone, computeGhost, setDown, objectsSave, moveHeld, carryHeld } from './objects.js';
+         drawStone, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
@@ -300,6 +300,9 @@ function frameBody(now) {
   gpuEnd(q);
   mark('present');
   radar.gaze = gazePoint(cam);
+  // what the dot rests on: something you could take (or the console, on B), and how hard you strain at what you hold
+  G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
+  G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
   drawFaced(cam); drawGazeDot();
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
