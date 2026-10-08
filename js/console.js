@@ -9,17 +9,28 @@ import { LAWS, resetLaws, TRUE_LAWS } from './laws.js';
 import { vec4 } from './player.js';
 import { rot as R4 } from './so4.js';
 import { World, makeBody } from './bodies.js';
-import { NORMALS, B_IN, nearB } from './planetB.js';
+import { NORMALS, B_IN, nearB, accelB } from './planetB.js';
 import { orbitOf, toBody, toInertial, dirToBody, rebaseSpin } from './cosmos.js';
-import { objects } from './objects.js';
+import { objects, hold, camRot } from './objects.js';
 
 const $ = id => document.getElementById(id);
 export const bworld = { world: new World({ accel: () => [0, 0, 0, 0], env: () => ({ d: 1e9, n: [0, 0, 0, 1] }) }), console: null };
 const proj = (v, n) => vec4.norm(vec4.sub(v, vec4.scale(n, vec4.dot(v, n))));
 const CONSOLE_FLOOR = 60;
 
-// B's structures, in B's own frame (centre at the origin, axes inertial).
+// B's ground for bodies: the crystal's nearest floor (the 120-cell is convex, so the farthest floor plane is the
+// signed distance near its faces).
+function crystalSD(x) {
+  let m = -Infinity, nn = NORMALS[0];
+  for (const n of NORMALS) { const d = x[0] * n[0] + x[1] * n[1] + x[2] * n[2] + x[3] * n[3]; if (d > m) { m = d; nn = n; } }
+  return { d: m - B_IN(), n: nn };
+}
+// B's structures, in B's own frame (centre at the origin, axes inertial), and its world of bodies: what you bring.
 export function buildB() {
+  const w = bworld.world;
+  w.accel = (x, v) => accelB(x, v, G.state.time); w.env = crystalSD;
+  objects.worldB = w;
+  objects.toA = (pos, rot) => { const it = toA(pos, rot, G.state.time, G.player.onB ?? 0); return { pos: it.pos, rot: it.rot }; };
   const n = NORMALS[CONSOLE_FLOOR], floorR = B_IN();
   const t0 = proj([0.3, 0.7, -0.4, 0.5], n), t1 = proj(vec4.sub([0.6, -0.2, 0.5, 0.6], vec4.scale(t0, vec4.dot([0.6, -0.2, 0.5, 0.6], t0))), n);
   const t2 = proj(vec4.sub(vec4.sub([-0.4, 0.5, 0.6, 0.3], vec4.scale(t0, vec4.dot([-0.4, 0.5, 0.6, 0.3], t0))), vec4.scale(t1, vec4.dot([-0.4, 0.5, 0.6, 0.3], t1))), n);
@@ -42,32 +53,30 @@ function fixDet(rows) {
   if (d < 0) rows.forEach(r => { r[2] = -r[2]; });
   return rows;
 }
-// For the renderer: B's structures in A's frame (B's copy k round the hoop: the one you are near).
-export function bItems(eyeA, t) {
+// A pose in B's frame (copy k) as seen in A's frame at time t.
+function toA(pos, rot, t, k) {
+  const o = orbitOf('B', t).c, P = toBody([o[0] + pos[0], o[1] + pos[1], o[2] + pos[2], o[3] + pos[3] + k * LAWS.L], t);
+  const M = R4.toRows(rot), cols = [0, 1, 2, 3].map(j => dirToBody([M[0][j], M[1][j], M[2][j], M[3][j]], t));
+  return { pos: P, rot: R4.fromMatrix([0, 1, 2, 3].map(r => cols.map(c => c[r]))) };
+}
+const lerp4 = (a, b, s) => [0, 1, 2, 3].map(i => a[i] + (b[i] - a[i]) * s);
+// For the renderer: B's structures and what lies on B, in A's frame (B's copy k round the hoop: the one you are
+// near), drawn between the last two steps (alpha) like everything else.
+export function bItems(cam, t, alpha = 1) {
   // on B, the copy you stand on; otherwise the copy round the hoop nearest you
-  const p = G.player, k = p.onB ?? nearB(toInertial(eyeA, t), t).k, o = orbitOf('B', t).c, base = [o[0], o[1], o[2], o[3] + k * LAWS.L];
+  const eyeA = cam.eye, p = G.player, k = p.onB ?? nearB(toInertial(eyeA, t), t).k, o = orbitOf('B', t).c;
   const items = [];
-  const cb = toBody(base, t);
-  if (vec4.len(vec4.sub(cb, eyeA)) > 400) return items;
-  const cols = [0, 1, 2, 3].map(j => { const e = [0, 0, 0, 0]; e[j] = 1; return dirToBody(e, t); });   // inertial axes in A's frame
+  if (vec4.len(vec4.sub(toBody([o[0], o[1], o[2], o[3] + k * LAWS.L], t), eyeA)) > 400) return items;
   for (const b of bworld.world.bodies) {
-    const pos = toBody(vec4.add(base, b.pos), t);
-    const M = R4.toRows(b.rot), axes = [0, 1, 2, 3].map(j => { const v = [M[0][j], M[1][j], M[2][j], M[3][j]]; return [0, 1, 2, 3].map(i => cols[0][i] * v[0] + cols[1][i] * v[1] + cols[2][i] * v[2] + cols[3][i] * v[3]); });
-    const rows = [0, 1, 2, 3].map(r => axes.map(a => a[r]));
-    items.push({ pos, rot: R4.fromMatrix(rows), shape: 'tesseract', half: b.half, size: b.size, mat: b.mat, glow: b.glow, d: vec4.len(vec4.sub(pos, eyeA)) });
+    let q;
+    if (b.held && hold.rel) { const C = camRot(cam); q = { pos: vec4.add(eyeA, R4.apply(C, hold.rel.p)), rot: R4.compose(C, hold.rel.R) }; }
+    else {
+      const moving = alpha < 1 && b.prevPos && !b.fixed && vec4.len(vec4.sub(b.pos, b.prevPos)) < 1;
+      q = toA(moving ? lerp4(b.prevPos, b.pos, alpha) : b.pos, b.rot, t, k);
+    }
+    items.push({ pos: q.pos, rot: q.rot, shape: b.shape, half: b.half, size: b.size, mat: b.mat, glow: b.glow, light: b.light, d: vec4.len(vec4.sub(q.pos, eyeA)) });
   }
   return items;
-}
-// On B, the pillars and the console stop you (the capsule against them, in B's frame).
-export function bContacts(p) {
-  if (p.onB == null) return;
-  const cap = p.capsule(), up = p.up();
-  for (const c of bworld.world.capsuleContacts(cap.a, cap.b, cap.r)) {
-    p.pos = vec4.add(p.pos, vec4.scale(c.n, Math.min(c.depth, 0.2)));
-    const vn = vec4.dot(p.vel, c.n);
-    if (vn < 0) p.vel = vec4.sub(p.vel, vec4.scale(c.n, vn));
-    if (vec4.dot(c.n, up) > 0.6) p.supported = true;
-  }
 }
 
 // ---------- the orbit ----------

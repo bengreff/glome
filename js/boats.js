@@ -34,10 +34,11 @@ export function stepBoats(dt, t) {
     if (lv.length < 3) continue;
     const [h, s1, s2] = lv;
     const v = vec4.sub(b.vel, vec4.scale(up, vec4.dot(b.vel, up)));
-    const m = b.m, frac = b.wet;
-    // the keel and the hull
-    const dv = vec4.add(vec4.scale(h, -0.15 * vec4.dot(v, h)), vec4.add(vec4.scale(s1, -1.6 * vec4.dot(v, s1)), vec4.scale(s2, -1.6 * vec4.dot(v, s2))));
-    let F = vec4.scale(dv, m * frac * 2);
+    const m = b.m, wetted = Math.min(1, b.wet * 20);
+    // the keel and the hull: water's drag on the hull's bottom, linear and quadratic in speed (newtons, so a light
+    // raft drifts no faster than a heavy one), ten times as strong sideways (both ways) as along the heading
+    const drag = (axis, k) => { const u = vec4.dot(v, axis); return vec4.scale(axis, -k * (20 * u + 40 * u * Math.abs(u)) * wetted); };
+    let F = vec4.add(drag(h, 1), vec4.add(drag(s1, 10), drag(s2, 10)));
     // the wind on the raft, and on a sail resting on it
     // a sail set on the raft is rigged: it rides on top, turning with the raft, until you take it off
     let sailed = false;
@@ -52,7 +53,7 @@ export function stepBoats(dt, t) {
     }
     const w = vec4.sub(windAt(up, t), v);
     const wh = vec4.dot(w, h);
-    F = vec4.add(F, vec4.scale(w, 3 * vec4.len(w)));                                  // windage of the raft
+    F = vec4.add(F, vec4.scale(w, 1 * vec4.len(w)));                                  // windage of the raft
     if (sailed) F = vec4.add(F, vec4.scale(h, 34 * wh * Math.abs(wh)));                 // the sail
     for (let i = 0; i < 4; i++) b.vel[i] += F[i] / m * dt;
     b.sailed = sailed;

@@ -240,6 +240,25 @@ export function step(A, w, dt) {
   return { l: qmul(dl, A.l), r: qmul(A.r, dr) };
 }
 
+// log(D): the bivector ω with step(identity, ω, 1) = D, so a body spinning at ω for one second turns by D.
+// D's quaternion pair is defined only up to a common sign; each sign gives one ω, and we keep the shorter.
+// Inverts step(): l = exp(ω₊/2), r = exp(ω₋/2), then the self-dual/anti-self-dual split above, solved for ω.
+function qlog(q) {                                   // unit quaternion -> v with qexp(v) = q, |v| in [0, π]
+  const s = Math.hypot(q[1], q[2], q[3]), a = Math.atan2(s, q[0]);
+  if (s < 1e-12) return q[0] > 0 ? [0, 0, 0] : [Math.PI, 0, 0];
+  return [q[1] * a / s, q[2] * a / s, q[3] * a / s];
+}
+export function log(D) {
+  let best = null;
+  for (const sg of [1, -1]) {
+    const a = qlog(D.l.map(x => x * sg)), b = qlog(D.r.map(x => x * sg));
+    const n = a[0] * a[0] + a[1] * a[1] + a[2] * a[2] + b[0] * b[0] + b[1] * b[1] + b[2] * b[2];
+    if (!best || n < best.n) best = { a, b, n };
+  }
+  const wp = best.a.map(x => 2 * x), wm = best.b.map(x => 2 * x);
+  return [-(wp[0] + wm[0]) / 2, -(wp[1] + wm[1]) / 2, -(wp[2] + wm[2]) / 2, (wm[2] - wp[2]) / 2, (wp[1] - wm[1]) / 2, (wm[0] - wp[0]) / 2];
+}
+
 // ---------------------------------------------------------------------------
 // Robust 3x3 rotation-matrix -> quaternion (Shepperd's method: pick whichever of
 // w²,x²,y²,z² is largest to divide by, so it never divides by something near zero).

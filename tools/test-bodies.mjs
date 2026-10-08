@@ -80,6 +80,19 @@ const up = [0, 0, 0, 1], onGround = h => [0, 0, 0, RP + h];
   const frac = ballSubmerged(r, -b.pos[3]) / VOLUME.glome(r);
   check('buoyancy: density 500 floats half-submerged', Math.abs(half - 0.5) < 1e-12 && Math.abs(frac - 0.5) < 0.01, `submerged ${(frac * 100).toFixed(2)}% (cap formula at y=0: ${(half * 100).toFixed(4)}%)`);
 }
+// 6b. a floating tesseract: a uniform cube floats square only below about 0.21 of water's density (BM = s²/12d
+// against KG − KB = (s − d)/2, the same rule in 4D as in 3D): at 60 kg/m⁴, given a 20° tilt, it rights itself and
+// draws 0.06 of its side; at 450 it settles tilted (on an edge)
+for (const [rho, wantFlat] of [[60, true], [450, false]]) {
+  const w = new World({ accel: () => [0, 0, 0, -g0], env: () => ({ d: 1e9, n: up }) });
+  w.water = { height: p => p[3], up: () => up, density: 1000 };
+  const b = w.add(makeBody({ shape: 'tesseract', size: 1.3, density: rho, pos: [0, 0, 0, 0.6], rot: R4.planeRotation(0, 3, 0.35) }));
+  for (let i = 0; i < 120 * 60; i++) w.step();
+  const M = R4.toRows(b.rot), tilt = Math.acos(Math.max(...[0, 1, 2, 3].map(j => Math.abs(M[3][j])))) * 180 / Math.PI;
+  const draft = 0.65 - b.pos[3];
+  check(`floating tesseract at ${rho} kg/m⁴: ${wantFlat ? 'square' : 'tilted'}`, wantFlat ? tilt < 1 && Math.abs(draft / 1.3 - rho / 1000) < 0.01 : tilt > 10,
+    `tilt ${tilt.toFixed(1)}°, draft ${(draft / 1.3).toFixed(3)} of its side`);
+}
 // 7. raycast hits a rotated tesseract at the analytic distance
 {
   const w = new World({ accel: () => [0, 0, 0, 0], env: () => ({ d: 1e9, n: up }) });

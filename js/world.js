@@ -1,7 +1,7 @@
 // The planet: a 4D ball whose surface is a 3-sphere. Terrain height is a function on that 3-sphere,
 // stored in a "cubed 3-sphere" atlas: 8 cubic charts, one per tesseract cell (±x, ±y, ±z, ±w).
-import { fbm4, ridged4 } from './noise.js?v=20261008085948';
-import { LAWS } from './laws.js?v=20261008085948';
+import { fbm4, ridged4 } from './noise.js?v=20261008094632';
+import { LAWS } from './laws.js?v=20261008094632';
 
 export const PLANET_R = LAWS.R_A;   // metres
 export const SEA = LAWS.SEA;        // sea level, metres above PLANET_R

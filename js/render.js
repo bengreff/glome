@@ -213,7 +213,7 @@ export function uploadTrees() {
 }
 // The hoop sky, computed once per frame (render.sky); the sun direction used for shadows is its mean.
 export const skyNow = { u: null };
-export function updateSky(t, eye) { skyNow.u = skyUniforms(t, eye); skyNow.b = bUniforms(t); G.sun = skyNow.u.sun; return G.sun; }
+export function updateSky(t, eye, up) { skyNow.u = skyUniforms(t, eye, up); skyNow.b = bUniforms(t); G.sun = skyNow.u.sun; return G.sun; }
 export function setWorld(p, cam, sun) {
   const sk = skyNow.u;
   gl.uniform4fv(p.u('uStar0'), sk.star0);

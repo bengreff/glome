@@ -1,6 +1,6 @@
 // Node test for js/so4.js. No packages: plain JS, a hand-rolled matrix exponential
 // (Taylor + scaling-and-squaring) used only as an independent oracle to check step().
-import { rot, qmul, qconj, qnorm, qexp, wedge, bivApply, bivToMatrix, bivAdd, bivScale, bivDot, step } from '../js/so4.js';
+import { rot, qmul, qconj, qnorm, qexp, wedge, bivApply, bivToMatrix, bivAdd, bivScale, bivDot, step, log } from '../js/so4.js';
 
 let fails = 0, checks = 0;
 function near(a, b, tol, msg) {
@@ -212,6 +212,16 @@ for (let t = 0; t < 60; t++) {
     const dij = rows[i].reduce((s, x, k) => s + x * rows[j][k], 0);
     near(dij, i === j ? 1 : 0, 1e-8, `orthonormality after 1e5 steps [${i}][${j}]`);
   }
+}
+
+// 10. log() inverts step(): for ω with both plane angles under π, log(step(I, ω, 1)) = ω; and for any rotation,
+// step(I, log(D), 1) = D.
+for (let t = 0; t < 60; t++) {
+  let w = randomBivector();
+  const m = Math.hypot(...w); w = w.map(x => x * rnd(0.01, 1.4) / m);
+  vnear(log(step(rot.identity(), w, 1)), w, 1e-9, `log(step(I, w, 1)) = w (t=${t})`);
+  const D = randomRot(), v = randomVec4();
+  vnear(rot.apply(step(rot.identity(), log(D), 1), v), rot.apply(D, v), 1e-9, `step(I, log(D), 1) = D (t=${t})`);
 }
 
 console.log(`${checks} checks, ${fails} failures.`);

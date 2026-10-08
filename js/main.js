@@ -20,7 +20,7 @@ import { MASSIF } from './world.js';
 import { quality, updateSky } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
-         drawStone, computeGhost, setDown, objectsSave } from './objects.js';
+         drawStone, computeGhost, setDown, objectsSave, moveHeld } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
@@ -30,13 +30,13 @@ import { growTree, trees, rope as ropeSlot } from './trees.js';
 import { Rope } from './rope.js';
 import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
 import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
-import { bworld, buildB, bItems, bContacts, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
+import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad } from './cosmos.js';
 import { stepBoats, windAt } from './boats.js';
 import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { uploadTrees } from './render.js';
-import { orbitOf, toBody, dirToBody } from './cosmos.js';
+import { orbitOf, toBody, dirToBody, dirToInertial } from './cosmos.js';
 import { RIVERS, ISLANDS, ARCHI } from './world.js';
 
 const $ = id => document.getElementById(id);
@@ -92,17 +92,21 @@ function backToDry() {
 
 // ---------- hands: pick up, carry, set down, throw ----------
 const hold = { fT: -1, mT: -1, ghostT: 0 };
-const kickPlayer = dv => { if (flight.active) kick(dv); else G.player.vel = vec4.add(G.player.vel, dv); };
+// A change of your velocity given in A's frame (the frame objects live in): in flight it goes to the inertial state,
+// on B into B's frame (whose axes are inertial).
+const kickPlayer = dv => { const p = G.player; if (flight.active) kick(dv); else if (p.onB != null) p.vel = vec4.add(p.vel, dirToInertial(dv, state.time)); else p.vel = vec4.add(p.vel, dv); };
 function handleActions(cam) {
-  const now = G.simT;
+  const now = G.simT, p = G.player;
+  // things are handled in the frame of the world they are in: on B, B's (your own frame there)
+  const camW = p.onB != null ? p.camera() : cam, kickW = p.onB != null ? dv => { p.vel = vec4.add(p.vel, dv); } : kickPlayer;
   if (actions.fDown) {
     actions.fDown = false;
     if (!objects.held && nearConsole(G.player)) { if ($('console').hidden) openConsole(); else closeConsole(); }
     else if (G.ropeHeld != null) G.ropeHeld = null;       // let go of the rope
     else if (objects.held) hold.fT = now;                  // tap: drop · hold: show where it will rest
     else {
-      const b = lookedAt(cam);
-      if (b) pickUp(b);
+      const b = lookedAt(camW);
+      if (b) pickUp(b, camW);
       else if (ropeSlot.obj) {                             // or take hold of the rope where you look at it
         let best = -1, bd = 0.35;
         ropeSlot.obj.x.forEach((q, i) => { const d = vec4.sub(q, cam.eye), t = vec4.dot(d, cam.F); if (t > 0 && t < 3.2) { const m = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))); if (m < bd) { bd = m; best = i; } } });
@@ -115,21 +119,28 @@ function handleActions(cam) {
     if (hold.fT >= 0 && objects.held) { if (now - hold.fT > 0.3 && objects.ghost) setDown(); else drop(); }
     hold.fT = -1; objects.ghost = null;
   }
-  if (hold.fT >= 0 && objects.held && now - hold.fT > 0.3 && now - hold.ghostT > 0.2) { computeGhost(cam); hold.ghostT = now; }
+  if (hold.fT >= 0 && objects.held && now - hold.fT > 0.3 && now - hold.ghostT > 0.2) { computeGhost(camW); hold.ghostT = now; }
   G.charge = hold.mT >= 0 && objects.held ? (now - hold.mT) / 1.0 : -1;
-  if (actions.g) { actions.g = false; drawStone(cam); }
+  if (actions.g) { actions.g = false; drawStone(camW); }
   if (actions.mDown) { actions.mDown = false; if (objects.held) hold.mT = now; }
   if (actions.mUp) {
     actions.mUp = false;
-    if (hold.mT >= 0 && objects.held) throwHeld(cam, Math.min(1, (now - hold.mT) / 1.0), kickPlayer);
+    if (hold.mT >= 0 && objects.held) throwHeld(camW, Math.min(1, (now - hold.mT) / 1.0), kickW);
     hold.mT = -1;
   }
 }
 // The camera in A's frame (the renderer's frame), wherever you are: on B your frame is B's, carried on its orbit.
-function cameraNow() {
+// For drawing, alpha < 1 places it between the last two physics steps (the frame falls between them), with the
+// time to match, so motion is smooth whatever the display's rate.
+function cameraNow(alpha = 1) {
   const p = G.player, c = p.camera();
+  let t = state.time;
+  if (alpha < 1 && p.prevPos && p.prevOnB === p.onB && vec4.len(vec4.sub(p.pos, p.prevPos)) < 3) {
+    c.eye = vec4.add(c.eye, vec4.scale(vec4.sub(p.pos, p.prevPos), alpha - 1));
+    t -= (1 - alpha) * STEP;
+  }
   if (p.onB == null) return c;
-  const t = state.time, o = orbitOf('B', t).c, toA = v => dirToBody(v, t);
+  const o = orbitOf('B', t).c, toA = v => dirToBody(v, t);
   return { eye: toBody([o[0] + c.eye[0], o[1] + c.eye[1], o[2] + c.eye[2], o[3] + c.eye[3] + p.onB * LAWS.L], t), F: toA(c.F), R: toA(c.R), U: toA(c.U), A: toA(c.A), up: toA(c.up) };
 }
 // B's return pad: one floor, in the accent colour; jump on it and it throws you along your gaze at 33 m/s
@@ -205,23 +216,30 @@ function frameBody(now) {
   handleActions(cameraNow());
   for (let n = 0; physAcc >= STEP && n < 10; n++, physAcc -= STEP) {
     const onB = player.onB != null;
-    if (!onB) { updateLauncher(player); tryLaunch(player, player.camera(), input.jump && !flight.active); }
-    else tryLaunchB(player, input.jump);
+    player.prevPos = player.pos.slice(); player.prevOnB = player.onB;
+    const v0 = player.vel.slice();
+    let launched = false;
+    if (!onB) { updateLauncher(player); launched = tryLaunch(player, player.camera(), input.jump && !flight.active); }
+    else launched = tryLaunchB(player, input.jump);
+    // a launch throws you and what you hold together (it is in the world, and so the frame, you are in)
+    if (launched && objects.held) objects.held.vel = vec4.add(objects.held.vel, vec4.sub(player.vel, v0));
     updateFlightMode(player);
     if (flight.active) { if (!stepFlight(player, STEP)) softReset(); }
     else if (G.fly) flyStep(player, input, STEP);
-    else if (onB) { const k = player.onB; player.update(STEP, input, (x, v) => accelB(x, v, state.time, k)); bContacts(player); }
+    else if (onB) { const k = player.onB; player.update(STEP, input, (x, v) => accelB(x, v, state.time, k)); }
     else {
       player.floorFn = nearCarves(player.pos, 25) ? (n, r) => floorRadius(n, r, player.hf) : null;
       player.update(STEP, input, accel);
       capsuleTerrain(player);
     }
     player.ride = null;
-    if (!onB && !flight.active) playerContacts(player);
+    if (!flight.active) playerContacts(player);              // the bodies of the planet you are on
     if (player.supported && !flight.active && !(G.simT < player.airborneUntil)) player.grounded = true;   // standing on a thing is footing too
     if (!onB) stepBoats(STEP, state.time);
     trackOrbit(flight, state.time);
-    stepObjects(cameraNow());
+    if (objects.held && !!objects.held.inB !== (player.onB != null)) moveHeld(player.onB != null);   // landing on B or leaving it: what you hold comes too
+    stepObjects(cameraNow(), kickPlayer);
+    if (player.onB != null) stepObjects(player.camera(), dv => { player.vel = vec4.add(player.vel, dv); }, objects.worldB, 150, 900);
     if (ropeSlot.obj) {
       const R = ropeSlot.obj;
       R.pins.clear();
@@ -238,7 +256,10 @@ function frameBody(now) {
 
   updateDyn(Math.min(0.2, (now - lastRaw) / 1000)); lastRaw = now;
   resize();
-  const cam = cameraNow(), sun = updateSky(state.time, cam.eye);
+  // draw between the last two steps: this frame's share of the next step
+  const alpha = Math.min(1, physAcc / STEP), tR = state.time - (1 - alpha) * STEP;
+  ropeSlot.alpha = alpha;
+  const cam = cameraNow(alpha), sun = updateSky(tR, cam.eye, cam.up);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
   if (player.onB == null) {
@@ -247,9 +268,9 @@ function frameBody(now) {
     const cd = creatureDraw(cam.eye, cam.A, player.hf);
     G.creatureItems = cd.items; legSlot.caps = cd.caps;
   } else { G.creatureItems = []; legSlot.caps = []; }
-  G.creatureItems = G.creatureItems.concat(bItems(cam.eye, state.time));   // B's pillars and console, when near
+  G.creatureItems = G.creatureItems.concat(bItems(cam, tR, alpha));   // B's pillars and console, when near
   updateConsole();
-  uploadObjects(cam);
+  uploadObjects(cam, alpha);
   // the first sight of your own planet's copies round the hoop: a copy inside your slice, in front of you, in the sky
   if (!G.flags.copiesSeen) {
     const h = cosmos.hoopAxisBody(state.time);

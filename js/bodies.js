@@ -138,11 +138,20 @@ function buoyancy(b, water, g, dt) {
   if (y < -b.bound) return 0;
   let V, cb = b.pos;
   if (b.shape === 'glome') V = ballSubmerged(b.size, y);
-  else {                                                     // tesseract: 4⁴ sub-cells
-    const Ax = axesOf(b), h = b.half; let n = 0, c = [0, 0, 0, 0];
+  else {
+    // tesseract: 4⁴ sub-cells against the water's surface, taken as flat across the body (its curvature over a
+    // metre is a millimetre). Each cell is wet in proportion to how deep it sits (exact for a level cell, close for a
+    // tilted one), so the volume changes smoothly however shallow the draft; the wet part's centre lies below the
+    // cell's by the dry share of its height.
+    const Ax = axesOf(b), h = b.half, a = Ax.map(A => dot(A, up));
+    const e = (h / 4) * (Math.abs(a[0]) + Math.abs(a[1]) + Math.abs(a[2]) + Math.abs(a[3]));   // a cell's half-height
+    let n = 0, c = [0, 0, 0, 0];
     for (const q of GRID) {
+      const z = h * (q[0] * a[0] + q[1] * a[1] + q[2] * a[2] + q[3] * a[3]);
+      const f = Math.max(0, Math.min(1, (y - z + e) / (2 * e)));
+      if (f <= 0) continue;
       const p = add(b.pos, add(add(scale(Ax[0], q[0] * h), scale(Ax[1], q[1] * h)), add(scale(Ax[2], q[2] * h), scale(Ax[3], q[3] * h))));
-      if (water.height(p) < 0) { n++; c = add(c, p); }
+      n += f; c = add(c, scale(sub(p, scale(up, e * (1 - f))), f));
     }
     V = (n / 256) * b.size ** 4;
     if (n) cb = scale(c, 1 / n);
@@ -151,10 +160,13 @@ function buoyancy(b, water, g, dt) {
   const F = water.density * g * V;
   applyImpulse(b, scale(up, F * dt), cb);
   const frac = V / VOLUME[b.shape](b.size);
-  if (!b.boat) {                                             // water drag (an approximation); boats have their own (boats.js)
-    const damp = Math.exp(-1.2 * frac * dt);
-    b.vel = b.vel.map(v => v * damp); b.omega = b.omega.map(v => v * damp);
-  } else { const damp = Math.exp(-0.8 * frac * dt); b.omega = b.omega.map(v => v * damp); }
+  // water's drag (an approximation): a rate set by the mass of water displaced against the body's own, so anything
+  // afloat settles alike however light it is, and a sinking stone is slowed less. Boats keep their own drag across
+  // the water (boats.js) and get only this one's damping of bobbing and rolling.
+  const damp = Math.exp(-1.5 * water.density * V * b.invM * dt);
+  if (!b.boat) b.vel = b.vel.map(v => v * damp);
+  else { const vu = dot(b.vel, up); b.vel = sub(b.vel, scale(up, vu * (1 - damp))); }
+  b.omega = b.omega.map(v => v * damp);
   return frac;
 }
 
@@ -170,6 +182,7 @@ export class World {
 
   step() {
     const dt = this.dt, bodies = this.bodies;
+    for (const b of bodies) { b.prevPos = b.pos.slice(); b.prevRot = b.rot; }     // (for drawing between steps)
     // 1. forces
     for (const b of bodies) {
       if (b.sleeping || b.kinematic) continue;
@@ -183,7 +196,7 @@ export class World {
     for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
       const A = bodies[i], B = bodies[j];
       if ((A.sleeping || A.kinematic) && (B.sleeping || B.kinematic)) continue;
-      if (A.held || B.held || A.ghostly || B.ghostly) continue;
+      if (A.ghostly || B.ghostly) continue;
       pairContacts(A, B, cs);
     }
     // a moving body wakes a sleeping one it touches
@@ -247,7 +260,7 @@ export class World {
       for (let i = 0; i < 4; i++) b.pos[i] += b.vel[i] * dt;
       b.rot = R4.renorm(rotStep(b.rot, b.omega, dt));
       const floating = b.wet > 0 && b.wet < 0.999;               // a floating body bobs; it never sleeps
-      const still = !floating && len(b.vel) < 0.06 && len(b.omega) < 0.08;
+      const still = !floating && !b.held && len(b.vel) < 0.06 && len(b.omega) < 0.08;
       b.sleepT = still ? b.sleepT + dt : 0;
       if (b.sleepT > 0.6) { b.sleeping = true; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; }
     }

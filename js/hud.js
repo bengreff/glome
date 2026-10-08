@@ -5,6 +5,7 @@ import { G } from './game.js';
 import { canvas, overlay, octx, scene, prof, FOV } from './render.js';
 import { radar, headingTo } from './radar.js';
 import { boulders } from './boulders.js';
+import { floorOf } from './planetB.js';
 
 const $ = id => document.getElementById(id);
 
@@ -90,10 +91,16 @@ export function updateHUD(dt, cam, sun) {
   const sa = vec4.dot(sun, G.player.A), sf = vec4.dot(sun, G.player.F), sr = vec4.dot(sun, G.player.R);
   const anaLean = Math.atan2(sa, Math.hypot(sf, sr)) * 180 / Math.PI;
   const ahead = Math.atan2(sr, sf) * 180 / Math.PI;
-  $('where').textContent = `η ${fmt(h.eta)}°  ξ₁ ${fmt(h.xi1)}°  ξ₂ ${fmt(h.xi2)}°`;
-  $('alt').textContent = G.player.depth > 0 ? `wading, ${fmt(G.player.depth, 1)} m deep` : `${fmt(G.player.altitude(), 1)} m above sea`;
+  const p = G.player;
+  if (p.onB != null) {                                     // on the crystal: which of its 120 floors, and how high
+    $('where').textContent = `planet B · floor ${floorOf(p.up()) + 1} of 120`;
+    $('alt').textContent = `${fmt(Math.max(0, p.heightAboveGround()), 1)} m above the floor`;
+  } else {
+    $('where').textContent = `η ${fmt(h.eta)}°  ξ₁ ${fmt(h.xi1)}°  ξ₂ ${fmt(h.xi2)}°`;
+    $('alt').textContent = p.depth > 0 ? `wading, ${fmt(p.depth, 1)} m deep` : `${fmt(p.altitude(), 1)} m above sea`;
+  }
   $('sun').textContent = el > -2
-    ? `sun ${fmt(el)}° up · ${fmt(Math.abs(anaLean))}° toward ${anaLean >= 0 ? 'ana' : 'kata'} · ${fmt(Math.abs(ahead))}° ${ahead >= 0 ? 'right' : 'left'}`
+    ? `sun ${Math.abs(el) < 1.5 ? 'on the horizon' : `${fmt(el)}° up`} · ${fmt(Math.abs(anaLean))}° toward ${anaLean >= 0 ? 'ana' : 'kata'} · ${fmt(Math.abs(ahead))}° ${ahead >= 0 ? 'right' : 'left'}`
     : `night · sun ${fmt(-el)}° below`;
   $('fps').textContent = `${fmt(fps)} fps · res ${fmt(100 * scene.w / canvas.width)}%${prof.gpu > 0 ? ` · gpu ${fmt(prof.gpu, 1)} ms` : ''}`;
 }

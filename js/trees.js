@@ -60,7 +60,10 @@ export function legTexData() {
 export function ropeTexData() {
   const r = rope.obj, out = new Float32Array(ROPE_CAPS * 12);
   if (!r) return out;
-  for (let i = 0; i + 1 < r.x.length && i < ROPE_CAPS; i++) { out.set(r.x[i], 12 * i); out.set(r.x[i + 1], 12 * i + 4); out.set([r.r, 2, 0, 0], 12 * i + 8); }
+  // between the last two steps (rope.alpha, set each frame), unless it jumped (a load)
+  const a = rope.alpha ?? 1, P = r.prevX && r.prevX.length === r.x.length && a < 1 ? r.prevX : null;
+  const x = P ? r.x.map((q, i) => { const p = P[i], d = Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) + Math.abs(q[3] - p[3]); return d > 1 ? q : q.map((v, k) => p[k] + (v - p[k]) * a); }) : r.x;
+  for (let i = 0; i + 1 < x.length && i < ROPE_CAPS; i++) { out.set(x[i], 12 * i); out.set(x[i + 1], 12 * i + 4); out.set([r.r, 2, 0, 0], 12 * i + 8); }
   return out;
 }
 // The trees your slice cuts and that are near enough, for the renderer.

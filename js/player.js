@@ -118,8 +118,13 @@ export class Player {
     const vh = sub(this.vel, scale(u, vr));
     let nh;
     // standing on something that moves (a raft), you move with it
-    const base = this.ride ? sub(this.ride.vel, scale(u, dot(this.ride.vel, u))) : [0, 0, 0, 0];
-    if (this.grounded) nh = add(vh, scale(sub(add(target, base), vh), Math.min(1, 14 * dt)));   // feet grip the ground
+    const rv = this.ride ? this.rideVel || this.ride.vel : null, base = rv ? sub(rv, scale(u, dot(rv, u))) : [0, 0, 0, 0];
+    // feet grip the ground: your velocity relative to what you stand on eases toward where you want to go, and the
+    // ground's own motion (a raft's) carries you at once, as static friction would (lastBase: the ground's velocity
+    // last step, or on landing this one's)
+    const prevBase = this.lastBase || base;
+    this.lastBase = this.grounded ? base : null;
+    if (this.grounded) { const rel = sub(vh, prevBase); nh = add(base, add(rel, scale(sub(target, rel), Math.min(1, 14 * dt)))); }
     else {
       nh = add(vh, scale(gh, dt));                                                     // ballistic ...
       // ... except for a little steering within a couple of metres of the ground, the way a jumper twists

@@ -43,6 +43,7 @@ export class Rope {
   get length() { return this.L0.reduce((a, b) => a + b, 0); }
   step(dt) {
     const n = this.x.length, prev = this.x.map(p => p.slice());
+    this.prevX = prev;                                    // (for drawing between steps)
     for (let i = 0; i < n; i++) {
       const a = this.accel(this.x[i]);
       for (let k = 0; k < 4; k++) { this.v[i][k] = (this.v[i][k] + a[k] * dt) * this.damping; this.x[i][k] += this.v[i][k] * dt; }
