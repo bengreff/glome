@@ -83,6 +83,11 @@ A 4D capsule from 0.3 m to 1.75 m along the local up, radius 0.3 m.
 - **Contacts:** full 4D normals with Coulomb friction. A push within about 42° of head-on sticks; a glancing one slides, through ana if that is where the surface leans.
 - **Climbing:** holding Space against a boulder moves you up its surface along the steepest 4D ascent.
 
+## Boats
+
+- **Floating** is the displaced 4-volume (sampled on a 4⁴ grid for a tesseract) times the water's density and the local gravity, applied at the centre of buoyancy, so it also rights (or tips) the raft. A uniform cube floats square only when light enough; heavier, it settles on an edge, in 4D as in 3D.
+- **The keel and hull** (an approximation: a drag proportional to speed, 0.15/s forward and 1.6/s in each sideways direction, scaled by how deep the raft sits); **the sail** (square-rigged): a force along the heading of 34·w|w| N, w the relative wind along the heading; the raft's own windage 3·|w|·w N. The wind turns slowly over hours.
+
 ## Ropes
 
 A chain of particles with distance constraints (position-based dynamics) that collides with the terrain and bodies. In 4D a rope can always pass another rope or itself by moving through ana, because a 1D curve cannot block another 1D curve there. So a knot never holds.

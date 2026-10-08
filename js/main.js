@@ -19,7 +19,7 @@ import { capsuleTerrain, envSD, tangents } from './env.js';
 import { MASSIF } from './world.js';
 import { quality, updateSky } from './render.js';
 import { updateSound } from './sounds.js';
-import { gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
+import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
          drawStone, computeGhost, setDown, objectsSave } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
@@ -32,11 +32,12 @@ import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } 
 import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
 import { bworld, buildB, bItems, bContacts, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad } from './cosmos.js';
+import { stepBoats, windAt } from './boats.js';
 import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { uploadTrees } from './render.js';
 import { orbitOf, toBody, dirToBody } from './cosmos.js';
-import { RIVERS, ISLANDS } from './world.js';
+import { RIVERS, ISLANDS, ARCHI } from './world.js';
 
 const $ = id => document.getElementById(id);
 const state = G.state;
@@ -214,7 +215,10 @@ function frameBody(now) {
       player.update(STEP, input, accel);
       capsuleTerrain(player);
     }
+    player.ride = null;
     if (!onB && !flight.active) playerContacts(player);
+    if (player.supported && !flight.active) player.grounded = true;         // standing on a thing is footing too
+    if (!onB) stepBoats(STEP, state.time);
     trackOrbit(flight, state.time);
     stepObjects(cameraNow());
     if (ropeSlot.obj) {
@@ -362,6 +366,17 @@ function frameBody(now) {
     initCreatures(player.hf);
     hooks.creatures = creaturesSave;
     G.creatures = creatures;
+    {
+      // a raft on a beach facing the archipelago, and a sail on one of the islands
+      const hf = player.hf; let beach = null;
+      for (let i = 0; i < 4000 && !beach; i++) {
+        const T = tangents(ARCHI), d = vec4.norm([0, 1, 2, 3].map(k => (rand() - 0.5) * T[0][k] + (rand() - 0.5) * T[1][k] + (rand() - 0.5) * T[2][k]));
+        const m = 150 + 60 * rand(), n = vec4.norm(vec4.add(vec4.scale(ARCHI, Math.cos(m / 250)), vec4.scale(d, Math.sin(m / 250)))), h = hf.heightAt(n);
+        if (h > 0.4 && h < 1.6 && hf.waterAt(n) < 0.01) beach = n;
+      }
+      if (beach) { const r = spawnObj('raft', beach); r.boat = true; G.raftHome = beach; }
+      spawnObj('sail', ISLANDS[2].n);
+    }
     buildArtifacts();
     buildB();
     bindConsole();
@@ -404,7 +419,7 @@ function frameBody(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

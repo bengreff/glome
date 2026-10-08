@@ -106,7 +106,7 @@ export class Player {
     // You cannot swim. You can wade: water deeper than your knees slows you, and past chest depth you fade back
     // to where you stepped in (main.js).
     const seaR = this.groundFn ? -Infinity : PLANET_R + this.hf.waterAt(u), floor = this.ground(u);   // the sea, or a river (B is dry)
-    this.depth = Math.max(0, seaR - floor);
+    this.depth = Math.max(0, seaR - Math.max(floor, len(this.pos) - 0.02));   // water above your feet (none on a raft)
     const wade = this.depth > 0.3 ? Math.max(0.35, 1 - (this.depth - 0.3) / 1.4) : 1;
     const speed = (input.run ? LAWS.RUN : LAWS.WALK) * wade;
     const target = wl > 0 ? scale(wish, speed / wl) : [0, 0, 0, 0];
@@ -116,7 +116,9 @@ export class Player {
     const vr = dot(this.vel, u);
     const vh = sub(this.vel, scale(u, vr));
     let nh;
-    if (this.grounded) nh = add(vh, scale(sub(target, vh), Math.min(1, 14 * dt)));   // feet grip the ground
+    // standing on something that moves (a raft), you move with it
+    const base = this.ride ? sub(this.ride.vel, scale(u, dot(this.ride.vel, u))) : [0, 0, 0, 0];
+    if (this.grounded) nh = add(vh, scale(sub(add(target, base), vh), Math.min(1, 14 * dt)));   // feet grip the ground
     else {
       nh = add(vh, scale(gh, dt));                                                     // ballistic ...
       // ... except for a little steering within a couple of metres of the ground, the way a jumper twists

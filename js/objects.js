@@ -29,6 +29,9 @@ export const KINDS = {
   stone: { shape: 'glome', size: 0.09, mass: 2.5, mat: 2, glow: 0.35 },          // an impulse stone
   lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 1, glow: 0.9, light: [1.9, 1.35, 0.75] },
   part: { shape: 'tesseract', size: 0.26, mass: 14, mat: 2, glow: 0.25 },          // a launcher part (tiers I–IV): it doesn't roll
+  raft: { shape: 'tesseract', size: 1.3, density: 160, mat: 6 },                 // light wood (like balsa): a uniform cube floats flat
+                                                                                   // only below about a fifth of water's density
+  sail: { shape: 'tesseract', size: 0.4, density: DENSITY.wood, mat: 2, glow: 0.2 }, // set on a raft, it catches the wind
   key: { shape: 'tesseract', size: 0.32, density: DENSITY.metal / 4, mat: 4 },     // the mirror key: handed (two marked cells)
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
@@ -205,7 +208,7 @@ export function playerContacts(p) {
     p.pos = vec4.add(p.pos, vec4.scale(c.n, Math.min(c.depth, 0.2)));
     const vb = vec4.add(B.vel, [0, 0, 0, 0]);
     const vrel = vec4.dot(vec4.sub(p.vel, vb), c.n);
-    if (vec4.dot(c.n, up) > 0.6) p.supported = true;
+    if (vec4.dot(c.n, up) > 0.6) { p.supported = true; p.ride = B; }      // standing on it: you move with it
     if (vrel >= 0) continue;
     if (B.kinematic) { p.vel = vec4.sub(p.vel, vec4.scale(c.n, vrel)); continue; }
     // an inelastic push between you (mass m_p) and the body at the contact point

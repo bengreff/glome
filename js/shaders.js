@@ -557,6 +557,11 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   if (mat < 0.5) { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); nb = normalize(n - 0.04 * (g1 - n * dot(g1, n))); }
   else if (mat < 1.5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; }
   else if (mat < 2.5) { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
+  else if (mat > 5.5) {                                   // wood: planks along the body's first axis
+    float grain = 0.5 + 0.5 * sin(q.y * 26.0 + 3.0 * d1) * sin(q.w * 7.0);
+    alb = mix(vec3(0.36, 0.24, 0.14), vec3(0.50, 0.36, 0.22), grain) * (0.9 + 0.1 * d2);
+    alb *= 1.0 - 0.35 * smoothstep(0.92, 1.0, abs(fract(q.y * 2.5 / h) * 2.0 - 1.0));
+  }
   else if (mat > 4.5) {                                   // the console: brushed metal, and its screen (the +x cell)
     alb = vec3(0.34, 0.35, 0.38) * (0.94 + 0.04 * d2); spec = 0.5;
     if (q.x > h * 0.9) {

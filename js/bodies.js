@@ -150,8 +150,11 @@ function buoyancy(b, water, g, dt) {
   if (V <= 0) return 0;
   const F = water.density * g * V;
   applyImpulse(b, scale(up, F * dt), cb);
-  const frac = V / VOLUME[b.shape](b.size), damp = Math.exp(-1.2 * frac * dt);   // water drag (an approximation)
-  b.vel = b.vel.map(v => v * damp); b.omega = b.omega.map(v => v * damp);
+  const frac = V / VOLUME[b.shape](b.size);
+  if (!b.boat) {                                             // water drag (an approximation); boats have their own (boats.js)
+    const damp = Math.exp(-1.2 * frac * dt);
+    b.vel = b.vel.map(v => v * damp); b.omega = b.omega.map(v => v * damp);
+  } else { const damp = Math.exp(-0.8 * frac * dt); b.omega = b.omega.map(v => v * damp); }
   return frac;
 }
 
@@ -180,7 +183,7 @@ export class World {
     for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
       const A = bodies[i], B = bodies[j];
       if ((A.sleeping || A.kinematic) && (B.sleeping || B.kinematic)) continue;
-      if (A.held || B.held) continue;
+      if (A.held || B.held || A.ghostly || B.ghostly) continue;
       pairContacts(A, B, cs);
     }
     // a moving body wakes a sleeping one it touches
@@ -281,7 +284,7 @@ export class World {
   capsuleContacts(a, b, radius) {
     const out = [], ab = sub(b, a), L2 = dot(ab, ab);
     for (const B of this.bodies) {
-      if (B.held) continue;
+      if (B.held || B.ghostly) continue;
       const t = Math.max(0, Math.min(1, dot(sub(B.pos, a), ab) / L2)), q = add(a, scale(ab, t));
       const dq = sub(q, B.pos);
       if (dot(dq, dq) > (B.bound + radius + 0.05) ** 2) continue;
@@ -300,6 +303,12 @@ export class World {
           if (it === 1) {
             const dd = sub(qq, pb), l = len(dd);
             if (l < radius && l > 1e-9) out.push({ body: B, point: pb, n: scale(dd, 1 / l), depth: radius - l, q: qq });
+            else if (l <= 1e-9) {                                  // the axis is inside the box: out through the nearest face
+              const loc = toLocal(B, Ax, qq);
+              let k = 0; for (let i = 1; i < 4; i++) if (h - Math.abs(loc[i]) < h - Math.abs(loc[k])) k = i;
+              const n = scale(Ax[k], Math.sign(loc[k]) || 1);
+              out.push({ body: B, point: qq, n, depth: radius + h - Math.abs(loc[k]), q: qq });
+            }
           }
         }
       }
