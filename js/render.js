@@ -302,7 +302,8 @@ export function setWorld(p, cam, sun) {
 }
 
 const vec4dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-export const FOV = Math.tan(38 * Math.PI / 180);
+export let FOV = Math.tan(38 * Math.PI / 180);           // half the view's height at unit distance (a setting: 60–100°)
+export function setFov(deg) { FOV = Math.tan(Math.max(60, Math.min(100, deg || 76)) / 2 * Math.PI / 180); }
 
 export function drawSlice(cam, sun, x, y, w, h) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);

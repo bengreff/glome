@@ -9,7 +9,7 @@ import { groundRadiusB } from './planetB.js';
 export const SAVE_VERSION = 1;
 const KEY_SETTINGS = 'glome.settings', KEY_WORLD = 'glome.world', OLD_KEY = 'hoop.settings';
 const RADAR_SAVED = ['big', 'range', 'compass', 'layers', 'hidden', 'yaw', 'el'];
-export const settings = { sens: 1, sound: 0.8, music: 0.7, quality: 'high' };
+export const settings = { sens: 1, sound: 0.8, music: 0.7, quality: 'high', fov: 76, invert: false };
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },

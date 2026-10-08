@@ -54,6 +54,7 @@ kbd { font: 500 11.5px var(--mono); border: 1px solid #3a4866; border-bottom-wid
 .settings { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; max-width: 360px; }
 .settings label { font: 12px var(--mono); color: var(--muted); }
 .settings input[type=range] { width: 100%; accent-color: var(--cool); }
+.settings input[type=checkbox] { justify-self: start; accent-color: var(--cool); }
 .settings select, .buttons button { font: 12.5px var(--ui); color: var(--text); background: rgba(255, 255, 255, 0.05); border: 1px solid #3a4866; border-radius: 6px; padding: 4px 10px; }
 .buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
 .buttons button { cursor: pointer; }

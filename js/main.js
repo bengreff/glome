@@ -17,7 +17,7 @@ import * as saveMod from './save.js';
 import * as cosmos from './cosmos.js';
 import { capsuleTerrain, envSD, tangents } from './env.js';
 import { MASSIF } from './world.js';
-import { quality, updateSky } from './render.js';
+import { quality, updateSky, setFov } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
          drawStone, computeGhost, setDown, objectsSave, moveHeld, carryHeld } from './objects.js';
@@ -47,11 +47,15 @@ loadSettings();
 const QUALITY = { low: 0.55, medium: 0.78, high: 1 };
 function applySettings() {
   quality.cap = QUALITY[settings.quality] || 1;
+  setFov(settings.fov);
   G.audio?.setVolumes({ sound: settings.sound, music: settings.music });
 }
 function bindSettings() {
-  const sens = $('set-sens'), snd = $('set-sound'), mus = $('set-music'), q = $('set-quality');
+  const sens = $('set-sens'), snd = $('set-sound'), mus = $('set-music'), q = $('set-quality'), fov = $('set-fov'), inv = $('set-invert');
   sens.value = Math.log(settings.sens); snd.value = settings.sound; mus.value = settings.music; q.value = settings.quality;
+  fov.value = settings.fov; inv.checked = !!settings.invert;
+  fov.oninput = () => { settings.fov = +fov.value; applySettings(); };
+  inv.onchange = () => { settings.invert = inv.checked; inv.blur(); };
   sens.oninput = () => { settings.sens = Math.exp(+sens.value); };
   snd.oninput = () => { settings.sound = +snd.value; applySettings(); };
   mus.oninput = () => { settings.music = +mus.value; applySettings(); };
@@ -192,13 +196,13 @@ function frameBody(now) {
   mark();
 
   // look
-  const sens = SENS * settings.sens;
+  const sens = SENS * settings.sens, dy = settings.invert ? -mouse.dy : mouse.dy;
   if (mouse.alt) {
     player.rotate('FA', mouse.dx * sens);
-    player.rotate('RA', -mouse.dy * sens);
+    player.rotate('RA', -dy * sens);
   } else {
     player.rotate('FR', mouse.dx * sens);
-    player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - mouse.dy * sens));
+    player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - dy * sens));
   }
   if (mouse.dx || mouse.dy) { state.facing = null; syncFlightFrame(player); }   // looking around cancels an automatic turn
   mouse.dx = mouse.dy = 0;
