@@ -1,11 +1,12 @@
-# Hoop
+# Glome
 
-**A walkable planet in four spatial dimensions.** [Play it in the browser](https://bengreff.github.io/hoop-4d/) (desktop, keyboard and mouse, WebGL 2).
+**A walkable planet in four spatial dimensions.** [Play it in the browser](https://bengreff.github.io/glome/) (desktop, keyboard and mouse, WebGL 2).
 
-Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D ball, and every pixel is a 4D ray traced through it. Geometry, surface normals, sunlight and shadows are all computed in four dimensions.
+Glome is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D ball, and every pixel is a 4D ray traced through it. Geometry, surface normals, sunlight and shadows are all computed in four dimensions.
 
 ## Where it is going
-Hoop is becoming a small, wordless, self-contained 4D universe: one star, two planets, and a fourth direction that loops back on itself.
+(The name: a *glome* is a 4D ball — the planets, the star and the boulders are all glomes. The looping fourth direction is still called the hoop.)
+Glome is becoming a small, wordless, self-contained 4D universe: one star, two planets, and a fourth direction that loops back on itself.
 - **Physics:** exact gravity, with real 4D rigid bodies to throw and stack.
 - **The world:** geometric creatures, caves you can only enter from ana, and a flight off the planet that fails to orbit before it loops the star.
 - **The puzzle:** a quiet chain of artifacts that ends at the console of the simulation itself.

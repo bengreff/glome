@@ -1,7 +1,8 @@
 // A 4D walker on the surface of a 3-sphere planet.
 // The body frame is (F, R, A): three orthonormal horizontal directions (forward, right, ana).
 // "Up" is always radial. The camera adds a pitch angle in the forward–up plane.
-import { PLANET_R, SEA } from './world.js?v=20261007193730';
+import { PLANET_R, SEA } from './world.js';
+import { LAWS } from './laws.js';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 const len = a => Math.sqrt(dot(a, a));
@@ -11,7 +12,6 @@ const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]];
 const norm = a => scale(a, 1 / len(a));
 const reject = (a, b) => sub(a, scale(b, dot(a, b)));   // remove b-component (b unit)
 
-const GRAVITY = 9.8, EYE = 1.62, WALK = 4.2, RUN = 9.5, JUMP = 5.2;
 
 export class Player {
   constructor(heightField) {
@@ -95,7 +95,7 @@ export class Player {
     const u = this.up();
     const wish = add(add(scale(this.F, input.fwd), scale(this.R, input.right)), scale(this.A, input.ana));
     const wl = len(wish);
-    const speed = input.run ? RUN : WALK;
+    const speed = input.run ? LAWS.RUN : LAWS.WALK;
     const target = wl > 0 ? scale(wish, speed / wl) : [0, 0, 0, 0];
 
     const r = len(this.pos);
@@ -114,8 +114,8 @@ export class Player {
       nvr *= Math.exp(-2.5 * dt);
       if (input.jump) nvr = Math.max(nvr, 2.5);
     } else {
-      nvr -= GRAVITY * dt;
-      if (input.jump && this.grounded) { nvr = JUMP; this.grounded = false; }
+      nvr -= LAWS.G_SURF * dt;
+      if (input.jump && this.grounded) { nvr = LAWS.JUMP; this.grounded = false; }
     }
     this.vel = add(nh, scale(u, nvr));
     this.supported = false;
@@ -141,7 +141,7 @@ export class Player {
     const U = this.up();
     const c = Math.cos(this.pitch), s = Math.sin(this.pitch);
     return {
-      eye: add(this.pos, scale(U, EYE)),
+      eye: add(this.pos, scale(U, LAWS.EYE)),
       F: add(scale(this.F, c), scale(U, s)),
       U: sub(scale(U, c), scale(this.F, s)),
       R: this.R, A: this.A, up: U,

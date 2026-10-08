@@ -1,8 +1,8 @@
-# Hoop: design
+# Glome: design
 
 ## In one paragraph
 
-Hoop is a small, wordless, self-contained 4D universe that runs in a browser. It contains one star, two planets, and a fourth direction that closes back on itself (the "hoop"). You arrive on a planet whose ground is a 3-sphere and see it as a 3D slice through your eyes. A 3D radar shows the ground around you. Nothing is explained. Everything is demonstrated by the world behaving exactly as a 4D world must: boulders swell and vanish as you turn, knots fall open, orbits refuse to close, and your own planet hangs in the sky one hoop-length away. It is a sandbox first. Running quietly through it is a chain of wordless artifacts, Myst-like, that leads off the planet, to a second world, and to the console of the simulation itself.
+Glome is a small, wordless, self-contained 4D universe that runs in a browser. It contains one star, two planets, and a fourth direction that closes back on itself (the "hoop"). You arrive on a planet whose ground is a 3-sphere and see it as a 3D slice through your eyes. A 3D radar shows the ground around you. Nothing is explained. Everything is demonstrated by the world behaving exactly as a 4D world must: boulders swell and vanish as you turn, knots fall open, orbits refuse to close, and your own planet hangs in the sky one hoop-length away. It is a sandbox first. Running quietly through it is a chain of wordless artifacts, Myst-like, that leads off the planet, to a second world, and to the console of the simulation itself.
 
 ## Story, such as it is
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hoop — a walkable 4D world</title>
+<title>Glome — a walkable 4D world</title>
 <meta name="description" content="A planet in four spatial dimensions you can walk on. Real 4D ray-traced geometry, lighting and shadows.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
 <canvas id="overlay"></canvas>
 
 <div class="hud" id="hud" hidden>
-  <div class="title"><span class="w">Hoop</span> <span id="mode">Slice view</span></div>
+  <div class="title"><span class="w">Glome</span> <span id="mode">Slice view</span></div>
   <div id="where"></div>
   <div id="alt"></div>
   <div id="sun"></div>
@@ -49,7 +49,7 @@
 </section>
 
 <section class="panel loading" id="loading">
-  <h1><span class="w">Hoop</span></h1>
+  <h1><span class="w">Glome</span></h1>
   <p>A planet in four spatial dimensions that you can walk on.</p>
   <div class="bar"><div id="bar"></div></div>
   <p class="dim">Growing the terrain of a 3-sphere…</p>
@@ -60,6 +60,7 @@
   <pre id="error-msg"></pre>
 </section>
 
-<script type="module" src="js/main.js?v=20261007193730"></script>
+<script type="importmap">{"imports": {"./js/boulders.js": "./js/boulders.js?v=20261007223620", "./js/game.js": "./js/game.js?v=20261007223620", "./js/hud.js": "./js/hud.js?v=20261007223620", "./js/input.js": "./js/input.js?v=20261007223620", "./js/laws.js": "./js/laws.js?v=20261007223620", "./js/main.js": "./js/main.js?v=20261007223620", "./js/noise.js": "./js/noise.js?v=20261007223620", "./js/player.js": "./js/player.js?v=20261007223620", "./js/radar.js": "./js/radar.js?v=20261007223620", "./js/render.js": "./js/render.js?v=20261007223620", "./js/save.js": "./js/save.js?v=20261007223620", "./js/shaders.js": "./js/shaders.js?v=20261007223620", "./js/terrain-worker.js": "./js/terrain-worker.js?v=20261007223620", "./js/world.js": "./js/world.js?v=20261007223620"}}</script>
+<script type="module" src="js/main.js?v=20261007223620"></script>
 </body>
 </html>

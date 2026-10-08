@@ -1,4 +1,4 @@
-# Hoop: physics
+# Glome: physics
 
 The laws of the universe, the numbers, and an honest list of where the game approximates. Pillar one of the [design](DESIGN.md) is that nothing is faked: an approximation may integrate a law numerically, but it may never swap in a different law.
 

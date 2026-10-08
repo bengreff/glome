@@ -1,0 +1,238 @@
+// The GL side: context, programs, textures, the slice view, dynamic resolution, upscaling and the profiler.
+import { VERT, SLICE_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js';
+import { PLANET_R, SEA } from './world.js';
+import { G } from './game.js';
+import { boulders } from './boulders.js';
+
+const $ = id => document.getElementById(id);
+export const canvas = $('view'), overlay = $('overlay');
+export const octx = overlay.getContext('2d');
+
+export function fail(msg) {
+  $('loading').hidden = true;
+  $('error').hidden = false;
+  $('error-msg').textContent = msg;
+  throw new Error(msg);
+}
+
+export const gl = canvas.getContext('webgl2', { antialias: false, powerPreference: 'high-performance' });
+if (!gl) fail('This world needs WebGL 2, which this browser does not provide. Try a recent Chrome, Edge, Firefox or Safari on a desktop.');
+
+// ---------- GL helpers ----------
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) fail('Shader failed to compile:\n' + gl.getShaderInfoLog(s));
+  return s;
+}
+export function program(fragSrc) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) fail('Shader failed to link:\n' + gl.getProgramInfoLog(p));
+  const locs = {};
+  p.u = name => (name in locs) ? locs[name] : (locs[name] = gl.getUniformLocation(p, name));
+  return p;
+}
+export const progSlice = program(SLICE_FRAG), progUp = program(UPSCALE_FRAG), progRadar = program(RADAR_FRAG), progBake = program(RADAR_BAKE_FRAG), progBlit = program(BLIT_FRAG);
+export const vao = gl.createVertexArray();
+
+export function tex3D(w, h, d, internal, format, type, filter, data = null) {
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE7);
+  gl.bindTexture(gl.TEXTURE_3D, t);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, filter);
+  for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, p, gl.CLAMP_TO_EDGE);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, internal, w, h, d, 0, format, type, data);
+  gl.bindTexture(gl.TEXTURE_3D, null);
+  gl.activeTexture(gl.TEXTURE0);
+  return t;
+}
+
+// ---------- terrain atlas ----------
+const max3D = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
+export let N = 128;
+while (8 * N > max3D && N > 32) N >>= 1;
+
+export function buildAtlas() {
+  return new Promise((resolve, reject) => {
+    const data = new Float32Array(N * N * N * 8);
+    const progress = new Array(8).fill(0);
+    let done = 0;
+    for (let c = 0; c < 8; c++) {
+      const w = new Worker(new URL('./terrain-worker.js' + new URL(import.meta.url).search, import.meta.url), { type: 'module' });
+      w.onerror = e => reject(new Error('Terrain worker failed: ' + (e.message || 'unknown error')));
+      w.onmessage = e => {
+        if (e.data.data) {
+          data.set(e.data.data, c * N * N * N);
+          progress[c] = 1; w.terminate();
+          if (++done === 8) resolve(data);
+        } else progress[c] = e.data.progress;
+        $('bar').style.width = (100 * progress.reduce((a, b) => a + b, 0) / 8).toFixed(1) + '%';
+      };
+      w.postMessage({ chart: c, N });
+    }
+  });
+}
+
+// Tileable 3D value noise with analytic gradient: rgb = gradient / 3, a = value (all mapped to 0..1).
+export function makeNoise() {
+  const S = 64, P = 16, k = S / P;
+  let seed = 7;
+  const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+  const lat = new Float32Array(P * P * P).map(rnd);
+  const L = (x, y, z) => lat[((x % P + P) % P) + P * (((y % P + P) % P) + P * ((z % P + P) % P))];
+  const out = new Uint8Array(S * S * S * 4);
+  const sm = f => f * f * (3 - 2 * f), dsm = f => 6 * f * (1 - f);
+  for (let z = 0; z < S; z++) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const q = [(x + 0.5) / k, (y + 0.5) / k, (z + 0.5) / k];
+    const i = q.map(Math.floor), f = q.map((v, j) => v - i[j]);
+    const w = f.map(sm), dw = f.map(dsm);
+    let v = 0, gx = 0, gy = 0, gz = 0;
+    for (let c = 0; c < 8; c++) {
+      const a = c & 1, b = (c >> 1) & 1, d = (c >> 2) & 1;
+      const val = L(i[0] + a, i[1] + b, i[2] + d);
+      const wx = a ? w[0] : 1 - w[0], wy = b ? w[1] : 1 - w[1], wz = d ? w[2] : 1 - w[2];
+      const sx = a ? dw[0] : -dw[0], sy = b ? dw[1] : -dw[1], sz = d ? dw[2] : -dw[2];
+      v += wx * wy * wz * val; gx += sx * wy * wz * val; gy += wx * sy * wz * val; gz += wx * wy * sz * val;
+    }
+    const o = 4 * (x + S * (y + S * z)), enc = t => Math.max(0, Math.min(255, Math.round((t * 0.5 + 0.5) * 255)));
+    out[o] = enc(gx / 3); out[o + 1] = enc(gy / 3); out[o + 2] = enc(gz / 3); out[o + 3] = enc(v);
+  }
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE7);
+  gl.bindTexture(gl.TEXTURE_3D, t);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, S, S, S, 0, gl.RGBA, gl.UNSIGNED_BYTE, out);
+  for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, p, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (aniso) gl.texParameterf(gl.TEXTURE_3D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  gl.generateMipmap(gl.TEXTURE_3D);
+  gl.bindTexture(gl.TEXTURE_3D, null);
+  gl.activeTexture(gl.TEXTURE0);
+  return t;
+}
+export const tex = { atlas: null, noise: null };
+
+// ---------- dynamic resolution ----------
+// Render internally at a fraction of the screen, adjusted to hold ~55-60 fps, then upscale with sharpening.
+export const dyn = { scale: 0.6, auto: true, acc: 0, n: 0, fast: 0, probe: null, floor: 0, floorUntil: 0 };
+const maxScale = () => Math.min(1, 1.5 / Math.min(devicePixelRatio || 1, 2));
+// Lower the resolution when frames are slow, but check that it helped: if a step down doesn't make frames
+// faster, pixels aren't what limits the frame rate (a capped display, a throttled GPU, the compositor), so
+// undo it and don't go below that resolution for a while.
+export function updateDyn(frameSec) {
+  const simT = G.simT;
+  dyn.acc += frameSec; dyn.n++;
+  if (dyn.acc < 0.4) return;
+  const avg = dyn.acc / dyn.n; dyn.acc = 0; dyn.n = 0;
+  if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
+  if (dyn.probe) {                                         // judge the last step down
+    const p = dyn.probe; dyn.probe = null;
+    if (avg > p.avg * 0.92) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
+  }
+  const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
+  dyn.fast = avg < 1 / 58 ? dyn.fast + 1 : 0;
+  if (avg > 1 / 50 && dyn.scale > floor + 0.01) {
+    dyn.probe = { scale: dyn.scale, avg };
+    dyn.scale = Math.max(floor, dyn.scale * (avg > 1 / 35 ? 0.8 : 0.9));
+  } else if (dyn.fast >= 2) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.08); dyn.fast = 0; }
+}
+export const scene = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
+function ensureScene(w, h) {
+  if (scene.tex && Math.abs(w - scene.w) < 2 && Math.abs(h - scene.h) < 2) return;
+  if (scene.tex) gl.deleteTexture(scene.tex);
+  scene.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE5);
+  gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scene.tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.activeTexture(gl.TEXTURE0);
+  scene.w = w; scene.h = h;
+}
+
+export function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const W = Math.max(1, Math.round(innerWidth * dpr)), H = Math.max(1, Math.round(innerHeight * dpr));
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  if (overlay.width !== W || overlay.height !== H) { overlay.width = W; overlay.height = H; }
+  ensureScene(Math.max(16, Math.round(W * dyn.scale)), Math.max(16, Math.round(H * dyn.scale)));
+}
+
+// Uniforms every world shader shares: the terrain, the camera, the sun and the boulders near you.
+export function setWorld(p, cam, sun) {
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D, tex.noise);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, tex.atlas);
+  gl.uniform1i(p.u('uAtlas'), 0);
+  gl.uniform1i(p.u('uNoise'), 4);
+  gl.uniform1f(p.u('uN'), N);
+  gl.uniform1f(p.u('uPR'), PLANET_R);
+  gl.uniform1f(p.u('uSea'), SEA);
+  gl.uniform4fv(p.u('uEye'), cam.eye);
+  gl.uniform4fv(p.u('uF'), cam.F);
+  gl.uniform4fv(p.u('uR'), cam.R);
+  gl.uniform4fv(p.u('uU'), cam.U);
+  gl.uniform4fv(p.u('uA'), cam.A);
+  gl.uniform4fv(p.u('uSun'), sun);
+  gl.uniform1f(p.u('uTime'), performance.now() / 1000);
+  gl.uniform1f(p.u('uShadows'), 1);
+  gl.uniform4fv(p.u('uBC'), boulders.C);
+  gl.uniform1fv(p.u('uBR'), boulders.R);
+  gl.uniform1i(p.u('uBN'), boulders.near.length);
+  gl.uniform1i(p.u('uBCut'), boulders.cut);
+  gl.uniform1i(p.u('uBShadow'), boulders.shadow);
+}
+
+export const FOV = Math.tan(38 * Math.PI / 180);
+
+export function drawSlice(cam, sun, x, y, w, h) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+  gl.viewport(x, y, w, h);
+  gl.useProgram(progSlice);
+  setWorld(progSlice, cam, sun);
+  gl.uniform2f(progSlice.u('uRes'), w, h);
+  gl.uniform1f(progSlice.u('uFov'), FOV);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+export function present() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(progUp);
+  gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+  gl.uniform1i(progUp.u('uScene'), 5);
+  gl.uniform2f(progUp.u('uSrc'), scene.w, scene.h);
+  gl.uniform1f(progUp.u('uSharp'), Math.min(1, 0.35 + 0.9 * (1 - scene.w / canvas.width)));
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.activeTexture(gl.TEXTURE0);
+}
+
+// ---------- profiler ----------
+// Moving averages of CPU time per part of the frame, and GPU time per frame (via timer queries where the
+// browser allows them). Read from the console as __glome.prof.
+export const prof = { cpu: {}, gpu: 0, interval: 0 };
+const tq = gl.getExtension('EXT_disjoint_timer_query_webgl2'), queries = [];
+let profT = 0;
+export const mark = name => { const t = performance.now(); if (name) prof.cpu[name] = 0.95 * (prof.cpu[name] || 0) + 0.05 * (t - profT); profT = t; };
+export function gpuBegin() {
+  if (!tq) return;
+  while (queries.length && gl.getQueryParameter(queries[0], gl.QUERY_RESULT_AVAILABLE)) {
+    const q = queries.shift();
+    if (!gl.getParameter(tq.GPU_DISJOINT_EXT)) prof.gpu = 0.95 * prof.gpu + 0.05 * gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+    gl.deleteQuery(q);
+  }
+  if (queries.length > 4) return null;
+  const q = gl.createQuery(); gl.beginQuery(tq.TIME_ELAPSED_EXT, q); return q;
+}
+export function gpuEnd(q) { if (q) { gl.endQuery(tq.TIME_ELAPSED_EXT); queries.push(q); } }

@@ -100,3 +100,6 @@ Everything the owner decided while defining v1.0, from 2026-10-07. Where this fi
 ## Night decisions
 
 (Added during the overnight build: what, and why in one line.)
+- **M0: a small `js/game.js` beside the seven named modules.** It holds the shared runtime state (`G`: state, player, clock) so the modules never import each other in a cycle.
+- **M0: cache-busting moved into an import map.** `tools/stamp.sh` now writes an import map in index.html (`js/x.js` → `js/x.js?v=…`), so module files keep plain imports and only the worker's import chain is stamped in place (workers don't see import maps).
+- **Music: four Ishizaka recordings, all CC0** (docs/CREDITS.md): copies = Goldberg Var. 12 (canon by inversion), escape = WTC I Prelude in C, landing on B = WTC I Fugue in E, console = the Goldberg Aria da capo (the piece's own strange loop). The WTC files come from Wikimedia Commons, where each file is marked CC0; two archive.org copies carry only the Public Domain Mark, which isn't a CC0 waiver, so they were not used.
