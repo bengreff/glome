@@ -142,7 +142,9 @@ export function updateDyn(frameSec) {
   if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
   if (dyn.probe) {                                         // judge the last step down
     const p = dyn.probe; dyn.probe = null;
-    if (avg > p.avg * 0.92) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
+    // a step that cut the pixels by a fraction f should save about f of a GPU-bound frame: expect at least half
+    const r = dyn.scale / p.scale, expect = 1 - 0.5 * (1 - r * r);
+    if (avg > p.avg * expect) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
   }
   const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
   dyn.fast = avg < 1 / 59 ? dyn.fast + 1 : 0;

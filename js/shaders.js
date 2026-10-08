@@ -504,7 +504,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) {
     sh = softShadow(p + n * 0.08, uSun);
     if (sh > 0.02) sh = min(sh, boulderShadow(p + n * 0.08, uSun));
-    if (sh > 0.02 && uON > 0) sh = min(sh, objectShadow(p + n * 0.08, uSun));
+    if (sh > 0.02 && uON > 0 && t < 60.0) sh = min(sh, objectShadow(p + n * 0.08, uSun));   // (beyond 60 m too small to see)
   }
   float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
