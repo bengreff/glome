@@ -173,3 +173,4 @@ Everything the owner decided while defining v1.0, from 2026-10-07. Where this fi
 - **Clouds fade where the view grazes their layer**, so seen from above the layer's edge has no hard rim.
 - **Performance now:** 60 fps at 52% of 3024×1964 at the default view (clouds, the finer noise and the precise hit placement cost about 4 ms in all since the morning's 59%).
 - **Objects are tested against their bounding ball first** (a tesseract's circumradius is twice its half-side), which most rays miss: objects and trees went from about 1.7 ms to 0.5 ms a frame. Looking down at near ground (the costliest view: hit placement, fine detail and shadows everywhere) holds 60 fps at 48%.
+- **A cave is dim, never black:** inside a hollow the sky's light falls off with depth below the ground above as before, but no lower than 15% (light finding its way down the tunnel), so the chamber reads as a space and a lantern still helps.

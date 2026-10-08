@@ -601,7 +601,8 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   if (f4 <= 0.0) g4 = vec4(0.0);
   // inside a carved hollow everything is bare rock, and the sky's light falls off with depth below the ground above
   float cave = uCN > 0 && dot(p - uCBoundC, p - uCBoundC) < uCBoundR * uCBoundR ? 1.0 - smoothstep(0.0, 0.6, sdCarve(p)) : 0.0;
-  float caveDark = cave > 0.0 ? mix(1.0, exp(-max(0.0, uPR + heightAt(up) - length(p)) / 2.5), cave) : 1.0;
+  // (some light finds its way in down the tunnel: a cave is dim, never quite black, and a lantern still matters)
+  float caveDark = cave > 0.0 ? mix(1.0, max(0.15, exp(-max(0.0, uPR + heightAt(up) - length(p)) / 2.5)), cave) : 1.0;
   float rocky = max(cave, 1.0 - smoothstep(0.62, 0.82, slope + 0.08 * d1));
   float sandy = (1.0 - smoothstep(uSea + 0.4, uSea + 2.2 + 0.8 * d1, h)) * (1.0 - cave);
   float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1) * (1.0 - cave);
