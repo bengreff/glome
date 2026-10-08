@@ -21,6 +21,7 @@ addEventListener('keydown', e => {
     case 'Tab': state.radar.big = !state.radar.big; break;
     case 'KeyL': state.radar.layers = (state.radar.layers + 1) % RADAR_LAYERS.length; break;
     case 'KeyK': state.radar.hidden = !state.radar.hidden; break;
+    case 'KeyU': state.bare = !state.bare; document.body.classList.toggle('bare', state.bare); break;   // nothing over the view: for pictures
     case 'Escape': if (!$('console').hidden) $('console').hidden = true; break;
     case 'KeyH': state.help = !state.help; $('help').hidden = !state.help; $('hud').hidden = !state.help; break;
     case 'KeyM': state.radar.compass = !state.radar.compass; break;

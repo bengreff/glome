@@ -176,3 +176,4 @@ Everything the owner decided while defining v1.0, from 2026-10-07. Where this fi
 - **A cave is dim, never black:** inside a hollow the sky's light falls off with depth below the ground above as before, but no lower than 15% (light finding its way down the tunnel), so the chamber reads as a space and a lantern still helps.
 - **Leafier trees:** the foliage gets a fine layer of leaf clumps (17 cm) with a gentler bump (it looked like blotched plastic balls), its underside is shaded by the canopy, and leaves lit from behind glow faintly through.
 - **A flight in progress is saved exactly** (its inertial position, velocity, frame and time), so a reload carries on the same arc; before, a save caught under 20 m after a launch came back as an ordinary jump.
+- **U clears the view** of everything drawn over it (radar, gaze dot, hint, numbers), for taking pictures; U again brings it back.

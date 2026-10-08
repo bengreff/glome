@@ -40,7 +40,7 @@ Nothing is swapped for a cheaper law; where the game approximates, it integrates
 | <kbd>Tab</kbd> · wheel or <kbd>−</kbd> <kbd>=</kbd> | radar big / small · zoom, out to the whole planet |
 | <kbd>M</kbd> <kbd>P</kbd> <kbd>L</kbd> <kbd>K</kbd> · arrows | radar: heading/compass-up · pin · layers · hide · spin |
 | <kbd>Esc</kbd>, then mouse | drag the radar to spin · hover to inspect · click to face |
-| <kbd>H</kbd> | help, settings, your world (export, import, new) |
+| <kbd>H</kbd> · <kbd>U</kbd> | help, settings, your world (export, import, new) · nothing over the view, for pictures |
 
 ## How it works
 

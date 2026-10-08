@@ -76,3 +76,6 @@ kbd { font: 500 11.5px var(--mono); border: 1px solid #3a4866; border-bottom-wid
 @media (max-width: 700px) {
   .hud { font-size: 11px; }
 }
+
+/* U: nothing over the view, for pictures */
+body.bare #hud, body.bare #hint, body.bare #help { display: none !important; }

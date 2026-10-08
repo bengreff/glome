@@ -293,7 +293,7 @@ function frameBody(now) {
   // above the ground (or on a charged launcher) the radar becomes the space map
   const onLauncher = launcher.onPad && launcher.tier > 0 && !flight.active;
   const spaceMode = flight.active || onLauncher || player.onB != null || player.heightAboveGround() > 60;
-  if (!state.radar.hidden && !spaceMode) rad = drawRadar(cam, sun, G.simT, FOV * scene.w / scene.h);
+  if (!state.radar.hidden && !state.bare && !spaceMode) rad = drawRadar(cam, sun, G.simT, FOV * scene.w / scene.h);
   else radar.last = null;                                    // (the space map takes no clicks: nothing stale to pick)
   mark('radar');
   present();
@@ -305,9 +305,9 @@ function frameBody(now) {
   G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
-  drawFaced(cam); drawGazeDot();
+  if (!state.bare) { drawFaced(cam); drawGazeDot(); }
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
-  if (spaceMode && !state.radar.hidden) {
+  if (spaceMode && !state.radar.hidden && !state.bare) {
     const u = player.up(), pc = player.camera(), dir = vec4.dot(pc.F, u) > 0.05 ? pc.F : u;
     updateSpaceMap({ flight, launch: onLauncher ? vec4.scale(dir, TIERS[launcher.tier]) : null, onB: player.onB });
     radar.rect = radarRect();
