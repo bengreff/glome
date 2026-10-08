@@ -30,7 +30,7 @@ export const KINDS = {
   tessS: { shape: 'tesseract', size: 0.3, density: DENSITY.stone, mat: 0 },
   tessL: { shape: 'tesseract', size: 0.5, density: DENSITY.stone, mat: 1 },
   stone: { shape: 'glome', size: 0.09, mass: 2.5, mat: 2, glow: 0.35 },          // an impulse stone
-  lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 1, glow: 0.9, light: [1.9, 1.35, 0.75] },
+  lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 7, glow: 0.9, light: [1.9, 1.35, 0.75] },   // warm glass, glowing its light's colour
   part: { shape: 'tesseract', size: 0.26, mass: 14, mat: 2, glow: 0.25 },          // a launcher part (tiers I–IV): it doesn't roll
   raft: { shape: 'tesseract', size: 1.3, density: 60, mat: 6 },                  // a hollow crate of planks (171 kg): a uniform cube floats flat
                                                                                    // only below about a fifth of water's density
@@ -110,7 +110,7 @@ function soundImpacts(w) {
     if (!b || b.fixed || b.ghostly || G.simT - (b.soundT ?? -9) < 0.08) continue;
     b.soundT = G.simT;
     const gain = Math.min(1.2, im.speed / 5) * Math.max(0.3, Math.min(1.2, 0.4 + 0.25 * Math.log10(b.m)));
-    const [kind, opts] = b.shape === 'glome' ? ['ring', { size: b.size, metal: b.mat === 1 }] : b.mat === 1 ? ['ping', { size: b.size }]
+    const [kind, opts] = b.shape === 'glome' ? ['ring', { size: b.size, metal: b.mat === 1 || !!b.light }] : b.mat === 1 ? ['ping', { size: b.size }]
       : b.mat === 6 ? ['knock', { size: b.size }] : ['block', { size: b.size }];
     G.audio.emit(kind, where(im.p), gain, opts);
   }

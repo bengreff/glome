@@ -36,7 +36,8 @@ uniform int uBShadow;       // and only the first uBShadow can shade it
 const int MAXO = 16;
 uniform vec4 uOC[MAXO];     // objects near you: centres ...
 uniform mat4 uOM[MAXO];     // ... orientations (columns: the body's axes in the world) ...
-uniform vec4 uOP[MAXO];     // ... x: shape (0 glome, 1 tesseract), y: radius or half side, z: material (0 stone, 1 metal, 2 accent), w: glow
+uniform vec4 uOP[MAXO];     // ... x: shape (0 glome, 1 tesseract, 2 duocylinder), y: radius or half side, z: material (0 stone, 1 metal,
+                            // 2 accent, 4 handed, 5 console, 6 wood, 7 lantern glass), w: glow
 uniform int uON;            // how many; the first uOCut cross your slice
 uniform int uOCut;
 const int MAXL = 4;
@@ -646,6 +647,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   if (mat < 0.5) { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); nb = normalize(n - 0.04 * (g1 - n * dot(g1, n))); }
   else if (mat < 1.5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; }
   else if (mat < 2.5) { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
+  else if (mat > 6.5) { alb = vec3(0.9, 0.78, 0.6) * (0.95 + 0.05 * d2); spec = 0.8; }   // a lantern: warm glass
   else if (mat > 5.5) {                                   // wood: planks along the body's first axis
     float grain = 0.5 + 0.5 * sin(q.y * 26.0 + 3.0 * d1) * sin(q.w * 7.0);
     alb = mix(vec3(0.36, 0.24, 0.14), vec3(0.50, 0.36, 0.22), grain) * (0.9 + 0.1 * d2);
@@ -685,9 +687,9 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
   vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);
   float skyVis = 0.5 + 0.5 * dot(nb, up);
-  vec3 col = alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.65 + 0.35 * skyVis) + lanternLight(p, nb));
+  vec3 col = alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.65 + 0.35 * skyVis) + (mat > 6.5 ? vec3(0.0) : lanternLight(p, nb)));   // (not lit by itself)
   col += sunCol * spec * pow(max(dot(reflect(uSun, nb), rd), 0.0), 36.0) * sh * smoothstep(-0.04, 0.06, sunEl);
-  col += ACCENT * glow * (0.6 + 0.4 * (0.5 + 0.5 * d2));
+  col += (mat > 6.5 ? vec3(0.95, 0.5, 0.17) : ACCENT) * glow * (0.6 + 0.4 * (0.5 + 0.5 * d2));   // (a lantern glows its own light)
   return col;
 }
 
