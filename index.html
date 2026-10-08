@@ -13,6 +13,7 @@
 <body>
 <canvas id="view"></canvas>
 <canvas id="overlay"></canvas>
+<div class="fade" id="fade"></div>
 
 <div class="hud" id="hud" hidden>
   <div class="title"><span class="w">Glome</span> <span id="mode">Slice view</span></div>
@@ -28,7 +29,7 @@
   <h2>Moving in four dimensions</h2>
   <dl>
     <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd> <kbd>E</kbd></dt><dd>walk forward, left, back, right · step kata / ana, the third direction along the ground</dd>
-    <dt><kbd>Space</kbd> <kbd>Shift</kbd></dt><dd>jump, swim up, or climb a boulder you are walking into · run</dd>
+    <dt><kbd>Space</kbd> <kbd>Shift</kbd></dt><dd>jump, or climb a boulder you are walking into · run</dd>
     <dt>mouse</dt><dd>turn left and right, look up and down</dd>
     <dt>right-drag or <kbd>Alt</kbd>+mouse · <kbd>Z</kbd> <kbd>C</kbd></dt><dd>turn toward ana or kata (and twist) · the same from the keyboard</dd>
   </dl>
@@ -45,7 +46,21 @@
   <p><b>The whole planet.</b> Zoom all the way out and the ball holds the entire planet: its whole outer surface is a single point, your antipode, 785 m away by any straight walk. <kbd>P</kbd> pins the ball where you stand; walk and you move through it as a dot, and your slice becomes a curved sheet, a great 2-sphere through you and your antipode.</p>
   <p><b>Compass.</b> Unlike Earth, a 3-sphere can carry a compass with no poles: three perpendicular directions (i, j, k, after the quaternion units) defined everywhere. Walking straight keeps your compass heading fixed but slowly rolls the other two around it, once per lap of the planet.</p>
   <p><b>Boulders</b> are 4D balls. Your slice cuts each in an ordinary sphere whose size depends on how far its centre lies toward ana or kata, so as you turn they swell out of nothing, shrink and vanish. The radar shows them all and rings the ones your slice cuts. They are solid, with friction: push into one and you stop; hold <kbd>Space</kbd> and you climb its surface (which can carry you toward its centre in ana).</p>
+  <p><b>Water.</b> You can't swim. Wade in up to your chest; any deeper and you are back where you stepped in.</p>
   <p>The ground is a 3-sphere: walk straight in any direction and you come back to where you started, about 1.6 km later. The planet spins in two planes at once, so there are no poles and the days never repeat.</p>
+  <h2>Settings</h2>
+  <div class="settings">
+    <label for="set-sens">mouse</label><input type="range" id="set-sens" min="-1.4" max="1.4" step="0.05">
+    <label for="set-sound">sound</label><input type="range" id="set-sound" min="0" max="1" step="0.05">
+    <label for="set-music">music</label><input type="range" id="set-music" min="0" max="1" step="0.05">
+    <label for="set-quality">quality</label><select id="set-quality"><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>
+  </div>
+  <h2>Your world</h2>
+  <p class="dim">It is saved in this browser as you go. Export it to a file to keep a copy or move it to another browser.</p>
+  <div class="buttons"><button id="w-export">Export .hoop file</button><button id="w-import">Import…</button><button id="w-new">New world</button><input type="file" id="w-file" accept=".hoop,application/json" hidden></div>
+  <p id="w-msg" class="dim"></p>
+  <h2>Credits</h2>
+  <p class="dim">Music: J. S. Bach, played by Kimiko Ishizaka (<i>The Open Goldberg Variations</i>, <i>The Open Well-Tempered Clavier</i>), dedicated to the public domain (CC0). Every sound is synthesised in code. Made by bengreff. MIT licence; the source is on <a href="https://github.com/bengreff/glome">GitHub</a>.</p>
 </section>
 
 <section class="panel loading" id="loading">
@@ -60,7 +75,7 @@
   <pre id="error-msg"></pre>
 </section>
 
-<script type="importmap">{"imports": {"./js/boulders.js": "./js/boulders.js?v=20261007223620", "./js/game.js": "./js/game.js?v=20261007223620", "./js/hud.js": "./js/hud.js?v=20261007223620", "./js/input.js": "./js/input.js?v=20261007223620", "./js/laws.js": "./js/laws.js?v=20261007223620", "./js/main.js": "./js/main.js?v=20261007223620", "./js/noise.js": "./js/noise.js?v=20261007223620", "./js/player.js": "./js/player.js?v=20261007223620", "./js/radar.js": "./js/radar.js?v=20261007223620", "./js/render.js": "./js/render.js?v=20261007223620", "./js/save.js": "./js/save.js?v=20261007223620", "./js/shaders.js": "./js/shaders.js?v=20261007223620", "./js/terrain-worker.js": "./js/terrain-worker.js?v=20261007223620", "./js/world.js": "./js/world.js?v=20261007223620"}}</script>
-<script type="module" src="js/main.js?v=20261007223620"></script>
+<script type="importmap">{"imports": {"./js/audio.js": "./js/audio.js?v=20261007224932", "./js/boulders.js": "./js/boulders.js?v=20261007224932", "./js/cosmos.js": "./js/cosmos.js?v=20261007224932", "./js/env.js": "./js/env.js?v=20261007224932", "./js/game.js": "./js/game.js?v=20261007224932", "./js/hud.js": "./js/hud.js?v=20261007224932", "./js/input.js": "./js/input.js?v=20261007224932", "./js/laws.js": "./js/laws.js?v=20261007224932", "./js/main.js": "./js/main.js?v=20261007224932", "./js/noise.js": "./js/noise.js?v=20261007224932", "./js/player.js": "./js/player.js?v=20261007224932", "./js/radar.js": "./js/radar.js?v=20261007224932", "./js/render.js": "./js/render.js?v=20261007224932", "./js/save.js": "./js/save.js?v=20261007224932", "./js/shaders.js": "./js/shaders.js?v=20261007224932", "./js/so4.js": "./js/so4.js?v=20261007224932", "./js/terrain-worker.js": "./js/terrain-worker.js?v=20261007224932", "./js/world.js": "./js/world.js?v=20261007224932"}}</script>
+<script type="module" src="js/main.js?v=20261007224932"></script>
 </body>
 </html>

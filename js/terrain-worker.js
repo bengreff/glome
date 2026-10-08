@@ -1,5 +1,5 @@
 // Builds one chart of the terrain atlas off the main thread.
-import { terrainHeight, chartVector } from './world.js?v=20261007223620';
+import { terrainHeight, chartVector } from './world.js?v=20261007224932';
 
 self.onmessage = (e) => {
   const { chart, N } = e.data;

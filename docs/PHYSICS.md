@@ -37,6 +37,7 @@ The force is the gradient of this. The game uses the formula directly: there is 
 - **Lighter summits.** Gravity falls by (R/r)³: on a 40 m peak it is 6.3 m/s², 36% lighter than at sea level.
 - **Gravity varies over the planet.** A's own images pull on it. Where "up" points along the hoop, surface gravity is 8.5% lighter (8.96 m/s²); where it points across, 1.7% heavier (9.97 m/s²). The planet's double spin carries these light zones across the land during the day.
 - **Tides** from the star are 0.09 m/s² (0.9% of g).
+- **In the planet's frame,** where you walk, everything also feels the spin: a centrifugal pull of up to 0.11 m/s² from the slow plane and 0.29 m/s² from the fast one (at most 2.9% of g), and the Coriolis force on anything moving. The game integrates the exact free-particle acceleration in that frame, a_b = (M S)ᵀ(g − a_A) − W²x − 2Wv: the gravity of the star, A and B with all their images, minus A's own orbital acceleration (which leaves the tides), plus the two spin terms. Measured at the start: 8.89 m/s² (a light zone, 8 m up).
 
 ## Light
 
@@ -68,7 +69,8 @@ Sound obeys the wave equation in four space dimensions. Amplitude falls as **r^(
 ## The player
 
 A 4D capsule from 0.3 m to 1.75 m along the local up, radius 0.3 m.
-- **Walking:** a velocity controller standing in for feet that grip the ground.
+- **Walking:** a velocity controller standing in for feet that grip the ground. In the air you are ballistic, except within 2.5 m of the ground, where a little steering stands in for the twist a jumper can make (a mercy; higher up, flight is purely ballistic).
+- **Water:** you cannot swim. Wading slows you as the water deepens (to 35% of your speed); past chest depth (1.3 m) you fade back to the last dry ground you stood on.
 - **Contacts:** full 4D normals with Coulomb friction. A push within about 42° of head-on sticks; a glancing one slides, through ana if that is where the surface leans.
 - **Climbing:** holding Space against a boulder moves you up its surface along the steepest 4D ascent.
 
@@ -108,4 +110,5 @@ A chain of particles with distance constraints (position-based dynamics) that co
 - **No atmosphere.** No drag, no aerodynamic heating, and landings are gentle by fiat (a deliberate mercy). The sky's colour is artistic, not scattered light.
 - **Light** is direct light with soft shadows and an ambient term. There is no multiple bouncing.
 - **Creature gaits** are kinematic, as above.
-- **Tides** (0.9% of g) are ignored.
+- **The planets' masses** are their bare balls (radius 250 m and 120 m). The terrain relief (−20 to +48 m) adds no mass of its own, and its pull is not computed.
+- **The planets' orbits and spins are prescribed** from the true laws: the console's dials change how you and your objects move, not the planets.

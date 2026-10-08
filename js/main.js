@@ -10,16 +10,67 @@ import { radar, drawRadar, blitRadar, drawRadarOverlay, makeRadarVolume, recordT
 import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulders.js';
 import { keys, mouse, SENS, readInput } from './input.js';
 import { gazePoint, drawFaced, drawGazeDot, updateHUD } from './hud.js';
-import { loadSettings, saveSettings } from './save.js';
+import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld } from './save.js';
 import { LAWS } from './laws.js';
+import { accelBodyA } from './cosmos.js';
+import * as saveMod from './save.js';
+import * as cosmos from './cosmos.js';
+import { capsuleTerrain, envSD } from './env.js';
+import { quality } from './render.js';
 
 const $ = id => document.getElementById(id);
 const state = G.state;
 loadSettings();
-setInterval(saveSettings, 2000);
+
+// ---------- settings (in the help panel) ----------
+const QUALITY = { low: 0.55, medium: 0.78, high: 1 };
+function applySettings() {
+  quality.cap = QUALITY[settings.quality] || 1;
+  G.audio?.setVolumes({ sound: settings.sound, music: settings.music });
+}
+function bindSettings() {
+  const sens = $('set-sens'), snd = $('set-sound'), mus = $('set-music'), q = $('set-quality');
+  sens.value = Math.log(settings.sens); snd.value = settings.sound; mus.value = settings.music; q.value = settings.quality;
+  sens.oninput = () => { settings.sens = Math.exp(+sens.value); };
+  snd.oninput = () => { settings.sound = +snd.value; applySettings(); };
+  mus.oninput = () => { settings.music = +mus.value; applySettings(); };
+  q.onchange = () => { settings.quality = q.value; applySettings(); q.blur(); };
+  $('w-export').onclick = () => exportFile();
+  $('w-import').onclick = () => $('w-file').click();
+  $('w-file').onchange = async () => { const f = $('w-file').files[0]; if (f) { const err = await importFile(f); if (err) $('w-msg').textContent = `That file could not be loaded: ${err}.`; } };
+  let armed = 0;
+  $('w-new').onclick = () => {
+    if (performance.now() - armed < 4000) return newWorld();
+    armed = performance.now(); $('w-msg').textContent = 'Click "New world" again to start over (your settings are kept).';
+  };
+  applySettings();
+}
+
+// ---------- fades ----------
+// Nothing kills you. Wading past chest depth (or, later, drifting in space) fades the world out and back in
+// somewhere safe.
+const fade = { t: -1, then: null };
+export function fadeOut(then) { if (fade.t < 0) { fade.t = 0; fade.then = then; } }
+function updateFade(dt) {
+  if (fade.t < 0) return;
+  fade.t += dt;
+  if (fade.then && fade.t >= 0.6) { fade.then(); fade.then = null; }
+  const a = fade.t < 0.6 ? fade.t / 0.6 : Math.max(0, 1 - (fade.t - 0.9) / 0.7);
+  $('fade').style.opacity = a.toFixed(3);
+  if (fade.t > 1.6) { fade.t = -1; $('fade').style.opacity = 0; }
+}
+const CHEST = 1.3;
+function backToDry() {
+  const p = G.player, d = p.dry || G.home;
+  p.pos = d.pos.slice(); p.vel = [0, 0, 0, 0];
+  if (d.F) { p.F = d.F; p.R = d.R; p.A = d.A; }
+  p.settleFrame();
+}
 
 // ---------- main loop ----------
-let last = performance.now(), lastRaw = last;
+let last = performance.now(), lastRaw = last, physAcc = 0;
+const STEP = 1 / 120;
+const accel = (x, v) => accelBodyA(x, v, state.time);
 function frame(now) {
   const player = G.player;
   prof.interval = 0.95 * prof.interval + 0.05 * (now - last);
@@ -27,12 +78,13 @@ function frame(now) {
   mark();
 
   // look
+  const sens = SENS * settings.sens;
   if (mouse.alt) {
-    player.rotate('FA', mouse.dx * SENS);
-    player.rotate('RA', -mouse.dy * SENS);
+    player.rotate('FA', mouse.dx * sens);
+    player.rotate('RA', -mouse.dy * sens);
   } else {
-    player.rotate('FR', mouse.dx * SENS);
-    player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - mouse.dy * SENS));
+    player.rotate('FR', mouse.dx * sens);
+    player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - mouse.dy * sens));
   }
   if (mouse.dx || mouse.dy) state.facing = null;          // looking around cancels an automatic turn
   mouse.dx = mouse.dy = 0;
@@ -45,12 +97,18 @@ function frame(now) {
   state.radar.grow = Math.max(0, Math.min(1, state.radar.grow + (state.radar.big ? 1 : -1) * dt * 4));
 
   mark('input');
-  const input = readInput();
-  const sub = 3;
+  const input = fade.t >= 0 ? { fwd: 0, right: 0, ana: 0, jump: false, run: false } : readInput();
   updateBoulders(player.camera().eye);
-  for (let i = 0; i < sub; i++) player.update(dt / sub, input);
+  // physics runs in fixed steps of 1/120 s (PHYSICS.md), as many as the frame needs
+  physAcc += dt * LAWS.TIME_RATE;
+  for (let n = 0; physAcc >= STEP && n < 10; n++, physAcc -= STEP) {
+    player.update(STEP, input, accel);
+    capsuleTerrain(player);
+    state.time += STEP;
+  }
+  if (player.depth > CHEST) fadeOut(backToDry);
+  updateFade(dt);
   recordTrail();
-  state.time += dt;
   mark('physics');
 
   updateDyn(Math.min(0.2, (now - lastRaw) / 1000)); lastRaw = now;
@@ -92,20 +150,24 @@ function frame(now) {
     makeRadarVolume();
     makeBoulders(rand);
     player.contact = boulderContact;
+    G.home = { pos: player.pos.slice(), F: player.F, R: player.R, A: player.A };
     // start in the morning: sun about 20° up and rising
     const up = player.up();
     for (let t = 0; t < 20000; t += 0.5) {
       const e0 = vec4.dot(sunDir(t), up), e1 = vec4.dot(sunDir(t + 0.5), up);
       if (e0 > 0.3 && e0 < 0.38 && e1 > e0) { state.time = t; break; }
     }
+    loadWorld();                       // a saved world, if there is one, replaces the fresh start
+    startAutosave();
+    bindSettings();
     $('loading').hidden = true;
-    $('hud').hidden = false;
+    $('hud').hidden = !state.help;
     $('hint').hidden = false;
     if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches)
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
-    window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders } };
+    window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

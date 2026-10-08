@@ -1,6 +1,5 @@
 // Shared runtime state. Modules read it through G (filled in at boot), so the modules never import each other in
 // a cycle: main.js wires them together.
-import { LAWS } from './laws.js';
 
 export const G = {
   state: {
@@ -12,8 +11,6 @@ export const G = {
   simT: 0,                 // seconds since the world started this session (wall clock, capped per frame)
 };
 
-// The planet double-rotates; in the planet's own frame the sun circles in two planes at once.
-export function sunDir(t) {
-  const a = Math.SQRT1_2, w1 = 2 * Math.PI / LAWS.DAY1, w2 = w1 * LAWS.RATIO;
-  return [a * Math.cos(w1 * t), -a * Math.sin(w1 * t), a * Math.cos(w2 * t), -a * Math.sin(w2 * t)];
-}
+// The direction of the star (its main image) from the planet, in the planet's own frame: the planet double-rotates
+// and orbits, so in its frame the sun circles in two planes at once and drifts with the year.
+export { starDirBody as sunDir } from './cosmos.js';

@@ -9,6 +9,7 @@ export const mouse = { dx: 0, dy: 0, alt: false, dragging: false };
 export const SENS = 0.0022;
 
 addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;   // a settings control has focus
   if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   const state = G.state;
@@ -16,7 +17,7 @@ addEventListener('keydown', e => {
     case 'Tab': state.radar.big = !state.radar.big; break;
     case 'KeyL': state.radar.layers = (state.radar.layers + 1) % RADAR_LAYERS.length; break;
     case 'KeyK': state.radar.hidden = !state.radar.hidden; break;
-    case 'KeyH': state.help = !state.help; $('help').hidden = !state.help; break;
+    case 'KeyH': state.help = !state.help; $('help').hidden = !state.help; $('hud').hidden = !state.help; break;
     case 'KeyM': state.radar.compass = !state.radar.compass; break;
     case 'KeyP': state.radar.pin = state.radar.pin ? null : { n: G.player.up(), B: radarBasis() }; break;
   }

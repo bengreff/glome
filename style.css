@@ -51,6 +51,15 @@ kbd { font: 500 11.5px var(--mono); border: 1px solid #3a4866; border-bottom-wid
 .help dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; align-items: baseline; }
 .help dt { white-space: nowrap; font: 12px var(--mono); color: var(--muted); }
 .help dd { margin: 0; }
+.settings { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; max-width: 360px; }
+.settings label { font: 12px var(--mono); color: var(--muted); }
+.settings input[type=range] { width: 100%; accent-color: var(--cool); }
+.settings select, .buttons button { font: 12.5px var(--ui); color: var(--text); background: rgba(255, 255, 255, 0.05); border: 1px solid #3a4866; border-radius: 6px; padding: 4px 10px; }
+.buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
+.buttons button { cursor: pointer; }
+.buttons button:hover { background: rgba(255, 255, 255, 0.1); }
+.panel a { color: var(--cool); }
+.fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 .bar { height: 6px; border-radius: 3px; background: #1d2535; overflow: hidden; margin: 16px 0 10px; }
 .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--cool), #e6ecf4, var(--warm)); transition: width 0.15s; }
 

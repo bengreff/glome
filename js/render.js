@@ -122,7 +122,8 @@ export const tex = { atlas: null, noise: null };
 // ---------- dynamic resolution ----------
 // Render internally at a fraction of the screen, adjusted to hold ~55-60 fps, then upscale with sharpening.
 export const dyn = { scale: 0.6, auto: true, acc: 0, n: 0, fast: 0, probe: null, floor: 0, floorUntil: 0 };
-const maxScale = () => Math.min(1, 1.5 / Math.min(devicePixelRatio || 1, 2));
+export const quality = { cap: 1 };                       // the graphics setting: a cap on the resolution
+const maxScale = () => Math.min(1, 1.5 / Math.min(devicePixelRatio || 1, 2)) * quality.cap;
 // Lower the resolution when frames are slow, but check that it helped: if a step down doesn't make frames
 // faster, pixels aren't what limits the frame rate (a capped display, a throttled GPU, the compositor), so
 // undo it and don't go below that resolution for a while.
@@ -131,6 +132,7 @@ export function updateDyn(frameSec) {
   dyn.acc += frameSec; dyn.n++;
   if (dyn.acc < 0.4) return;
   const avg = dyn.acc / dyn.n; dyn.acc = 0; dyn.n = 0;
+  if (dyn.scale > maxScale()) dyn.scale = maxScale();
   if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
   if (dyn.probe) {                                         // judge the last step down
     const p = dyn.probe; dyn.probe = null;

@@ -11,6 +11,7 @@ const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]];
 const norm = a => scale(a, 1 / len(a));
 const reject = (a, b) => sub(a, scale(b, dot(a, b)));   // remove b-component (b unit)
+export const CAP_LO = 0.3, CAP_HI = 1.75, CAP_R = 0.3;   // the body capsule (PHYSICS.md)
 
 
 export class Player {
@@ -21,7 +22,8 @@ export class Player {
     this.F = [0, 1, 0, 0]; this.R = [0, 0, 1, 0]; this.A = [0, 0, 0, 1];
     this.pitch = 0;
     this.grounded = false;
-    this.swimming = false;
+    this.depth = 0;
+    this.dry = null;              // the last dry ground you stood on: where a wade too deep fades you back to
   }
 
   ground(n) { return PLANET_R + this.hf.heightAt(n); }
@@ -91,32 +93,37 @@ export class Player {
     return st === phi;
   }
 
-  update(dt, input) {
+  // The body is a 4D capsule along the local up: sphere centres 0.3 m and 1.75 m above the feet, radius 0.3 m.
+  capsule() { const u = this.up(); return { a: add(this.pos, scale(u, CAP_LO)), b: add(this.pos, scale(u, CAP_HI)), r: CAP_R }; }
+
+  // One fixed step. accel(pos, vel) is the exact acceleration of a free particle in the planet's frame (gravity of
+  // everything with its images round the hoop, plus the spin's centrifugal and Coriolis terms).
+  update(dt, input, accel) {
     const u = this.up();
     const wish = add(add(scale(this.F, input.fwd), scale(this.R, input.right)), scale(this.A, input.ana));
     const wl = len(wish);
-    const speed = input.run ? LAWS.RUN : LAWS.WALK;
+    // You cannot swim. You can wade: water deeper than your knees slows you, and past chest depth you fade back
+    // to where you stepped in (main.js).
+    const seaR = PLANET_R + SEA, floor = this.ground(u);
+    this.depth = Math.max(0, seaR - floor);
+    const wade = this.depth > 0.3 ? Math.max(0.35, 1 - (this.depth - 0.3) / 1.4) : 1;
+    const speed = (input.run ? LAWS.RUN : LAWS.WALK) * wade;
     const target = wl > 0 ? scale(wish, speed / wl) : [0, 0, 0, 0];
 
-    const r = len(this.pos);
-    const seaR = PLANET_R + SEA;
-    this.swimming = r < seaR - 1.1 && r > this.ground(u) + 0.3;
-
-    // horizontal velocity: snappy on the ground, sluggish in the air or water
+    const g = accel(this.pos, this.vel);
+    const gr = dot(g, u), gh = sub(g, scale(u, gr));
     const vr = dot(this.vel, u);
     const vh = sub(this.vel, scale(u, vr));
-    const k = this.grounded ? 14 : this.swimming ? 3 : 1.5;
-    const nh = add(vh, scale(sub(target, vh), Math.min(1, k * dt)));
-    let nvr = vr;
-
-    if (this.swimming) {
-      nvr += ((seaR - 0.9) - r) * 6 * dt;                     // buoyancy keeps the head above water
-      nvr *= Math.exp(-2.5 * dt);
-      if (input.jump) nvr = Math.max(nvr, 2.5);
-    } else {
-      nvr -= LAWS.G_SURF * dt;
-      if (input.jump && this.grounded) { nvr = LAWS.JUMP; this.grounded = false; }
+    let nh;
+    if (this.grounded) nh = add(vh, scale(sub(target, vh), Math.min(1, 14 * dt)));   // feet grip the ground
+    else {
+      nh = add(vh, scale(gh, dt));                                                     // ballistic ...
+      // ... except for a little steering within a couple of metres of the ground, the way a jumper twists
+      // (a deliberate mercy, logged in DECISIONS.md; flight higher up is purely ballistic)
+      if (len(this.pos) - floor < 2.5) nh = add(nh, scale(sub(target, nh), Math.min(1, 1.5 * dt)));
     }
+    let nvr = vr + gr * dt;
+    if (input.jump && this.grounded) { nvr = Math.max(nvr, 0) + LAWS.JUMP; this.grounded = false; }
     this.vel = add(nh, scale(u, nvr));
     this.supported = false;
     this.contact?.(this, dt, input);                       // obstacles: contact forces before the step
@@ -124,15 +131,16 @@ export class Player {
 
     // ground collision
     const n = this.up();
-    const g = this.ground(n);
-    if (len(this.pos) <= g) {
-      this.pos = scale(n, g);
+    const gnd = this.ground(n);
+    if (len(this.pos) <= gnd) {
+      this.pos = scale(n, gnd);
       const v2 = dot(this.vel, n);
       if (v2 < 0) this.vel = sub(this.vel, scale(n, v2));
       this.grounded = true;
     } else {
-      this.grounded = len(this.pos) < g + 0.05 || this.supported;
+      this.grounded = len(this.pos) < gnd + 0.05 || this.supported;
     }
+    if (this.grounded && this.depth === 0 && floor > seaR + 0.2) this.dry = { pos: this.pos.slice(), F: this.F, R: this.R, A: this.A };
     this.settleFrame();
   }
 
@@ -158,6 +166,7 @@ export class Player {
   }
 
   altitude() { return len(this.pos) - PLANET_R - SEA; }
+  heightAboveGround() { return len(this.pos) - this.ground(this.up()); }
 }
 
 export const vec4 = { dot, len, norm, add, sub, scale };

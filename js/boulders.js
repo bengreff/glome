@@ -1,7 +1,7 @@
 // Boulders: scattered 4D balls, partly buried. The nearest MAXB go to the GPU each frame; the far ones shrink to
 // nothing before they drop out of the list, so they never pop.
 import { PLANET_R } from './world.js';
-import { vec4 } from './player.js';
+import { vec4, CAP_LO, CAP_HI, CAP_R } from './player.js';
 import { LAWS } from './laws.js';
 import { G, sunDir } from './game.js';
 
@@ -52,20 +52,23 @@ export function updateBoulders(eye) {
   boulders.near = near.map(x => x.b);
 }
 
-// Contact with boulders, in full 4D. The contact normal points from the boulder's centre to you, so it has an
-// ana component whenever the centre is off your slice. Coulomb friction (body and feet against rock, μ = 0.9)
-// acts on the whole horizontal part of your velocity, ana included: push into a boulder within about 42° of
-// head-on and you stick; only a glancing push slides you around it, through ana if that is where its surface
-// leans. Holding Space against one scrambles you up its surface; near the top you can stand on it.
+// Contact with boulders, in full 4D, for the body capsule (PHYSICS.md: sphere centres 0.3 m and 1.75 m above the
+// feet, radius 0.3 m). The contact normal points from the boulder's centre to the nearest point of the capsule's
+// axis, so it has an ana component whenever the centre is off your slice. Coulomb friction (body and feet against
+// rock, μ = 0.9) acts on the whole horizontal part of your velocity, ana included: push into a boulder within
+// about 42° of head-on and you stick; only a glancing push slides you around it, through ana if that is where its
+// surface leans. Holding Space against one scrambles you up its surface; near the top you can stand on it.
 export function boulderContact(p, dt, input) {
   const up = p.up(), MU = LAWS.MU;
   for (const b of boulders.near) {
-    const d = vec4.sub(p.pos, b.c), l = vec4.len(d), R = b.r + 0.3;
+    const ca = vec4.dot(vec4.sub(b.c, p.pos), up);                       // the nearest point of the capsule's axis
+    const y = Math.min(CAP_HI, Math.max(CAP_LO, ca));
+    const d = vec4.sub(vec4.add(p.pos, vec4.scale(up, y)), b.c), l = vec4.len(d), R = b.r + CAP_R;
     if (l > R + 0.03 || l < 1e-6) continue;
     const n = vec4.scale(d, 1 / l), nu = vec4.dot(n, up);
-    if (l < R) p.pos = vec4.add(b.c, vec4.scale(n, R));      // undo any overlap along the 4D normal
-    if (nu > 0.5) p.supported = true;                          // you are on top of it
-    if (input.jump && nu < 0.85 && (input.fwd || input.right || input.ana)) {
+    if (l < R) p.pos = vec4.add(p.pos, vec4.scale(n, R - l));            // undo any overlap along the 4D normal
+    if (nu > 0.5) p.supported = true;                                     // you are on top of it
+    if (input.jump && nu < 0.85 && nu > -0.3 && (input.fwd || input.right || input.ana)) {
       // scramble: climb along the steepest way up the 4D surface (up, minus its normal part)
       const climb = vec4.sub(up, vec4.scale(n, nu)), cl = vec4.len(climb);
       if (cl > 1e-3) { p.vel = vec4.scale(climb, LAWS.CLIMB / cl); p.supported = true; continue; }

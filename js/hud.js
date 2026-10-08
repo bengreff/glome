@@ -64,7 +64,7 @@ export function drawGazeDot() {
   octx.beginPath(); octx.arc(W / 2, H / 2, 3 * k, 0, 7); octx.stroke();
   octx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; octx.lineWidth = 1.4 * k;
   octx.beginPath(); octx.arc(W / 2, H / 2, 3 * k, 0, 7); octx.stroke();
-  if (radar.gaze && !G.state.radar.hidden) {
+  if (radar.gaze && !G.state.radar.hidden && G.state.help) {
     octx.font = `500 ${10.5 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     octx.fillText(`${Math.round(radar.gaze.t)} m`, W / 2 + 8 * k, H / 2 + 4 * k);
   }
@@ -85,7 +85,7 @@ export function updateHUD(dt, cam, sun) {
   const anaLean = Math.atan2(sa, Math.hypot(sf, sr)) * 180 / Math.PI;
   const ahead = Math.atan2(sr, sf) * 180 / Math.PI;
   $('where').textContent = `η ${fmt(h.eta)}°  ξ₁ ${fmt(h.xi1)}°  ξ₂ ${fmt(h.xi2)}°`;
-  $('alt').textContent = G.player.swimming ? 'swimming' : `${fmt(G.player.altitude(), 1)} m above sea`;
+  $('alt').textContent = G.player.depth > 0 ? `wading, ${fmt(G.player.depth, 1)} m deep` : `${fmt(G.player.altitude(), 1)} m above sea`;
   $('sun').textContent = el > -2
     ? `sun ${fmt(el)}° up · ${fmt(Math.abs(anaLean))}° toward ${anaLean >= 0 ? 'ana' : 'kata'} · ${fmt(Math.abs(ahead))}° ${ahead >= 0 ? 'right' : 'left'}`
     : `night · sun ${fmt(-el)}° below`;
