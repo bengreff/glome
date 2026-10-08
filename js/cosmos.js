@@ -123,15 +123,26 @@ function det4(m) {
 }
 
 export const spinRates = () => { const w1 = TAU / LAWS.DAY1; return [w1, w1 * LAWS.RATIO]; };
+// The spin's two angles at time t. They run from a base (t0, θ1, θ2), so the console can change the day's length
+// without the planet jumping: rebaseSpin carries the angles on from where they are.
+const spinBase = { t0: 0, a1: 0, a2: 0 };
+function spinAngles(t) { const [w1, w2] = spinRates(); return [spinBase.a1 + w1 * (t - spinBase.t0), spinBase.a2 + w2 * (t - spinBase.t0)]; }
+export function rebaseSpin(t, day) {
+  const [a1, a2] = spinAngles(t);
+  spinBase.t0 = t; spinBase.a1 = a1; spinBase.a2 = a2;
+  LAWS.DAY1 = day;
+}
+export const spinSave = () => ({ ...spinBase, day: LAWS.DAY1 });
+export function spinLoad(s) { if (s) { spinBase.t0 = s.t0; spinBase.a1 = s.a1; spinBase.a2 = s.a2; LAWS.DAY1 = s.day; } }
 // S(t)ᵀ v: undo the spin (inertial-aligned -> body)
 function unspin(v, t, out = [0, 0, 0, 0]) {
-  const [w1, w2] = spinRates(), c1 = Math.cos(w1 * t), s1 = Math.sin(w1 * t), c2 = Math.cos(w2 * t), s2 = Math.sin(w2 * t);
+  const [a1, a2] = spinAngles(t), c1 = Math.cos(a1), s1 = Math.sin(a1), c2 = Math.cos(a2), s2 = Math.sin(a2);
   out[0] = c1 * v[0] + s1 * v[1]; out[1] = -s1 * v[0] + c1 * v[1];
   out[2] = c2 * v[2] + s2 * v[3]; out[3] = -s2 * v[2] + c2 * v[3];
   return out;
 }
 function spin(v, t, out = [0, 0, 0, 0]) {
-  const [w1, w2] = spinRates(), c1 = Math.cos(w1 * t), s1 = Math.sin(w1 * t), c2 = Math.cos(w2 * t), s2 = Math.sin(w2 * t);
+  const [a1, a2] = spinAngles(t), c1 = Math.cos(a1), s1 = Math.sin(a1), c2 = Math.cos(a2), s2 = Math.sin(a2);
   out[0] = c1 * v[0] - s1 * v[1]; out[1] = s1 * v[0] + c1 * v[1];
   out[2] = c2 * v[2] - s2 * v[3]; out[3] = s2 * v[2] + c2 * v[3];
   return out;

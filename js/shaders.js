@@ -32,7 +32,7 @@ uniform int uBN;            // all of them cast shadows ...
 uniform int uBCut;          // ... but only the first uBCut cross your slice, so only those can be seen,
 uniform int uBShadow;       // and only the first uBShadow can shade it
 
-const int MAXO = 12;
+const int MAXO = 16;
 uniform vec4 uOC[MAXO];     // objects near you: centres ...
 uniform mat4 uOM[MAXO];     // ... orientations (columns: the body's axes in the world) ...
 uniform vec4 uOP[MAXO];     // ... x: shape (0 glome, 1 tesseract), y: radius or half side, z: material (0 stone, 1 metal, 2 accent), w: glow
@@ -275,6 +275,8 @@ float hitDuo(vec4 o, vec4 d, float a, out vec4 n) {
 }
 // Objects: 4D balls and tesseracts with any orientation in SO(4). The ray is carried into the object's own frame
 // (the transpose of its rotation), where a tesseract is the box |x_i| <= h: a 4D slab test.
+uniform sampler2D uPrev;     // the last frame (for the console's screen)
+uniform float uScreenOn;
 uniform int uGhost;          // the index of the ghost (where a held object would come to rest), or -1
 float hitObject(vec4 ro, vec4 rd, float tMax, int count, out int idx, out vec4 nrm) {
   float best = tMax; idx = -1; nrm = vec4(0.0);
@@ -554,7 +556,24 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   float spec = 0.0;
   if (mat < 0.5) { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); nb = normalize(n - 0.04 * (g1 - n * dot(g1, n))); }
   else if (mat < 1.5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; }
-  else { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
+  else if (mat < 2.5) { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
+  else if (mat > 4.5) {                                   // the console: brushed metal, and its screen (the +x cell)
+    alb = vec3(0.34, 0.35, 0.38) * (0.94 + 0.04 * d2); spec = 0.5;
+    if (q.x > h * 0.9) {
+      vec2 uv = clamp(vec2(-q.y, q.w) / (h * 0.86) * 0.5 + 0.5, 0.0, 1.0);   // across and up (its fourth axis is up)
+      float frame = step(0.04, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
+      // on: the view itself, fed back (the universe, with the console in it, with the universe in it, ...);
+      // dark: a faint ring, an orbit
+      vec3 scr = uScreenOn > 0.5 ? pow(texture(uPrev, uv).rgb, vec3(2.2)) * 1.6
+                                 : ACCENT * 0.25 * (1.0 - smoothstep(0.0, 0.03, abs(length(uv - 0.5) - 0.3)));
+      return mix(vec3(0.02), scr, frame);
+    }
+  }
+  else {                                                   // a handed object: one cell in the accent colour, one dark
+    alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.5;
+    if (q.x > h * 0.9) { alb = ACCENT * 0.8; spec = 0.3; }
+    else if (q.y > h * 0.9) alb = vec3(0.10, 0.10, 0.12);
+  }
   if (uOP[i].x > 0.5 && uOP[i].x < 1.5) {                  // tesseract: darken the edges of the slice's polyhedron
     vec4 a = step(vec4(h * 0.93), abs(q));
     float ed = a.x + a.y + a.z + a.w;
@@ -756,6 +775,9 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
   if ((uDebug & 8) != 0) fPB = -1;
   float tT = dot(ro, ro) > (uPR + 400.0) * (uPR + 400.0) ? marchTerrainFar(ro, rd) : marchTerrain(ro, rd);
   if (fPB >= 0 && (tT < 0.0 || tPB < tT) && (tW < 0.0 || tPB < tW)) {
+    int oiB; vec4 onB2;                                       // things standing on B, in front of its floor
+    float tOB = hitObject(ro, rd, tPB, (uDebug & 16) == 0 ? uOCut : 0, oiB, onB2);
+    if (oiB >= 0) { tOut = tOB; return applyFog(shadeObject(ro + rd * tOB, onB2, oiB, rd, tOB), upE, tOB); }
     tOut = tPB;
     vec3 col = shadePlanetB(ro + rd * tPB, nPB, fPB, cPB, rd);
     return applyFog(col, upE, tPB);

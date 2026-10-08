@@ -59,6 +59,15 @@ kbd { font: 500 11.5px var(--mono); border: 1px solid #3a4866; border-bottom-wid
 .buttons button { cursor: pointer; }
 .buttons button:hover { background: rgba(255, 255, 255, 0.1); }
 .panel a { color: var(--cool); }
+.console { width: min(760px, calc(100% - 32px)); background: rgba(8, 10, 16, 0.92); border-color: #2c5a56; }
+.console .dials { display: grid; grid-template-columns: 4em 1fr 4em 1fr; gap: 8px 12px; align-items: center; font: 15px var(--mono); color: #9fe3d8; }
+.console .dials input[type=range] { width: 100%; accent-color: #52dcc8; }
+.console .dials label { white-space: nowrap; }
+.console .src { display: grid; grid-template-columns: 9em 1fr; gap: 10px; margin-top: 12px; height: 46vh; }
+.console #console-files { display: flex; flex-direction: column; gap: 3px; overflow: auto; }
+.console #console-files button { font: 11.5px var(--mono); text-align: left; background: none; border: 0; color: #9fb6c9; cursor: pointer; padding: 2px 4px; }
+.console #console-files button:hover { color: #fff; }
+.console pre { margin: 0; overflow: auto; font: 11px/1.45 var(--mono); color: #c9d6e3; background: rgba(255, 255, 255, 0.03); padding: 8px; white-space: pre; }
 .fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; }
 .bar { height: 6px; border-radius: 3px; background: #1d2535; overflow: hidden; margin: 16px 0 10px; }
 .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--cool), #e6ecf4, var(--warm)); transition: width 0.15s; }

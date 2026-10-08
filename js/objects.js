@@ -15,7 +15,7 @@ import { World, makeBody, DENSITY, applyImpulse } from './bodies.js';
 import { rot as R4 } from './so4.js';
 import { tangents } from './env.js';
 
-export const MAXO = 12, MAXL = 4;
+export const MAXO = 16, MAXL = 4;
 // What the shader draws: the nearest objects, the ones your slice cuts first.
 export const gpuObj = { C: new Float32Array(MAXO * 4), M: new Float32Array(MAXO * 16), P: new Float32Array(MAXO * 4), n: 0, cut: 0,
                         LP: new Float32Array(MAXL * 4), LC: new Float32Array(MAXL * 4), ln: 0, ghost: -1 };
@@ -29,6 +29,7 @@ export const KINDS = {
   stone: { shape: 'glome', size: 0.09, mass: 2.5, mat: 2, glow: 0.35 },          // an impulse stone
   lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 1, glow: 0.9, light: [1.9, 1.35, 0.75] },
   part: { shape: 'tesseract', size: 0.26, mass: 14, mat: 2, glow: 0.25 },          // a launcher part (tiers I–IV): it doesn't roll
+  key: { shape: 'tesseract', size: 0.32, density: DENSITY.metal / 4, mat: 4 },     // the mirror key: handed (two marked cells)
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
 const THROW_MAX = 260, THROW_VMAX = 14;   // a full charge is a 260 N·s impulse, at most 14 m/s

@@ -29,6 +29,9 @@ import { buildLandforms, floorRadius, nearCarves } from './landforms.js';
 import { growTree, trees, rope as ropeSlot } from './trees.js';
 import { Rope } from './rope.js';
 import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
+import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
+import { bworld, buildB, bItems, bContacts, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
+import { spinSave, spinLoad } from './cosmos.js';
 import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { uploadTrees } from './render.js';
@@ -93,7 +96,8 @@ function handleActions(cam) {
   const now = G.simT;
   if (actions.fDown) {
     actions.fDown = false;
-    if (G.ropeHeld != null) G.ropeHeld = null;            // let go of the rope
+    if (!objects.held && nearConsole(G.player)) { if ($('console').hidden) openConsole(); else closeConsole(); }
+    else if (G.ropeHeld != null) G.ropeHeld = null;       // let go of the rope
     else if (objects.held) hold.fT = now;                  // tap: drop · hold: show where it will rest
     else {
       const b = lookedAt(cam);
@@ -137,6 +141,18 @@ function tryLaunchB(p, jump) {
   p.vel = vec4.scale(dir, B_PAD_SPEED); p.pos = vec4.add(p.pos, vec4.scale(u, 0.3)); p.grounded = false;
   G.audio?.emit('launch', p.pos, 1.0);
   return true;
+}
+// The console's flight: no gravity, you go where you look (W/S, A/D, E/Q, Space/Shift for up and down), and the
+// ground still holds you.
+function flyStep(p, input, dt) {
+  flight.active = false;
+  const c = p.camera(), sp = 14;
+  const dir = vec4.add(vec4.add(vec4.add(vec4.scale(c.F, input.fwd), vec4.scale(c.R, input.right)), vec4.scale(p.A, input.ana)), vec4.scale(p.up(), (input.jump ? 1 : 0) - (input.run ? 1 : 0)));
+  p.vel = vec4.scale(dir, sp);
+  p.pos = vec4.add(p.pos, vec4.scale(p.vel, dt));
+  const g = p.ground(p.up());
+  if (vec4.len(p.pos) < g) p.pos = vec4.scale(p.up(), g);
+  p.grounded = false; p.settleFrame();
 }
 // Soft reset: after touching the star or drifting too long, a quiet fade back to the last ground you stood on.
 function softReset() {
@@ -191,19 +207,22 @@ function frameBody(now) {
     else tryLaunchB(player, input.jump);
     updateFlightMode(player);
     if (flight.active) { if (!stepFlight(player, STEP)) softReset(); }
-    else if (onB) { const k = player.onB; player.update(STEP, input, (x, v) => accelB(x, v, state.time, k)); }
+    else if (G.fly) flyStep(player, input, STEP);
+    else if (onB) { const k = player.onB; player.update(STEP, input, (x, v) => accelB(x, v, state.time, k)); bContacts(player); }
     else {
       player.floorFn = nearCarves(player.pos, 25) ? (n, r) => floorRadius(n, r, player.hf) : null;
       player.update(STEP, input, accel);
       capsuleTerrain(player);
     }
     if (!onB && !flight.active) playerContacts(player);
+    trackOrbit(flight, state.time);
     stepObjects(cameraNow());
     if (ropeSlot.obj) {
       const R = ropeSlot.obj;
       R.pins.clear();
+      if (G.knotAnchor && !G.flags.solved_knot) R.pins.set(0, G.knotAnchor);   // tied to the gate until it opens
       if (G.ropeHeld != null) { const c = cameraNow(); R.pins.set(G.ropeHeld, vec4.add(vec4.add(c.eye, vec4.scale(c.F, 0.8)), vec4.scale(c.U, -0.3))); }
-      if (G.ropeHeld != null || R.x.some(v => vec4.len(v) > 0) && vec4.len(vec4.sub(R.x[0], cameraNow().eye)) < 120) R.step(STEP);
+      if (G.ropeHeld != null || vec4.len(vec4.sub(R.x[0], cameraNow().eye)) < 120) R.step(STEP);
     }
     state.time += STEP;
   }
@@ -218,10 +237,13 @@ function frameBody(now) {
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
   if (player.onB == null) {
+    updateArtifacts();
     stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
     const cd = creatureDraw(cam.eye, cam.A, player.hf);
     G.creatureItems = cd.items; legSlot.caps = cd.caps;
   } else { G.creatureItems = []; legSlot.caps = []; }
+  G.creatureItems = G.creatureItems.concat(bItems(cam.eye, state.time));   // B's pillars and console, when near
+  updateConsole();
   uploadObjects(cam);
   // the first sight of your own planet's copies round the hoop: a copy inside your slice, in front of you, in the sky
   if (!G.flags.copiesSeen) {
@@ -340,16 +362,24 @@ function frameBody(now) {
     initCreatures(player.hf);
     hooks.creatures = creaturesSave;
     G.creatures = creatures;
+    buildArtifacts();
+    buildB();
+    bindConsole();
+    hooks.spin = { save: spinSave, load: spinLoad };
     {
-      // a rope, lying in loose loops a little way from the start
-      const home = player.up(), pts = [];
-      for (let i = 0; i < 31; i++) {
-        const a = i / 30, side = 2.2 + 0.6 * Math.sin(a * 9), fwd = -3 + 6 * a, ana = 0.5 * Math.sin(a * 7);
-        const dir = vec4.add(vec4.add(vec4.scale(player.F, fwd), vec4.scale(player.R, -4 - side)), vec4.scale(player.A, ana));
-        const n = vec4.norm(vec4.add(home, vec4.scale(dir, 1 / 250)));
-        pts.push(vec4.scale(n, 250 + player.hf.heightAt(n) + 0.05));
-      }
-      ropeSlot.obj = new Rope(pts, { radius: 0.035, accel: x => accel(x, [0, 0, 0, 0]), env: p => terrainSD(p), damping: 0.995 });
+      // the knot gate's rope: tied to the vault, led to the tall post, looped once round it, and back
+      const post = G.knotPost, anchor = G.knotAnchor, pts = [];
+      const pn = vec4.norm(post.a), up = pn, toPost = vec4.norm(vec4.sub(vec4.sub(post.a, anchor), vec4.scale(up, vec4.dot(vec4.sub(post.a, anchor), up))));
+      const T = tangents(pn), side = vec4.norm(vec4.sub(vec4.sub(T[1], vec4.scale(toPost, vec4.dot(T[1], toPost))), vec4.scale(up, vec4.dot(T[1], up))));
+      const at = (base, f, s2, h) => vec4.add(vec4.add(vec4.add(base, vec4.scale(toPost, f)), vec4.scale(side, s2)), vec4.scale(up, h));
+      const ring = vec4.add(post.a, vec4.scale(up, 0.6));
+      const dist = vec4.len(vec4.sub(vec4.sub(post.a, anchor), vec4.scale(up, vec4.dot(vec4.sub(post.a, anchor), up))));
+      for (let i = 0; i < 10; i++) pts.push(at(anchor, (dist - 0.5) * i / 10, 0, 0.6 * i / 10 - 0.0));
+      for (let i = 0; i <= 14; i++) { const a = Math.PI + 2 * Math.PI * i / 14; pts.push(at(ring, 0.5 * Math.cos(a), 0.5 * Math.sin(a), 0)); }
+      for (let i = 1; i <= 6; i++) pts.push(at(ring, -0.5 - 0.3 * i, 0.4, -0.1 * i));
+      const postSD = q => { const ab = vec4.sub(post.b, post.a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(q, post.a), ab) / vec4.dot(ab, ab))), d = vec4.sub(q, vec4.add(post.a, vec4.scale(ab, t))), l = vec4.len(d); return { d: l - post.r, n: vec4.scale(d, 1 / Math.max(l, 1e-9)) }; };
+      const env = q => { const a = terrainSD(q), b = postSD(q); return b.d < a.d ? b : a; };
+      ropeSlot.obj = G.rope = new Rope(pts, { radius: 0.035, accel: x => accel(x, [0, 0, 0, 0]), env, damping: 0.995 });
       ropeSlot.obj.iterations = 8;
       hooks.rope = { save: () => ({ x: ropeSlot.obj.x.map(v => v.map(q => Math.round(q * 1e4) / 1e4)) }), load: r => { if (r && r.x && r.x.length === ropeSlot.obj.x.length) { ropeSlot.obj.x = r.x; ropeSlot.obj.v = r.x.map(() => [0, 0, 0, 0]); } } };
     }
@@ -363,6 +393,7 @@ function frameBody(now) {
     }
     stamps.world = performance.now() - bootT0;
     loadWorld();                       // a saved world, if there is one, replaces the fresh start
+    syncArtifacts();
     startAutosave();
     bindSettings();
     G.boot = { ...stamps, total: performance.now() - bootT0 };
@@ -373,7 +404,7 @@ function frameBody(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

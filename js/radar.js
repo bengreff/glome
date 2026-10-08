@@ -368,6 +368,15 @@ export function drawRadarOverlay(r, sun) {
       }
     }
   }
+  // the artifacts you have found (faint) or solved (bright): your memory is the record, but these stay marked
+  if (G.artifacts) for (const a of G.artifacts) {
+    if (!G.flags['seen_' + a.id]) continue;
+    const m = logMap(a.n, B, u), r = Math.hypot(...m);
+    const P = proj(r > RB * 0.95 ? m.map(v => v / r * RB * 0.95) : m), z = 5 * k, solved = G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1);
+    octx.strokeStyle = solved ? 'rgba(82, 220, 200, 0.95)' : 'rgba(82, 220, 200, 0.5)'; octx.lineWidth = 1.6 * k;
+    octx.beginPath(); octx.moveTo(P[0], P[1] - z); octx.lineTo(P[0] + z, P[1]); octx.lineTo(P[0], P[1] + z); octx.lineTo(P[0] - z, P[1]); octx.closePath(); octx.stroke();
+    if (solved) { octx.fillStyle = 'rgba(82, 220, 200, 0.35)'; octx.fill(); }
+  }
   // the pouch: one dot per impulse stone, under the ball
   if (G.objects && G.objects.pouch > 0) {
     octx.fillStyle = 'rgba(82, 220, 200, 0.95)';

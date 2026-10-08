@@ -151,23 +151,34 @@ export function updateDyn(frameSec) {
     dyn.scale = Math.max(floor, dyn.scale * (avg > 1 / 35 ? 0.8 : avg > 1 / 50 ? 0.9 : 0.95));
   } else if (dyn.fast >= 3) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.04); dyn.fast = 0; }
 }
-export const scene = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
-function ensureScene(w, h) {
-  if (scene.tex && Math.abs(w - scene.w) < 2 && Math.abs(h - scene.h) < 2) return;
-  if (scene.tex) gl.deleteTexture(scene.tex);
-  scene.tex = gl.createTexture();
+// Two scene buffers, used in turn: each frame draws into one while the other still holds the last frame, which the
+// console's screen shows (the view fed back into itself).
+export const scene = { fbos: [gl.createFramebuffer(), gl.createFramebuffer()], texs: [null, null], cur: 0, fbo: null, tex: null, prev: null, w: 0, h: 0 };
+function makeSceneTex(w, h) {
+  const t = gl.createTexture();
   gl.activeTexture(gl.TEXTURE5);
-  gl.bindTexture(gl.TEXTURE_2D, scene.tex);
+  gl.bindTexture(gl.TEXTURE_2D, t);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scene.tex, 0);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.activeTexture(gl.TEXTURE0);
-  scene.w = w; scene.h = h;
+  return t;
+}
+function ensureScene(w, h) {
+  if (!(scene.texs[0] && Math.abs(w - scene.w) < 2 && Math.abs(h - scene.h) < 2)) {
+    for (let i = 0; i < 2; i++) {
+      if (scene.texs[i]) gl.deleteTexture(scene.texs[i]);
+      scene.texs[i] = makeSceneTex(w, h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbos[i]);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, scene.texs[i], 0);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.activeTexture(gl.TEXTURE0);
+    scene.w = w; scene.h = h;
+  }
+  scene.cur ^= 1;                                   // swap: draw into one, the other is last frame
+  scene.fbo = scene.fbos[scene.cur]; scene.tex = scene.texs[scene.cur]; scene.prev = scene.texs[scene.cur ^ 1];
 }
 
 export function resize() {
@@ -261,6 +272,8 @@ export function setWorld(p, cam, sun) {
   gl.uniform1i(p.u('uON'), gpuObj.n);
   gl.uniform1i(p.u('uOCut'), gpuObj.cut);
   gl.uniform1i(p.u('uGhost'), gpuObj.ghost);
+  if (p === progSlice) { gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, scene.prev); gl.uniform1i(p.u('uPrev'), 7); gl.activeTexture(gl.TEXTURE0); }
+  gl.uniform1f(p.u('uScreenOn'), G.screenOn ? 1 : 0);
   if (treeTex && p === progSlice) {                          // the rope and the walkers' legs move: rewrite them
     gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
     if (ropeSlot.obj) gl.texSubImage2D(gl.TEXTURE_2D, 0, ropeSlot.start * 3, 0, ROPE_CAPS * 3, 1, gl.RGBA, gl.FLOAT, ropeTexData());
