@@ -509,7 +509,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
-  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);   // night: starlight fill
+  vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);   // night: starlight fill
   vec3 bounce = alb * vec3(0.9, 0.8, 0.6) * 0.14 * day;
   float skyVis = (0.5 + 0.5 * dot(nb, up)) * caveDark;
   return alb * (sunCol * dif * sh * 1.6 + (sky * skyVis + bounce * caveDark) * ao * ao + lanternLight(p, nb));
@@ -537,7 +537,7 @@ vec3 shadeBoulder(vec4 p, vec4 n, float t) {
   }
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
-  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);
+  vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);
   float skyVis = 0.5 + 0.5 * dot(nb, up);
   return alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.6 + 0.4 * skyVis) + lanternLight(p, nb));
 }
@@ -594,7 +594,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   }
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
-  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);
+  vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);
   float skyVis = 0.5 + 0.5 * dot(nb, up);
   vec3 col = alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.65 + 0.35 * skyVis) + lanternLight(p, nb));
   col += sunCol * spec * pow(max(dot(reflect(uSun, nb), rd), 0.0), 36.0) * sh * smoothstep(-0.04, 0.06, sunEl);
@@ -716,7 +716,7 @@ vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t) {
   float dif = rowLight(p, nb, up), sh = 1.0;
   if (dif > 0.0 && uShadows > 0.5) sh = softShadow(p + n * 0.1, uSun);
   float day = dayFactor(up);
-  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);
+  vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);
   return alb * (vec3(1.0, 0.94, 0.84) * dif * sh * 1.6 + sky * (0.6 + 0.4 * dot(nb, up)) + lanternLight(p, nb));
 }
 
@@ -860,7 +860,7 @@ void main() {
     float tg = hitObjectOne(uEye, rd, uGhost, gn);
     if (tg > 0.0 && (t < 0.0 || tg < t)) hdr = mix(hdr, ACCENT * (0.5 + 0.5 * abs(dot(gn, rd))), 0.35) + ACCENT * 0.25 * pow(1.0 - abs(dot(gn, rd)), 3.0);
   }
-  vec3 col = post(hdr * mix(2.2, 1.0, smoothstep(0.0, 0.35, uDayE)));   // the eye adapts only when it is really dark
+  vec3 col = post(hdr * mix(1.45, 1.0, smoothstep(0.0, 0.35, uDayE)));  // the eye adapts a little when it is really dark
   float vig = 1.0 - 0.25 * dot(vUV * 0.7, vUV * 0.7);
   col *= vig;
   // dither by half a step of the 8-bit target, so dark gradients (night, space) don't band

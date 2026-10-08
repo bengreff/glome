@@ -381,6 +381,10 @@ function frameBody(now) {
     buildB();
     bindConsole();
     hooks.spin = { save: spinSave, load: spinLoad };
+    // the console's laws (only the ones it can change), and its two switches
+    const CONSOLE_LAWS = ['G_SCALE', 'GRAV_DIM', 'L', 'TIME_RATE', 'JUMP', 'WALK', 'RUN'];
+    hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly }),
+                   load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; } };
     {
       // the knot gate's rope: tied to the vault, led to the tall post, looped once round it, and back
       const post = G.knotPost, anchor = G.knotAnchor, pts = [];
