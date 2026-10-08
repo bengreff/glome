@@ -2,7 +2,8 @@
 
 Each artifact was confirmed solvable by script, using the real controls where they are the puzzle (F to pick up
 and set down, the ana twist, stepping through ana with E, the launcher's jump) and teleporting only for long walks.
-Run one in the headless driver after `pt_common.js`, e.g.:
+Run one in the headless driver after `pt_common.js` (wait for the world to load after New world: about 10 s, longer
+if the machine is busy), e.g.:
 
     node tools/cdp.mjs http://127.0.0.1:8650/ /tmp/pt '[{"eval":"__glome.dbg.save.newWorld(); 1","wait":8000},
       {"eval": <pt_common.js as a string>}, {"eval": <pt_mirror.js as a string>}]' --gpu

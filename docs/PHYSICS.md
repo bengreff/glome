@@ -139,6 +139,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 - **Flight** is a kick-drift-kick leapfrog in the inertial frame at 1/120 s; the space map predicts with the same integrator at 0.02–0.1 s steps. Leaving and landing switch frames exactly (the conversions are rotations and translations).
 - **Planet orbits are prescribed circles.** For these masses and radii, the integrated two-body motion would be these same circles. The planets' spins are prescribed too. Small bodies (you in flight, thrown objects) are integrated in the exact field of the star and both planets, images included.
 - **No atmosphere.** No drag, no aerodynamic heating, and landings are gentle by fiat (a deliberate mercy). The sky's colour is artistic, not scattered light.
+- **Clouds** are a drifting layer of 4D noise 90 m up, not weather: no water cycle, no rain. What is true of them is their geometry: the layer is a 3D shell your slice cuts in a sheet, they shade the ground along the sun's direction, and each cloud is lit by the sun as it stands over that cloud.
 - **Light** is direct light with soft shadows and an ambient term. There is no multiple bouncing.
 - **Creature gaits** are kinematic, as above.
 - **Holding's reaction** reaches you as a change of velocity only: you have no rotational state of your own, so the drive's turning impulse is not felt back (angular momentum isn't conserved between you and what you hold).
