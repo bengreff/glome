@@ -1,7 +1,7 @@
 // A 4D walker on the surface of a 3-sphere planet.
 // The body frame is (F, R, A): three orthonormal horizontal directions (forward, right, ana).
 // "Up" is always radial. The camera adds a pitch angle in the forward–up plane.
-import { PLANET_R, SEA } from './world.js';
+import { PLANET_R, SEA } from './world.js?v=20261007193730';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 const len = a => Math.sqrt(dot(a, a));

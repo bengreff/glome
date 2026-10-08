@@ -1,6 +1,6 @@
-import { VERT, SLICE_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js';
-import { PLANET_R, SEA, HeightField, prefilter } from './world.js';
-import { Player, vec4 } from './player.js';
+import { VERT, SLICE_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js?v=20261007193730';
+import { PLANET_R, SEA, HeightField, prefilter } from './world.js?v=20261007193730';
+import { Player, vec4 } from './player.js?v=20261007193730';
 
 const $ = id => document.getElementById(id);
 const canvas = $('view'), overlay = $('overlay');
@@ -61,7 +61,7 @@ function buildAtlas() {
     const progress = new Array(8).fill(0);
     let done = 0;
     for (let c = 0; c < 8; c++) {
-      const w = new Worker(new URL('./terrain-worker.js', import.meta.url), { type: 'module' });
+      const w = new Worker(new URL('./terrain-worker.js?v=20261007193730', import.meta.url), { type: 'module' });
       w.onerror = e => reject(new Error('Terrain worker failed: ' + (e.message || 'unknown error')));
       w.onmessage = e => {
         if (e.data.data) {
@@ -148,18 +148,26 @@ function sunDir(t) {
 let player, atlasTex, noiseTex;
 // Dynamic resolution: render internally at a fraction of the screen, adjusted to hold ~55-60 fps,
 // then upscale with sharpening. 1/2/3 pick a fixed level, 0 returns to automatic.
-const dyn = { scale: 0.6, auto: true, acc: 0, n: 0, slow: 0, fast: 0 };
+const dyn = { scale: 0.6, auto: true, acc: 0, n: 0, fast: 0, probe: null, floor: 0, floorUntil: 0 };
 const maxScale = () => Math.min(1, 1.5 / Math.min(devicePixelRatio || 1, 2));
-function updateDyn(dt) {
-  dyn.acc += dt; dyn.n++;
-  if (dyn.acc < 0.35) return;
+// Lower the resolution when frames are slow, but check that it helped: if a step down doesn't make frames
+// faster, pixels aren't what limits the frame rate (a capped display, a throttled GPU, the compositor), so
+// undo it and don't go below that resolution for a while.
+function updateDyn(frameSec) {
+  dyn.acc += frameSec; dyn.n++;
+  if (dyn.acc < 0.4) return;
   const avg = dyn.acc / dyn.n; dyn.acc = 0; dyn.n = 0;
   if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
-  // drop quickly when frames are slow, climb back after a short run of fast frames (no flip-flopping)
-  dyn.slow = avg > 1 / 50 ? dyn.slow + 1 : 0;
+  if (dyn.probe) {                                         // judge the last step down
+    const p = dyn.probe; dyn.probe = null;
+    if (avg > p.avg * 0.92) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
+  }
+  const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
   dyn.fast = avg < 1 / 58 ? dyn.fast + 1 : 0;
-  if (dyn.slow >= 1) { dyn.scale = Math.max(0.3, dyn.scale * (avg > 1 / 35 ? 0.8 : 0.9)); dyn.slow = 0; }
-  else if (dyn.fast >= 2) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.08); dyn.fast = 0; }
+  if (avg > 1 / 50 && dyn.scale > floor + 0.01) {
+    dyn.probe = { scale: dyn.scale, avg };
+    dyn.scale = Math.max(floor, dyn.scale * (avg > 1 / 35 ? 0.8 : 0.9));
+  } else if (dyn.fast >= 2) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.08); dyn.fast = 0; }
 }
 const scene = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
 function ensureScene(w, h) {
@@ -270,16 +278,23 @@ function ensureRadar(w, h) {
   radar.w = w; radar.h = h;
   return true;
 }
-// Heights inside the ball, baked each frame: half floats where the GPU can render them, else 8 bits.
+// Heights inside the ball, as layers tiled into one 2D atlas: half floats where the GPU can render them, else 8 bits.
+const ATLAS_TX = { [VN_SMALL]: 10, [VN_BIG]: 16 };       // layers per row: 80 layers in 10×8, 128 in 16×8
 function makeRadarVolume() {
   const make = (VN, internal, format, type) => {
-    const t = tex3D(VN, VN, VN, internal, format, type, gl.LINEAR);
+    const tx = ATLAS_TX[VN], w = tx * VN, h = Math.ceil(VN / tx) * VN, t = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, null);
+    for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
     gl.bindFramebuffer(gl.FRAMEBUFFER, radar.volFbo);
-    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, t, 0, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
     const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    if (!ok) gl.deleteTexture(t);
-    return ok ? t : null;
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+    if (!ok) { gl.deleteTexture(t); return null; }
+    return { t, w, h, tx };
   };
   const small = gl.getExtension('EXT_color_buffer_float') ? make(VN_SMALL, gl.R16F, gl.RED, gl.HALF_FLOAT) : null;
   radar.enc = small ? 0 : 1;
@@ -439,6 +454,7 @@ function drawRadar(cam, sun, t, fovX) {
     gl.uniform1f(p.u('uRB'), RB);
     gl.uniform1f(p.u('uVN'), VN);
     gl.uniform1f(p.u('uEnc'), radar.enc);
+    gl.uniform1f(p.u('uTX'), vol.tx);
   };
   // Redraw only if something in the ball has changed, and then at most every other frame: it is an inset.
   const key = [VN, RB, ...u, ...B.flat()].map(x => x.toFixed(5)).join();
@@ -450,14 +466,11 @@ function drawRadar(cam, sun, t, fovX) {
   if (key !== radar.bakeKey) {
     radar.bakeKey = key;
     gl.bindFramebuffer(gl.FRAMEBUFFER, radar.volFbo);
-    gl.viewport(0, 0, VN, VN);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, vol.t, 0);
+    gl.viewport(0, 0, vol.w, vol.h);
     gl.useProgram(progBake);
     shared(progBake);
-    for (let l = 0; l < VN; l++) {
-      gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, vol, 0, l);
-      gl.uniform1f(progBake.u('uLayer'), l);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    }
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   // 2. march the ball
   const p = progRadar;
@@ -465,8 +478,9 @@ function drawRadar(cam, sun, t, fovX) {
   gl.viewport(0, 0, S, S);
   gl.useProgram(p);
   shared(p);
-  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, vol); gl.activeTexture(gl.TEXTURE0);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, vol.t); gl.activeTexture(gl.TEXTURE0);
   gl.uniform1i(p.u('uVol'), 3);
+  gl.uniform2f(p.u('uVolSize'), vol.w, vol.h);
   gl.uniform2f(p.u('uRes'), S, S);
   gl.uniform1f(p.u('uFov'), RADAR_FOV);
   gl.uniform3fv(p.u('uCam'), cv.pos);
@@ -484,7 +498,7 @@ function drawRadar(cam, sun, t, fovX) {
   gl.uniform1f(p.u('uPinned'), pin ? 1 : 0);
   gl.uniform4fv(p.u('uSliceA'), player.A);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_3D, null); gl.activeTexture(gl.TEXTURE0);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
   radar.last = { rect, cv, B, RB, discN, u, pinned: !!pin };
   return { rect, cv, B, RB, discN, u, pinned: !!pin };
 }
@@ -715,7 +729,7 @@ function drawRadarOverlay(r, sun) {
 // Scattered 4D balls, partly buried. The nearest MAXB go to the GPU each frame; the far ones shrink to
 // nothing before they drop out of the list, so they never pop.
 const MAXB = 32, B_FAR = 140;
-const boulders = { all: [], near: [], cut: 0, C: new Float32Array(MAXB * 4), R: new Float32Array(MAXB) };
+const boulders = { all: [], near: [], cut: 0, shadow: 0, C: new Float32Array(MAXB * 4), R: new Float32Array(MAXB) };
 function makeBoulders(rand) {
   const gauss = () => rand() + rand() + rand() + rand() - 2, home = player.up();
   for (let i = 0; i < 3400; i++) {
@@ -735,10 +749,19 @@ function updateBoulders(eye) {
   cand.sort((x, y) => x.d - y.d);
   const near = cand.slice(0, MAXB);
   const cut = Math.min(B_FAR, near.length === MAXB ? near[MAXB - 1].d : B_FAR);
-  // a ray of the slice view never leaves your slice, so it can only hit boulders the slice cuts: put them first
-  const A = player.A, inSlice = x => Math.abs(vec4.dot(x.b.c, A)) < x.b.r;
-  near.sort((x, y) => inSlice(y) - inSlice(x));
-  boulders.cut = near.filter(inSlice).length;
+  // A ray of the slice view never leaves your slice, so it can only hit boulders the slice cuts: they go first.
+  // A shadow ray from a point p of the slice toward the sun has ana coordinate s·(sun·A) at distance s (p·A = 0),
+  // so a boulder at ana coordinate a can only shade the slice if that line passes it within 200 m: next go those.
+  const A = player.A, sa = vec4.dot(sunDir(state.time), A);
+  const rank = x => {
+    const a = vec4.dot(x.b.c, A), r = x.b.r;
+    if (Math.abs(a) < r) return 2;
+    return a > Math.min(0, 200 * sa) - r && a < Math.max(0, 200 * sa) + r ? 1 : 0;
+  };
+  near.forEach(x => { x.rank = rank(x); });
+  near.sort((x, y) => y.rank - x.rank);
+  boulders.cut = near.filter(x => x.rank === 2).length;
+  boulders.shadow = near.filter(x => x.rank >= 1).length;
   boulders.C.fill(0); boulders.R.fill(0);
   near.forEach(({ b, d }, i) => {
     boulders.C.set(b.c, 4 * i);
@@ -804,6 +827,7 @@ function setWorld(p, cam, sun) {
   gl.uniform1fv(p.u('uBR'), boulders.R);
   gl.uniform1i(p.u('uBN'), boulders.near.length);
   gl.uniform1i(p.u('uBCut'), boulders.cut);
+  gl.uniform1i(p.u('uBShadow'), boulders.shadow);
 }
 
 const FOV = Math.tan(38 * Math.PI / 180);
@@ -912,13 +936,34 @@ function updateHUD(dt, cam, sun) {
   $('sun').textContent = el > -2
     ? `sun ${fmt(el)}° up · ${fmt(Math.abs(anaLean))}° toward ${anaLean >= 0 ? 'ana' : 'kata'} · ${fmt(Math.abs(ahead))}° ${ahead >= 0 ? 'right' : 'left'}`
     : `night · sun ${fmt(-el)}° below`;
-  $('fps').textContent = `${fmt(fps)} fps · res ${fmt(100 * scene.w / canvas.width)}%${dyn.auto ? ' auto' : ''}`;
+  $('fps').textContent = `${fmt(fps)} fps · res ${fmt(100 * scene.w / canvas.width)}%${prof.gpu > 0 ? ` · gpu ${fmt(prof.gpu, 1)} ms` : ''}`;
 }
 
+// ---------- profiler ----------
+// Moving averages of CPU time per part of the frame, and GPU time per frame (via timer queries where the
+// browser allows them). Read from the console as __hoop.prof.
+const prof = { cpu: {}, gpu: 0, interval: 0 };
+const tq = gl.getExtension('EXT_disjoint_timer_query_webgl2'), queries = [];
+let profT = 0;
+const mark = name => { const t = performance.now(); if (name) prof.cpu[name] = 0.95 * (prof.cpu[name] || 0) + 0.05 * (t - profT); profT = t; };
+function gpuBegin() {
+  if (!tq) return;
+  while (queries.length && gl.getQueryParameter(queries[0], gl.QUERY_RESULT_AVAILABLE)) {
+    const q = queries.shift();
+    if (!gl.getParameter(tq.GPU_DISJOINT_EXT)) prof.gpu = 0.95 * prof.gpu + 0.05 * gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6;
+    gl.deleteQuery(q);
+  }
+  if (queries.length > 4) return null;
+  const q = gl.createQuery(); gl.beginQuery(tq.TIME_ELAPSED_EXT, q); return q;
+}
+function gpuEnd(q) { if (q) { gl.endQuery(tq.TIME_ELAPSED_EXT); queries.push(q); } }
+
 // ---------- main loop ----------
-let last = performance.now(), simT = 0;
+let last = performance.now(), lastRaw = last, simT = 0;
 function frame(now) {
+  prof.interval = 0.95 * prof.interval + 0.05 * (now - last);
   const dt = Math.min(0.05, (now - last) / 1000); last = now; simT += dt;
+  mark();
 
   // look
   if (mouseAlt) {
@@ -938,25 +983,36 @@ function frame(now) {
   zoomRadar((k('Minus') - k('Equal')) * 1.3 * dt);
   state.radar.grow = Math.max(0, Math.min(1, state.radar.grow + (state.radar.big ? 1 : -1) * dt * 4));
 
+  mark('input');
   const input = readInput();
   const sub = 3;
   updateBoulders(player.camera().eye);
   for (let i = 0; i < sub; i++) player.update(dt / sub, input);
   recordTrail();
   state.time += dt;
+  mark('physics');
 
-  updateDyn(dt);
+  updateDyn(Math.min(0.2, (now - lastRaw) / 1000)); lastRaw = now;
   resize();
   const cam = player.camera(), sun = sunDir(state.time);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
+  const q = gpuBegin();
   drawSlice(cam, sun, 0, 0, scene.w, scene.h);
+  mark('slice');
   if (!state.radar.hidden) rad = drawRadar(cam, sun, simT, FOV * scene.w / scene.h);
+  mark('radar');
   present();
+  if (rad) blitRadar(rad);
+  gpuEnd(q);
+  mark('present');
   radar.gaze = gazePoint(cam);
+  mark('gaze');
   drawFaced(cam); drawGazeDot();
-  if (rad) { blitRadar(rad); drawRadarOverlay(rad, sun); } else radar.rect = null;
+  if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
+  mark('overlay');
   updateHUD(dt, cam, sun);
+  mark('hud');
   requestAnimationFrame(frame);
 }
 
@@ -986,7 +1042,7 @@ function frame(now) {
     $('hint').hidden = false;
     if (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches)
       $('hint').textContent = 'Hoop needs a keyboard and mouse to explore.';
-    window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, compassAt, logMap, recordTrail, dbg: { gl, drawRadar, drawSlice, scene, updateBoulders } };   // handle for debugging from the console
+    window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, dbg: { gl, drawRadar, drawSlice, scene, updateBoulders } };   // handle for debugging from the console
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);
