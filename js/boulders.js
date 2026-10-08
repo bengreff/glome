@@ -12,6 +12,13 @@ export const boulders = { all: [], near: [], cut: 0, shadow: 0, C: new Float32Ar
 export function makeBoulders(rand) {
   const player = G.player;
   const gauss = () => rand() + rand() + rand() + rand() - 2, home = player.up();
+  // The first thing you see: a boulder a few steps ahead, its centre a little toward ana, so it swells and
+  // shrinks to nothing as you turn.
+  {
+    const ahead = vec4.norm(vec4.add(vec4.scale(home, Math.cos(9 / PLANET_R)), vec4.scale(player.F, Math.sin(9 / PLANET_R))));
+    const n = vec4.norm(vec4.add(ahead, vec4.scale(player.A, 0.7 / PLANET_R))), r = 1.7;
+    boulders.all.push({ n, r, c: vec4.scale(n, PLANET_R + player.hf.heightAt(n) + 0.3 * r) });
+  }
   for (let i = 0; i < 3400; i++) {
     const n = vec4.norm([gauss(), gauss(), gauss(), gauss()]), h = player.hf.heightAt(n);
     if (h < 0.8) continue;

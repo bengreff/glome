@@ -111,6 +111,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 ## Approximations, honestly
 
 - **Terrain** is a heightfield on S³ plus a few carved landforms. Real 4D ground could overhang anywhere; ours does only at designed places.
+- **Rivers** are still water in carved channels (0.5 m deep), not a fluid simulation: they do not flow.
 - **Planet orbits are prescribed circles.** For these masses and radii, the integrated two-body motion would be these same circles. The planets' spins are prescribed too. Small bodies (you in flight, thrown objects) are integrated in the exact field of the star and both planets, images included.
 - **No atmosphere.** No drag, no aerodynamic heating, and landings are gentle by fiat (a deliberate mercy). The sky's colour is artistic, not scattered light.
 - **Light** is direct light with soft shadows and an ambient term. There is no multiple bouncing.

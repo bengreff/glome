@@ -15,7 +15,8 @@ import { LAWS } from './laws.js';
 import { accelBodyA } from './cosmos.js';
 import * as saveMod from './save.js';
 import * as cosmos from './cosmos.js';
-import { capsuleTerrain, envSD } from './env.js';
+import { capsuleTerrain, envSD, tangents } from './env.js';
+import { MASSIF } from './world.js';
 import { quality, updateSky } from './render.js';
 import { updateSound } from './sounds.js';
 import { gpuObj } from './objects.js';
@@ -141,15 +142,40 @@ function frame(now) {
 // ---------- boot ----------
 (async function boot() {
   try {
-    const data = prefilter(await buildAtlas(), N);
+    const built = await buildAtlas(), data = prefilter(built.data, N);
     tex.atlas = tex3D(N, N, 8 * N, gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, data);
+    tex.water = tex3D(N >> 1, N >> 1, 8 * (N >> 1), gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, built.water);
     tex.noise = makeNoise();
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, tex.atlas);
     gl.bindVertexArray(vao);
-    const player = G.player = new Player(new HeightField(data, N));
+    const player = G.player = new Player(new HeightField(data, N, built.water));
     let seed = 20261006;
     const rand = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
     player.spawn(rand);
+    // You arrive on a gentle hillside within sight of the great massif, facing it.
+    {
+      const T = tangents(MASSIF);
+      let best = null;
+      for (let k = 0; k < 600; k++) {
+        const d = vec4.norm([0, 1, 2, 3].map(i => (rand() - 0.5) * T[0][i] + (rand() - 0.5) * T[1][i] + (rand() - 0.5) * T[2][i]));
+        const m = 80 + 20 * rand(), n = vec4.norm(vec4.add(vec4.scale(MASSIF, Math.cos(m / 250)), vec4.scale(d, Math.sin(m / 250))));
+        const h = player.hf.heightAt(n);
+        if (h < 4 || h > 20 || player.hf.waterAt(n) > 0.01) continue;
+        let rough = 0;
+        for (const t of tangents(n)) rough += Math.abs(player.hf.heightAt(vec4.norm(vec4.add(n, vec4.scale(t, 2 / 250)))) - h);
+        if (!best || rough < best.rough) best = { n, rough };
+      }
+      if (best) {
+        player.pos = vec4.scale(best.n, 250 + player.hf.heightAt(best.n) + 0.05);
+        const u = best.n, toM = vec4.sub(MASSIF, vec4.scale(u, vec4.dot(MASSIF, u)));
+        player.F = vec4.norm(toM);
+        const T2 = tangents(u).map(t => vec4.sub(t, vec4.scale(player.F, vec4.dot(t, player.F))));
+        T2.sort((a, b) => vec4.len(b) - vec4.len(a));
+        player.R = vec4.norm(T2[0]); player.A = vec4.norm(vec4.sub(T2[1], vec4.scale(player.R, vec4.dot(T2[1], player.R))));
+        player.settleFrame();
+        player.pitch = 0.12;
+      }
+    }
     makeRadarVolume();
     makeBoulders(rand);
     player.contact = boulderContact;

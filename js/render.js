@@ -61,7 +61,7 @@ while (8 * N > max3D && N > 32) N >>= 1;
 
 export function buildAtlas() {
   return new Promise((resolve, reject) => {
-    const data = new Float32Array(N * N * N * 8);
+    const data = new Float32Array(N * N * N * 8), NW = N >> 1, water = new Float32Array(NW * NW * NW * 8);
     const progress = new Array(8).fill(0);
     let done = 0;
     for (let c = 0; c < 8; c++) {
@@ -70,8 +70,9 @@ export function buildAtlas() {
       w.onmessage = e => {
         if (e.data.data) {
           data.set(e.data.data, c * N * N * N);
+          water.set(e.data.water, c * NW * NW * NW);
           progress[c] = 1; w.terminate();
-          if (++done === 8) resolve(data);
+          if (++done === 8) resolve({ data, water });
         } else progress[c] = e.data.progress;
         $('bar').style.width = (100 * progress.reduce((a, b) => a + b, 0) / 8).toFixed(1) + '%';
       };
@@ -119,7 +120,7 @@ export function makeNoise() {
   gl.activeTexture(gl.TEXTURE0);
   return t;
 }
-export const tex = { atlas: null, noise: null };
+export const tex = { atlas: null, noise: null, water: null };
 
 // ---------- dynamic resolution ----------
 // Render internally at a fraction of the screen, adjusted to hold ~55-60 fps, then upscale with sharpening.
@@ -201,6 +202,8 @@ export function setWorld(p, cam, sun) {
   gl.uniform2i(p.u('uStarK'), sr[0], sr[1]);
   gl.uniform2i(p.u('uCopyK'), cr[0], cr[1]);
   gl.uniform1f(p.u('uAtmos'), Math.exp(-Math.max(0, Math.hypot(...cam.eye) - PLANET_R - 60) / 220));
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_3D, tex.water);
+  gl.uniform1i(p.u('uWaterL'), 2);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D, tex.noise);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, tex.atlas);
   gl.uniform1i(p.u('uAtlas'), 0);

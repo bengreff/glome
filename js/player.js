@@ -104,7 +104,7 @@ export class Player {
     const wl = len(wish);
     // You cannot swim. You can wade: water deeper than your knees slows you, and past chest depth you fade back
     // to where you stepped in (main.js).
-    const seaR = PLANET_R + SEA, floor = this.ground(u);
+    const seaR = PLANET_R + this.hf.waterAt(u), floor = this.ground(u);   // the sea, or a river
     this.depth = Math.max(0, seaR - floor);
     const wade = this.depth > 0.3 ? Math.max(0.35, 1 - (this.depth - 0.3) / 1.4) : 1;
     const speed = (input.run ? LAWS.RUN : LAWS.WALK) * wade;

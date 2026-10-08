@@ -88,6 +88,25 @@ float chartHeight(vec4 n, int k) {
   float chart = float(2 * k) + (s > 0.0 ? 1.0 : 0.0);
   return texture(uAtlas, vec3((pos.x + 0.5) / uN, (pos.y + 0.5) / uN, (chart * uN + pos.z + 0.5) / (8.0 * uN))).r;
 }
+// The water's surface (the sea, or a river 0.5 m above its bed), on the same charts at half the resolution.
+uniform sampler3D uWaterL;
+float waterAt(vec4 n) {
+  vec4 a = abs(n);
+  float amax = max(max(a.x, a.y), max(a.z, a.w)), NW = uN * 0.5;
+  float sum = 0.0, wsum = 0.0;
+  for (int k = 0; k < 4; k++) {
+    float w = 1.0 - (amax - comp(a, k)) / (0.04 * amax);
+    if (w <= 0.0) continue;
+    w = w * w * (3.0 - 2.0 * w);
+    float s = comp(n, k), m = abs(s);
+    vec3 u = (k == 0 ? n.yzw : k == 1 ? vec3(n.x, n.z, n.w) : k == 2 ? vec3(n.x, n.y, n.w) : n.xyz) / m;
+    vec3 pos = clamp((u * 0.5 + 0.5) * (NW - 1.0), 0.0, NW - 1.0);
+    float chart = float(2 * k) + (s > 0.0 ? 1.0 : 0.0);
+    sum += w * texture(uWaterL, vec3((pos.x + 0.5) / NW, (pos.y + 0.5) / NW, (chart * NW + pos.z + 0.5) / (8.0 * NW))).r;
+    wsum += w;
+  }
+  return max(uSea, sum / wsum);
+}
 const float SEAM = 0.04;
 // Same seam blend as HeightField.heightAt on the CPU: what you see is what you walk on.
 float heightAt(vec4 n) {
@@ -578,6 +597,12 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
     col = applyFog(shadeWater(ro + rd * tW, rd, tW, tT, ro), upE, tW);
   } else if (tT > 0.0 && !(under && tW > 0.0 && tW < tT)) {
     tOut = tT;
+    vec4 pT = ro + rd * tT, nT = normalize(pT);
+    float hT = length(pT) - uPR, wl = waterAt(nT);
+    if (wl > uSea + 0.05 && wl > hT + 0.03) {                // a river: shallow water over its bed
+      float down = -dot(rd, nT), tw = max(0.02, tT - (wl - hT) / max(down, 0.08));
+      col = shadeWater(ro + rd * tw, rd, tw, tT, ro);
+    } else
     col = shadeTerrain(ro + rd * tT, rd, tT, true);
     col = under ? mix(col, vec3(0.015, 0.10, 0.13), 1.0 - exp(-tT * 0.09)) : applyFog(col, upE, tT);
   } else if (under) {
