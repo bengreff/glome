@@ -28,6 +28,8 @@ import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves } from './landforms.js';
 import { growTree, trees, rope as ropeSlot } from './trees.js';
 import { Rope } from './rope.js';
+import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
+import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { uploadTrees } from './render.js';
 import { orbitOf, toBody, dirToBody } from './cosmos.js';
@@ -146,7 +148,13 @@ function softReset() {
 let last = performance.now(), lastRaw = last, physAcc = 0;
 const STEP = 1 / 120;
 const accel = (x, v) => accelBodyA(x, v, state.time);
+// One bad frame must never stop the world: errors are recorded (and logged once) and the loop carries on.
 function frame(now) {
+  try { frameBody(now); }
+  catch (e) { if (G.lastError !== e.stack) console.error(e); G.lastError = e.stack; G.errors = (G.errors || 0) + 1; last = now; }
+  requestAnimationFrame(frame);
+}
+function frameBody(now) {
   const player = G.player;
   prof.interval = 0.95 * prof.interval + 0.05 * (now - last);
   const dt = Math.min(0.05, (now - last) / 1000); last = now; G.simT += dt;
@@ -209,6 +217,11 @@ function frame(now) {
   const cam = cameraNow(), sun = updateSky(state.time, cam.eye);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
+  if (player.onB == null) {
+    stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
+    const cd = creatureDraw(cam.eye, cam.A, player.hf);
+    G.creatureItems = cd.items; legSlot.caps = cd.caps;
+  } else { G.creatureItems = []; legSlot.caps = []; }
   uploadObjects(cam);
   // the first sight of your own planet's copies round the hoop: a copy inside your slice, in front of you, in the sky
   if (!G.flags.copiesSeen) {
@@ -246,13 +259,14 @@ function frame(now) {
   updateHUD(dt, cam, sun);
   updateSound(dt, cam);
   mark('hud');
-  requestAnimationFrame(frame);
 }
 
 // ---------- boot ----------
 (async function boot() {
+  const bootT0 = performance.now(), stamps = {};
   try {
     const built = await buildAtlas(), data = prefilter(built.data, N);
+    stamps.terrain = performance.now() - bootT0;
     tex.atlas = tex3D(N, N, 8 * N, gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, data);
     tex.water = tex3D(N >> 1, N >> 1, 8 * (N >> 1), gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, built.water);
     tex.noise = makeNoise();
@@ -323,6 +337,9 @@ function frame(now) {
       G.partSpots = [p1, p2, p3, p4];
     }
     hooks.objects = objectsSave;
+    initCreatures(player.hf);
+    hooks.creatures = creaturesSave;
+    G.creatures = creatures;
     {
       // a rope, lying in loose loops a little way from the start
       const home = player.up(), pts = [];
@@ -344,9 +361,11 @@ function frame(now) {
       const e0 = vec4.dot(sunDir(t), up), e1 = vec4.dot(sunDir(t + 0.5), up);
       if (e0 > 0.3 && e0 < 0.38 && e1 > e0) { state.time = t; break; }
     }
+    stamps.world = performance.now() - bootT0;
     loadWorld();                       // a saved world, if there is one, replaces the fresh start
     startAutosave();
     bindSettings();
+    G.boot = { ...stamps, total: performance.now() - bootT0 };
     $('loading').hidden = true;
     $('hud').hidden = !state.help;
     $('hint').hidden = false;
@@ -354,7 +373,7 @@ function frame(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

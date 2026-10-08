@@ -11,7 +11,7 @@ import { join } from 'node:path';
 const args = process.argv.slice(2), gpu = args.includes('--gpu');
 const [url, out, stepsArg] = args.filter(a => a !== '--gpu');
 const profile = mkdtempSync(join(tmpdir(), 'glome-chrome-'));
-const port = gpu ? 9335 : 9333;
+const port = +(process.env.CDP_PORT || (gpu ? 9335 : 9333));
 const size = gpu ? { width: 1512, height: 982, deviceScaleFactor: 2 } : { width: 1280, height: 800, deviceScaleFactor: 1 };
 const flags = gpu ? ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
@@ -19,6 +19,8 @@ const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chro
   `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
 const cleanup = () => { try { chrome.kill('SIGKILL'); } catch {} try { rmSync(profile, { recursive: true, force: true }); } catch {} };
 process.on('exit', cleanup);
+process.on('SIGTERM', () => { cleanup(); process.exit(1); });
+process.on('SIGINT', () => { cleanup(); process.exit(1); });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 50; i++) { try { targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); if (targets.length) break; } catch {} await sleep(200); }

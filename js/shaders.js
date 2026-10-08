@@ -257,6 +257,22 @@ float boulderShadow(vec4 ro, vec4 rd) {
   return res;
 }
 
+// A duocylinder of radius a (the set x² + y² <= a² and z² + w² <= a², in its own frame): a ray is inside it while it
+// is inside both solid cylinders, so the entry is the later of the two entries. Rollers are duocylinders.
+float hitDuo(vec4 o, vec4 d, float a, out vec4 n) {
+  float t0 = -1e9, t1 = 1e9; n = vec4(0.0);
+  for (int k = 0; k < 2; k++) {
+    vec2 oo = k == 0 ? o.xy : o.zw, dd = k == 0 ? d.xy : d.zw;
+    float A = dot(dd, dd), B = dot(oo, dd), C = dot(oo, oo) - a * a;
+    if (A < 1e-12) { if (C > 0.0) return -1.0; continue; }
+    float disc = B * B - A * C;
+    if (disc < 0.0) return -1.0;
+    float s = sqrt(disc), ta = (-B - s) / A, tb = (-B + s) / A;
+    if (ta > t0) { t0 = ta; vec2 q = oo + dd * ta; n = k == 0 ? vec4(q, 0.0, 0.0) / a : vec4(0.0, 0.0, q) / a; }
+    t1 = min(t1, tb);
+  }
+  return t0 < t1 && t0 > 0.0 ? t0 : -1.0;
+}
 // Objects: 4D balls and tesseracts with any orientation in SO(4). The ray is carried into the object's own frame
 // (the transpose of its rotation), where a tesseract is the box |x_i| <= h: a 4D slab test.
 uniform int uGhost;          // the index of the ghost (where a held object would come to rest), or -1
@@ -270,9 +286,12 @@ float hitObject(vec4 ro, vec4 rd, float tMax, int count, out int idx, out vec4 n
     if (uOP[i].x < 0.5) {
       float b = dot(oc, rd), c = dot(oc, oc) - h * h, d = b * b - c;
       if (d > 0.0) { float t = -b - sqrt(d); if (t > 0.0 && t < best) { best = t; idx = i; nrm = (oc + rd * t) / h; } }
+    } else if (uOP[i].x > 1.5) {
+      vec4 n4; float t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4);
+      if (t > 0.0 && t < best) { best = t; idx = i; nrm = uOM[i] * n4; }
     } else {
       vec4 o = oc * uOM[i], dd = rd * uOM[i];           // into the body frame: Mᵀ·v
-      vec4 inv = 1.0 / dd;
+      vec4 inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));   // never 0/0
       vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv;
       vec4 tn = min(t1, t2), tf = max(t1, t2);
       float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
@@ -289,12 +308,13 @@ float hitObjectOne(vec4 ro, vec4 rd, int i, out vec4 nrm) {
   vec4 oc = ro - uOC[i];
   float h = uOP[i].y;
   nrm = vec4(0.0);
+  if (uOP[i].x > 1.5) { vec4 n4; float t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4); nrm = uOM[i] * n4; return t; }
   if (uOP[i].x < 0.5) {
     float b = dot(oc, rd), c = dot(oc, oc) - h * h, d = b * b - c;
     if (d <= 0.0) return -1.0;
     float t = -b - sqrt(d); nrm = (oc + rd * t) / h; return t;
   }
-  vec4 o = oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / dd;
+  vec4 o = oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));
   vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
   float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
   if (tNear >= tFar || tNear <= 0.0) return -1.0;
@@ -311,11 +331,11 @@ float objectShadow(vec4 ro, vec4 rd) {
     float t = dot(oc, rd);
     if (t <= 0.0) continue;
     float h = uOP[i].y;
-    if (uOP[i].x < 0.5) {
-      float miss = sqrt(max(dot(oc, oc) - t * t, 0.0)) - h;
+    if (uOP[i].x < 0.5 || uOP[i].x > 1.5) {                // balls (and rollers, by their bounding ball)
+      float miss = sqrt(max(dot(oc, oc) - t * t, 0.0)) - h * (uOP[i].x > 1.5 ? 1.2 : 1.0);
       res = min(res, clamp(6.0 * miss / t + 0.5, 0.0, 1.0));
     } else {
-      vec4 o = -oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / dd;
+      vec4 o = -oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));
       vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
       float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
       if (tNear < tFar && tFar > 0.0) res = 0.0;
@@ -535,7 +555,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   if (mat < 0.5) { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); nb = normalize(n - 0.04 * (g1 - n * dot(g1, n))); }
   else if (mat < 1.5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; }
   else { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
-  if (uOP[i].x > 0.5) {                                    // tesseract: darken the edges of the slice's polyhedron
+  if (uOP[i].x > 0.5 && uOP[i].x < 1.5) {                  // tesseract: darken the edges of the slice's polyhedron
     vec4 a = step(vec4(h * 0.93), abs(q));
     float ed = a.x + a.y + a.z + a.w;
     alb *= ed >= 2.0 ? 0.62 : 1.0;
@@ -619,10 +639,10 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
 }
 
 // Trees: 4D capsules (branches) and balls (foliage), from a float texture: three texels per capsule.
-const int NTREE = 4;          // three trees and the rope
+const int NTREE = 6;          // three trees, the rope, the walkers' legs
 uniform sampler2D uTreeTex;
 uniform vec4 uTC[NTREE];     // each tree's bounding ball: centre ...
-uniform vec4 uTRad;          // ... and radius
+uniform float uTRad[NTREE];  // ... and radius
 uniform ivec2 uTS[NTREE];    // first capsule, how many
 uniform int uTN;
 // Ray–capsule (works in any dimension: it only uses dot products).
@@ -647,7 +667,7 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf) {
     float R = uTRad[k], b = dot(oc, rd), c = dot(oc, oc) - R * R;
     if (b * b < c || (b > 0.0 && c > 0.0)) continue;
     int s0 = uTS[k].x, cnt = uTS[k].y;
-    for (int i = 0; i < 96; i++) {
+    for (int i = 0; i < 128; i++) {
       if (i >= cnt) break;
       int j = s0 + i;
       vec4 pa = texelFetch(uTreeTex, ivec2(3 * j, 0), 0), pb = texelFetch(uTreeTex, ivec2(3 * j + 1, 0), 0), q = texelFetch(uTreeTex, ivec2(3 * j + 2, 0), 0);
@@ -665,7 +685,8 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf) {
 vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t) {
   vec4 up = normalize(p), g;
   float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, g);
-  vec3 alb = leaf > 1.5 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                   // rope: hemp
+  vec3 alb = leaf > 2.5 ? vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1)                                   // a walker's legs
+           : leaf > 1.5 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                   // rope: hemp
            : leaf > 0.5 ? mix(vec3(0.09, 0.22, 0.06), vec3(0.24, 0.34, 0.10), 0.5 + 0.5 * d1) : vec3(0.27, 0.21, 0.16) * (0.82 + 0.18 * d1);
   vec4 nb = normalize(n - (leaf > 0.5 ? 0.35 : 0.12) * (g - n * dot(g, n)));
   float dif = rowLight(p, nb, up), sh = 1.0;

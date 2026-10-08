@@ -7,7 +7,7 @@ import { gpuObj } from './objects.js';
 import { skyUniforms } from './cosmos.js';
 import { bUniforms, NORMAL_DATA } from './planetB.js';
 import { carveUniforms } from './landforms.js';
-import { treeUniforms, treeTexData, ropeTexData, rope as ropeSlot, ROPE_CAPS } from './trees.js';
+import { treeUniforms, treeTexData, ropeTexData, rope as ropeSlot, ROPE_CAPS, legs as legSlot, legTexData, LEG_CAPS } from './trees.js';
 
 const $ = id => document.getElementById(id);
 export const canvas = $('view'), overlay = $('overlay');
@@ -261,14 +261,15 @@ export function setWorld(p, cam, sun) {
   gl.uniform1i(p.u('uON'), gpuObj.n);
   gl.uniform1i(p.u('uOCut'), gpuObj.cut);
   gl.uniform1i(p.u('uGhost'), gpuObj.ghost);
-  if (treeTex && ropeSlot.obj && p === progSlice) {           // the rope moves: rewrite its capsules
+  if (treeTex && p === progSlice) {                          // the rope and the walkers' legs move: rewrite them
     gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, ropeSlot.start * 3, 0, ROPE_CAPS * 3, 1, gl.RGBA, gl.FLOAT, ropeTexData());
+    if (ropeSlot.obj) gl.texSubImage2D(gl.TEXTURE_2D, 0, ropeSlot.start * 3, 0, ROPE_CAPS * 3, 1, gl.RGBA, gl.FLOAT, ropeTexData());
+    if (legSlot.caps.length) gl.texSubImage2D(gl.TEXTURE_2D, 0, legSlot.start * 3, 0, LEG_CAPS * 3, 1, gl.RGBA, gl.FLOAT, legTexData());
     gl.activeTexture(gl.TEXTURE0);
   }
   const tu = treeUniforms(cam.eye, cam.A);
   gl.uniform4fv(p.u('uTC'), tu.C);
-  gl.uniform4fv(p.u('uTRad'), tu.R);
+  gl.uniform1fv(p.u('uTRad'), tu.R);
   gl.uniform2iv(p.u('uTS'), tu.S);
   gl.uniform1i(p.u('uTN'), treeTex ? tu.n : 0);
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex); gl.uniform1i(p.u('uTreeTex'), 6); gl.activeTexture(gl.TEXTURE0);

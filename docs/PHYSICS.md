@@ -101,6 +101,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 - **Gaits** are kinematic: feet are placed by rule, then the body is carried by them.
 - **Walkers** stand on a tetrahedron of four feet, the smallest stable stance on 3D ground, and walk on two alternating tetrapods (eight legs).
 - **Rollers** are duocylinders rolling in two planes at once.
+- **In the game:** a walker's eight hips are the corners of its body's bottom cell (a cube), which split into two tetrahedra: the two tetrapods. A slice through a walker's middle misses every leg (they all lie off-centre toward ana or kata), so you see legs only as it moves off your slice. A roller is drawn exactly (a ray is inside a duocylinder while it is inside both solid cylinders), but its rolling is kinematic: it turns in its two planes at rates set by its speed. Populations: walkers gain energy on grass and are born when well fed, if their herd has room; rollers live on sunlight; both age and die.
 
 ## The system (toy scale, tunable)
 

@@ -7,9 +7,10 @@ import { vec4 } from './player.js';
 import { tangents } from './env.js';
 
 export const trees = [];            // { n, base, caps: [{ a, b, r, leaf }], c, R }
-export const MAXT = 4;           // three trees, and the rope (drawn with the same capsules)
-export const ROPE_CAPS = 40;
+export const MAXT = 6;           // three trees, the rope, and the walkers' legs (drawn with the same capsules)
+export const ROPE_CAPS = 40, LEG_CAPS = 128;
 export const rope = { obj: null, start: 0 };
+export const legs = { caps: [], start: 0 };
 let seed = 777;
 const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
 
@@ -41,12 +42,19 @@ export function growTree(n, h, { height = 7, depth = 3, spread = 0.75 } = {}) {
 }
 // All capsules as a float texture: three texels each (a, b, [radius, leaf, 0, 0]).
 export function treeTexData() {
-  const all = trees.flatMap(t => t.caps), data = new Float32Array((all.length + ROPE_CAPS) * 12);
+  const all = trees.flatMap(t => t.caps), data = new Float32Array((all.length + ROPE_CAPS + LEG_CAPS) * 12);
   all.forEach((k, i) => { data.set(k.a, 12 * i); data.set(k.b, 12 * i + 4); data.set([k.r, k.leaf, 0, 0], 12 * i + 8); });
   let start = 0;
   for (const t of trees) { t.start = start; start += t.caps.length; }
-  rope.start = start;                                   // the rope's capsules follow, rewritten every frame
-  return { data, count: all.length + ROPE_CAPS };
+  rope.start = start;                                   // the rope's capsules follow, rewritten every frame,
+  legs.start = start + ROPE_CAPS;                       // and then the walkers' legs
+  return { data, count: all.length + ROPE_CAPS + LEG_CAPS };
+}
+// The walkers' legs (leaf = 3), for the texture.
+export function legTexData() {
+  const out = new Float32Array(LEG_CAPS * 12);
+  legs.caps.slice(0, LEG_CAPS).forEach(([a, b], i) => { out.set(a, 12 * i); out.set(b, 12 * i + 4); out.set([0.05, 3, 0, 0], 12 * i + 8); });
+  return out;
 }
 // The rope's links as capsules (leaf = 2 marks rope), for the texture.
 export function ropeTexData() {
@@ -57,7 +65,7 @@ export function ropeTexData() {
 }
 // The trees your slice cuts and that are near enough, for the renderer.
 export function treeUniforms(eye, A) {
-  const C = new Float32Array(MAXT * 4), S = new Int32Array(MAXT * 2), Rs = [0, 0, 0, 0];
+  const C = new Float32Array(MAXT * 4), S = new Int32Array(MAXT * 2), Rs = new Float32Array(MAXT);
   let n = 0;
   for (const t of trees) {
     if (vec4.len(vec4.sub(t.c, eye)) > 260 + t.R) continue;
@@ -73,6 +81,11 @@ export function treeUniforms(eye, A) {
     if (vec4.len(vec4.sub(c, eye)) < 150 + R && Math.abs(vec4.dot(vec4.sub(c, eye), A)) < R) {
       C.set(c, 4 * n); S[2 * n] = rope.start; S[2 * n + 1] = Math.min(ROPE_CAPS, r.x.length - 1); Rs[n] = R; n++;
     }
+  }
+  if (legs.caps.length && n < MAXT) {
+    let c = [0, 0, 0, 0]; for (const [a] of legs.caps) c = vec4.add(c, a); c = vec4.scale(c, 1 / legs.caps.length);
+    let R = 0; for (const [a, b] of legs.caps) R = Math.max(R, vec4.len(vec4.sub(a, c)), vec4.len(vec4.sub(b, c)));
+    C.set(c, 4 * n); S[2 * n] = legs.start; S[2 * n + 1] = Math.min(LEG_CAPS, legs.caps.length); Rs[n] = R + 0.05; n++;
   }
   return { C, S, R: Rs, n, list: trees };
 }

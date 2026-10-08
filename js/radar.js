@@ -353,6 +353,21 @@ export function drawRadarOverlay(r, sun) {
       if (cut) octx.fillRect(P[0] - sz / 2, P[1] - sz / 2, sz, sz); else octx.strokeRect(P[0] - sz / 2, P[1] - sz / 2, sz, sz);
     }
   }
+  // creatures: walkers as small warm diamonds, rollers as accent rings
+  if (RB <= 200 && G.creatures) {
+    for (const c of G.creatures.list) {
+      const m = logMap(c.n, B, u);
+      if (Math.hypot(...m) > RB * 0.97) continue;
+      const P = proj(m), z = 3 * k;
+      if (c.kind === 'walker') {
+        octx.fillStyle = 'rgba(240, 200, 150, 0.9)';
+        octx.beginPath(); octx.moveTo(P[0], P[1] - z); octx.lineTo(P[0] + z, P[1]); octx.lineTo(P[0], P[1] + z); octx.lineTo(P[0] - z, P[1]); octx.closePath(); octx.fill();
+      } else {
+        octx.strokeStyle = 'rgba(82, 220, 200, 0.95)'; octx.lineWidth = 1.4 * k;
+        octx.beginPath(); octx.arc(P[0], P[1], z, 0, 7); octx.stroke();
+      }
+    }
+  }
   // the pouch: one dot per impulse stone, under the ball
   if (G.objects && G.objects.pouch > 0) {
     octx.fillStyle = 'rgba(82, 220, 200, 0.95)';

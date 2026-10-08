@@ -231,6 +231,10 @@ export function uploadObjects(cam) {
     if (b.shape === 'tesseract') { const M = R4.toRows(b.rot); reach = 0; for (let j = 0; j < 4; j++) reach += b.half * Math.abs(M[0][j] * cam.A[0] + M[1][j] * cam.A[1] + M[2][j] * cam.A[2] + M[3][j] * cam.A[3]); }
     list.push({ b, d, cut: a < reach });
   }
+  for (const it of G.creatureItems || []) {                  // the creatures near you (creatures.js)
+    const a = Math.abs(vec4.dot(vec4.sub(it.pos, cam.eye), cam.A));
+    list.push({ b: it, d: it.d, cut: a < (it.shape === 'tesseract' ? it.half * 2 : it.size * 1.42) });
+  }
   if (objects.ghost) {
     const g = objects.ghost;
     list.push({ b: { pos: g.pos, rot: g.rot, shape: g.shape, half: g.half, size: g.half, mat: 3, glow: 0.4, ghost: true }, d: 0, cut: true });
@@ -240,7 +244,7 @@ export function uploadObjects(cam) {
   shown.forEach(({ b, cut }, i) => {
     gpuObj.C.set(b.pos, 4 * i);
     gpuObj.M.set(R4.toMatrix(b.rot), 16 * i);
-    gpuObj.P.set([b.shape === 'tesseract' ? 1 : 0, b.shape === 'tesseract' ? b.half : b.size, b.mat || 0, b.glow || 0], 4 * i);
+    gpuObj.P.set([b.shape === 'tesseract' ? 1 : b.shape === 'duo' ? 2 : 0, b.shape === 'tesseract' ? b.half : b.size, b.mat || 0, b.glow || 0], 4 * i);
     if (cut) gpuObj.cut = i + 1;
     if (b.ghost) gpuObj.ghost = i;
   });

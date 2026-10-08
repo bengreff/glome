@@ -126,3 +126,7 @@ Everything the owner decided while defining v1.0, from 2026-10-07. Where this fi
 - **M4: the hoop copies' first sight, the first escape and the landing on B each fire their Bach cue once per world** (saved flags).
 - **M4: B has a return pad** (one floor, in the accent colour, 33 m/s along your gaze): without it a landing on B would strand you until the console.
 - **Fixed on the way:** the star field used a float hash that GPUs with fast maths turn into moiré; it is now an exact integer hash. An uninitialised variable drew a phantom tree on some GPUs. The scene is dithered before its 8-bit buffer, and sharpening fades out in the dark, so night and space don't band.
+- **M5: no third species** (DESIGN's first cut). Walkers and rollers only.
+- **M5: the ecosystem is coarse on purpose:** walkers think twice a second, herd with neighbours within 30 m, graze on grass (2–22 m above the sea), are born when well fed if fewer than eight share their 30 m, and live 25 minutes; rollers live on sunlight and live 43 minutes; caps of 90 and 20. Creatures more than 90 m away are simulated but not drawn.
+- **Review fixes (from the M2–M4 review):** standing on B is now saved and restored (it was lost on reload); the shader's slab tests can no longer divide 0 by 0; boulder contact is skipped on B.
+- **The frame loop can't die:** an error in one frame is logged once and recorded (`__glome.G.lastError`), and the world goes on.

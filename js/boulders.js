@@ -69,6 +69,7 @@ export function updateBoulders(eye) {
 // about 42° of head-on and you stick; only a glancing push slides you around it, through ana if that is where its
 // surface leans. Holding Space against one scrambles you up its surface; near the top you can stand on it.
 export function boulderContact(p, dt, input) {
+  if (p.onB != null) return;                                  // boulders are on planet A
   const up = p.up(), MU = LAWS.MU;
   for (const b of boulders.near) {
     const ca = vec4.dot(vec4.sub(b.c, p.pos), up);                       // the nearest point of the capsule's axis
