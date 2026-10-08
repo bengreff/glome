@@ -7,6 +7,7 @@ import { G } from './game.js';
 import { LAWS } from './laws.js';
 import { vec4 } from './player.js';
 import { gravityInertial, toInertial, velToInertial, toBody, velToBody, dirToInertial, dirToBody, orbitOf, GM } from './cosmos.js';
+import { nearB, groundRadiusB } from './planetB.js';
 
 export const flight = { active: false, x: null, v: null, F: null, R: null, A: null, time: 0, maxR: 0, escaped: false };
 const ENTER = 20, LEAVE = 14;          // heights above the ground (m) to switch into and out of flight
@@ -19,10 +20,29 @@ export function updateFlightMode(p) {
 function enter(p) {
   const t = G.state.time;
   flight.active = true; flight.time = 0;
+  if (p.onB != null) {                                    // leaving B: its frame is inertial, carried on its orbit
+    const o = orbitOf('B', t);
+    flight.x = vec4.add(vec4.add(o.c, [0, 0, 0, p.onB * LAWS.L]), p.pos); flight.v = vec4.add(o.v, p.vel);
+    flight.F = p.F.slice(); flight.R = p.R.slice(); flight.A = p.A.slice();
+    p.onB = null; p.groundFn = null;
+    p.pos = toBody(flight.x, t); p.vel = velToBody(flight.x, flight.v, t);
+    return;
+  }
   flight.x = toInertial(p.pos, t); flight.v = velToInertial(p.pos, p.vel, t);
   flight.F = dirToInertial(p.F, t); flight.R = dirToInertial(p.R, t); flight.A = dirToInertial(p.A, t);
 }
 function leave(p) { flight.active = false; }
+// Touching B ends the flight: you land, gently (there is no air to slow you; landings are soft by fiat).
+function landOnB(p, nb) {
+  flight.active = false;
+  const u = vec4.norm(nb.d);
+  p.onB = nb.k; p.groundFn = groundRadiusB;
+  p.pos = vec4.scale(u, groundRadiusB(u) + 0.02); p.vel = [0, 0, 0, 0];
+  p.F = flight.F.slice(); p.R = flight.R.slice(); p.A = flight.A.slice();
+  p.settleFrame();
+  p.grounded = true;
+  if (!G.flags.landedB) { G.flags.landedB = true; G.audio?.cue('landB'); }
+}
 
 // One fixed step of flight. Returns false if the flight should end in a soft reset (the star, or adrift too long).
 export function stepFlight(p, dt) {
@@ -42,7 +62,9 @@ export function stepFlight(p, dt) {
   p.grounded = false;
   const rA = vec4.len(p.pos);
   flight.maxR = Math.max(flight.maxR, rA);
-  if (!flight.escaped && rA > 840) { flight.escaped = true; G.audio?.cue('escape'); G.onEscape?.(); }
+  if (!G.flags.escaped && rA > 840) { G.flags.escaped = true; G.audio?.cue('escape'); }
+  const nb = nearB(x, t1);
+  if (nb.r < 140 && nb.r < groundRadiusB(vec4.scale(nb.d, 1 / nb.r)) + 0.05) { landOnB(p, nb); return true; }
   // the star: touching it is the end of this flight (nothing kills you: a quiet fade home)
   if (vec4.len(x) < LAWS.STAR_R + 5) return false;
   if (flight.time > 9 * 60) return false;                     // adrift for nine minutes

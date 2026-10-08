@@ -28,6 +28,7 @@ export const KINDS = {
   tessL: { shape: 'tesseract', size: 0.5, density: DENSITY.stone, mat: 1 },
   stone: { shape: 'glome', size: 0.09, mass: 2.5, mat: 2, glow: 0.35 },          // an impulse stone
   lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 1, glow: 0.9, light: [1.9, 1.35, 0.75] },
+  part: { shape: 'tesseract', size: 0.26, mass: 14, mat: 2, glow: 0.25 },          // a launcher part (tiers I–IV): it doesn't roll
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
 const THROW_MAX = 260, THROW_VMAX = 14;   // a full charge is a 260 N·s impulse, at most 14 m/s
@@ -105,10 +106,10 @@ function holdPose(b, cam) {
 export function lookedAt(cam, reach = 3.2) {
   const w = objects.world;
   const hit = w.raycast(cam.eye, cam.F, reach, objects.held);
-  if (hit) return hit.body;
+  if (hit) return hit.body.fixed ? null : hit.body;
   let best = null, bd = 0.3;
   for (const b of w.bodies) {
-    if (b === objects.held) continue;
+    if (b === objects.held || b.fixed) continue;
     const d = vec4.sub(b.pos, cam.eye), t = vec4.dot(d, cam.F);
     if (t < 0 || t > reach) continue;
     const miss = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))) - b.bound;
@@ -257,16 +258,17 @@ export const objectsSave = {
     return {
       pouch: objects.pouch,
       held: objects.held ? objects.held.id : null,
-      bodies: objects.world.bodies.map(b => ({ id: b.id, kind: b.kind, pos: b.pos.slice(), vel: b.vel.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) }, omega: b.omega.map(r5), sleeping: b.sleeping, holdRel: b.holdRel || null, tag: b.tag || null })),
+      bodies: objects.world.bodies.filter(b => !b.fixed).map(b => ({ id: b.id, kind: b.kind, tier: b.tier, pos: b.pos.slice(), vel: b.vel.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) }, omega: b.omega.map(r5), sleeping: b.sleeping, holdRel: b.holdRel || null, tag: b.tag || null })),
     };
   },
   load(s) {
     const w = objects.world;
-    w.bodies.length = 0;
+    w.bodies = w.bodies.filter(b => b.fixed);                        // fixed things (the launcher) are rebuilt, not saved
     objects.pouch = s.pouch || 0;
     for (const o of s.bodies) {
+      if (!KINDS[o.kind]) continue;
       const b = spawnAt(o.kind, o.pos);
-      b.vel = o.vel; b.rot = o.rot; b.omega = o.omega; b.sleeping = o.sleeping; b.tag = o.tag;
+      b.vel = o.vel; b.rot = o.rot; b.omega = o.omega; b.sleeping = o.sleeping; b.tag = o.tag; b.tier = o.tier;
       if (o.id === s.held && o.holdRel) { objects.held = b; b.held = true; b.kinematic = true; b.holdRel = o.holdRel; }
     }
   },

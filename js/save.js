@@ -40,6 +40,7 @@ function worldRecord() {
   const rec = {
     version: SAVE_VERSION, savedAt: new Date().toISOString(),
     time: G.state.time,
+    flags: { ...G.flags },
     player: { pos: p.pos.slice(), vel: vec(p.vel), F: vec(p.F), R: vec(p.R), A: vec(p.A), pitch: r5(p.pitch),
               dry: p.dry && { pos: p.dry.pos.slice(), F: vec(p.dry.F), R: vec(p.dry.R), A: vec(p.dry.A) } },
   };
@@ -69,6 +70,7 @@ export function loadWorld() {
   try {
     const rec = migrate(JSON.parse(raw)), p = G.player, q = rec.player;
     G.state.time = rec.time;
+    Object.assign(G.flags, rec.flags || {});
     p.pos = q.pos; p.vel = q.vel; p.F = q.F; p.R = q.R; p.A = q.A; p.pitch = q.pitch; p.dry = q.dry || null;
     p.settleFrame();
     for (const [name, h] of Object.entries(hooks)) if (name in rec) { try { h.load(rec[name]); } catch (e) { console.warn('load', name, e); } }

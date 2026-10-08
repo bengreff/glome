@@ -8,6 +8,7 @@ export const G = {
     facing: null, faced: null,
   },
   player: null,
+  flags: {},              // what has happened in this world (first sights, escapes, solved artifacts): saved
   simT: 0,                 // seconds since the world started this session (wall clock, capped per frame)
 };
 

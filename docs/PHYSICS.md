@@ -87,6 +87,14 @@ A 4D capsule from 0.3 m to 1.75 m along the local up, radius 0.3 m.
 
 A chain of particles with distance constraints (position-based dynamics) that collides with the terrain and bodies. In 4D a rope can always pass another rope or itself by moving through ana, because a 1D curve cannot block another 1D curve there. So a knot never holds.
 
+- **Checked** (tools/test-rope.mjs): a knot is held by its crossings, so the test makes one crossing and presses one strand down through the other. Confined to a 3D slice, the upper strand stays above (the crossing holds). Free in 4D, with the strands a hair (2 mm) off any single slice, it ends 0.42 m below, and the closest the two strands ever come is exactly their touching distance (0.0600 m for 0.03 m radius): it slipped round through ana without passing through anything. Any crossing can be changed this way, so no knot can hold.
+- **Seen in a slice,** a rope is a few dots: a curve meets a 3D slice only at points. You see a stretch of it only where it lies in your slice.
+
+## Landforms and trees
+
+- **Hollows** are 4D capsules and balls subtracted from the ground, in the renderer and the physics alike (the walker finds the floor of a hollow below the ground's surface). The cave's only tunnel leaves its chamber toward ana from the path that leads there; there is also an arch through an island and an overhang on the massif.
+- **Trees** are 4D capsules (branches spreading in all three ground directions) and balls (foliage), traced exactly. A slice cuts a branch only where the branch crosses it, so most views of a tree are floating pieces.
+
 ## Creatures
 
 - **Bodies** are dynamic 4D rigid bodies.
@@ -109,13 +117,17 @@ A chain of particles with distance constraints (position-based dynamics) that co
 | B's orbit | radius 3.2 km, year 16 min, speed 21 m/s |
 | A → B (minimum-energy transfer) | about 5 m/s beyond escape, 6 min coast; a launcher gives much faster arcs |
 | A's sphere of influence (3D far-field estimate) | about 840 m from its centre |
-| Launcher, straight up from A | 30 m/s → 62 m · 40 m/s → 160 m · 45 m/s → 282 m · 49.5 m/s → 565 m · 52 m/s → 985 m · 56.5 m/s escapes |
+| Launcher, straight up from A (sea level) | 30 m/s → 62 m · 40 m/s → 160 m · 45 m/s → 282 m · 49.5 m/s → 565 m · 52 m/s → 985 m · 56.5 m/s escapes |
+| From the massif's summit (46 m, where the launcher stands) | gravity 6.1 m/s² · a 60 m hop 23.7 m/s · a 200 m arc 34.7 m/s · circular across the hoop 42.4 m/s · escape 49.7 m/s · the spin carries the summit at 6.4 m/s. The launcher's tiers: 24, 35, 43, 52 m/s (tier II measured in the game: 203 m). |
+| Planet B (120-cell, floors at 115 m) | escape 28 m/s; its return pad gives 33 m/s; a tier IV launch aimed by the space map lands on B after 90–120 s |
 | The sun from A | 3.4° in radius, with images along the hoop at 21.8°, 38.7°, 50.2°, … |
 
 ## Approximations, honestly
 
 - **Terrain** is a heightfield on S³ plus a few carved landforms. Real 4D ground could overhang anywhere; ours does only at designed places.
 - **Rivers** are still water in carved channels (0.5 m deep), not a fluid simulation: they do not flow.
+- **Planet B** is a 120-cell (floors 115 m from its centre, corners 124 m), but its gravity is that of a uniform ball of radius 120 m.
+- **Flight** is a kick-drift-kick leapfrog in the inertial frame at 1/120 s; the space map predicts with the same integrator at 0.02–0.1 s steps. Leaving and landing switch frames exactly (the conversions are rotations and translations).
 - **Planet orbits are prescribed circles.** For these masses and radii, the integrated two-body motion would be these same circles. The planets' spins are prescribed too. Small bodies (you in flight, thrown objects) are integrated in the exact field of the star and both planets, images included.
 - **No atmosphere.** No drag, no aerodynamic heating, and landings are gentle by fiat (a deliberate mercy). The sky's colour is artistic, not scattered light.
 - **Light** is direct light with soft shadows and an ambient term. There is no multiple bouncing.

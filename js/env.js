@@ -4,6 +4,8 @@ import { PLANET_R } from './world.js';
 import { vec4, CAP_R } from './player.js';
 import { G } from './game.js';
 import { boulders } from './boulders.js';
+import { carves, carveSD } from './landforms.js';
+import { treeSD } from './trees.js';
 
 // Three perpendicular directions along the ground at unit u, defined everywhere (multiply u, as a unit quaternion,
 // by i, j and k): the 3-sphere has no poles to dodge.
@@ -12,6 +14,15 @@ export const tangents = ([a, b, c, d]) => [[-b, a, d, -c], [-c, -d, a, b], [-d, 
 // Distance from p to the ground surface r = R + h(n), to first order (the vertical gap times the cosine of the
 // slope), and the outward normal. Above the ground it is positive.
 export function terrainSD(p) {
+  let s = heightSD(p);
+  if (carves.length) {
+    const c = carveSD(p);                                            // the rock, less the carved hollows
+    if (-c.d > s.d) s = { d: -c.d, n: c.n };
+  }
+  const t = treeSD(p);                                               // and the trees' branches
+  return t.d < s.d ? t : s;
+}
+function heightSD(p) {
   const hf = G.player.hf, r = vec4.len(p), u = vec4.scale(p, 1 / r), h = hf.heightAt(u), gap = r - PLANET_R - h;
   if (gap > 3) return { d: gap, n: u };                              // far above: the gap is close enough
   const e = 0.5 / PLANET_R, T = tangents(u), rg = PLANET_R + h;

@@ -4,6 +4,7 @@ import { PLANET_R } from './world.js';
 import { vec4, CAP_LO, CAP_HI, CAP_R } from './player.js';
 import { LAWS } from './laws.js';
 import { G, sunDir } from './game.js';
+import { carveSD } from './landforms.js';
 
 export const MAXB = 32;
 const B_FAR = 140;
@@ -24,7 +25,9 @@ export function makeBoulders(rand) {
     if (h < 0.8) continue;
     const r = 1.4 + 3.6 * rand() ** 2;
     if (Math.acos(Math.min(1, vec4.dot(n, home))) * PLANET_R < r + 6) continue;   // keep the start clear
-    boulders.all.push({ n, r, c: vec4.scale(n, PLANET_R + h + 0.3 * r) });
+    const c = vec4.scale(n, PLANET_R + h + 0.3 * r);
+    if (carveSD(c).d < r + 2) continue;                                              // and the landforms
+    boulders.all.push({ n, r, c });
   }
 }
 

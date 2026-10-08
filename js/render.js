@@ -5,6 +5,9 @@ import { G } from './game.js';
 import { boulders } from './boulders.js';
 import { gpuObj } from './objects.js';
 import { skyUniforms } from './cosmos.js';
+import { bUniforms, NORMAL_DATA } from './planetB.js';
+import { carveUniforms } from './landforms.js';
+import { treeUniforms, treeTexData, ropeTexData, rope as ropeSlot, ROPE_CAPS } from './trees.js';
 
 const $ = id => document.getElementById(id);
 export const canvas = $('view'), overlay = $('overlay');
@@ -176,9 +179,28 @@ export function resize() {
 }
 
 // Uniforms every world shader shares: the terrain, the camera, the sun and the boulders near you.
+// Planet B's floor normals, as a 120×1 float texture.
+const bTex = (() => {
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 120, 1, 0, gl.RGBA, gl.FLOAT, NORMAL_DATA);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.activeTexture(gl.TEXTURE0);
+  return t;
+})();
+// The trees' capsules, as a float texture (built once the trees have grown).
+let treeTex = null;
+export function uploadTrees() {
+  const { data, count } = treeTexData();
+  treeTex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, Math.max(1, count * 3), 1, 0, gl.RGBA, gl.FLOAT, data);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.activeTexture(gl.TEXTURE0);
+}
 // The hoop sky, computed once per frame (render.sky); the sun direction used for shadows is its mean.
 export const skyNow = { u: null };
-export function updateSky(t, eye) { skyNow.u = skyUniforms(t, eye); G.sun = skyNow.u.sun; return G.sun; }
+export function updateSky(t, eye) { skyNow.u = skyUniforms(t, eye); skyNow.b = bUniforms(t); G.sun = skyNow.u.sun; return G.sun; }
 export function setWorld(p, cam, sun) {
   const sk = skyNow.u;
   gl.uniform4fv(p.u('uStar0'), sk.star0);
@@ -200,8 +222,16 @@ export function setWorld(p, cam, sun) {
   };
   const sr = range(sk.star0, sk.starR * 6, 7), cr = range([0, 0, 0, 0], PLANET_R + 48, 2);
   gl.uniform2i(p.u('uStarK'), sr[0], sr[1]);
+  const bu = skyNow.b, br = range(bu.c, bu.rin * 1.09, 1);
+  gl.uniform4fv(p.u('uPBc'), bu.c);
+  gl.uniformMatrix4fv(p.u('uPBM'), false, bu.M);
+  gl.uniform1f(p.u('uPBin'), bu.rin);
+  gl.uniform2i(p.u('uPBK'), br[0], br[1]);
+  gl.uniform1i(p.u('uPBpad'), 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bTex); gl.uniform1i(p.u('uPBN'), 1); gl.activeTexture(gl.TEXTURE0);
   gl.uniform2i(p.u('uCopyK'), cr[0], cr[1]);
-  gl.uniform1f(p.u('uAtmos'), Math.exp(-Math.max(0, Math.hypot(...cam.eye) - PLANET_R - 60) / 220));
+  const atm = Math.exp(-Math.max(0, Math.hypot(...cam.eye) - PLANET_R - 60) / 220);
+  gl.uniform1f(p.u('uAtmos'), atm < 0.02 ? 0 : atm);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_3D, tex.water);
   gl.uniform1i(p.u('uWaterL'), 2);
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D, tex.noise);
@@ -219,6 +249,7 @@ export function setWorld(p, cam, sun) {
   gl.uniform4fv(p.u('uSun'), sun);
   gl.uniform1f(p.u('uTime'), performance.now() / 1000);
   gl.uniform1f(p.u('uShadows'), 1);
+  gl.uniform1i(p.u('uDebug'), G.debug | 0);
   gl.uniform4fv(p.u('uBC'), boulders.C);
   gl.uniform1fv(p.u('uBR'), boulders.R);
   gl.uniform1i(p.u('uBN'), boulders.near.length);
@@ -230,6 +261,20 @@ export function setWorld(p, cam, sun) {
   gl.uniform1i(p.u('uON'), gpuObj.n);
   gl.uniform1i(p.u('uOCut'), gpuObj.cut);
   gl.uniform1i(p.u('uGhost'), gpuObj.ghost);
+  if (treeTex && ropeSlot.obj && p === progSlice) {           // the rope moves: rewrite its capsules
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, ropeSlot.start * 3, 0, ROPE_CAPS * 3, 1, gl.RGBA, gl.FLOAT, ropeTexData());
+    gl.activeTexture(gl.TEXTURE0);
+  }
+  const tu = treeUniforms(cam.eye, cam.A);
+  gl.uniform4fv(p.u('uTC'), tu.C);
+  gl.uniform4fv(p.u('uTRad'), tu.R);
+  gl.uniform2iv(p.u('uTS'), tu.S);
+  gl.uniform1i(p.u('uTN'), treeTex ? tu.n : 0);
+  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex); gl.uniform1i(p.u('uTreeTex'), 6); gl.activeTexture(gl.TEXTURE0);
+  const cu = carveUniforms(cam.eye);
+  gl.uniform4fv(p.u('uCA'), cu.A); gl.uniform4fv(p.u('uCB'), cu.B); gl.uniform1fv(p.u('uCR'), cu.R); gl.uniform1i(p.u('uCN'), cu.n);
+  gl.uniform4fv(p.u('uCBoundC'), cu.C); gl.uniform1f(p.u('uCBoundR'), cu.Rb);
   gl.uniform4fv(p.u('uLP'), gpuObj.LP);
   gl.uniform4fv(p.u('uLC'), gpuObj.LC);
   gl.uniform1i(p.u('uLN'), gpuObj.ln);

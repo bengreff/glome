@@ -26,7 +26,8 @@ export class Player {
     this.dry = null;              // the last dry ground you stood on: where a wade too deep fades you back to
   }
 
-  ground(n) { return PLANET_R + this.hf.heightAt(n); }
+  // The ground's distance from the centre of the body you stand on (planet A's heightfield, or B's crystal).
+  ground(n) { return this.groundFn ? this.groundFn(n) : this.floorFn ? this.floorFn(n, len(this.pos)) : PLANET_R + this.hf.heightAt(n); }
 
   // Pick a dry, gentle spot to start.
   spawn(rand) {
@@ -104,7 +105,7 @@ export class Player {
     const wl = len(wish);
     // You cannot swim. You can wade: water deeper than your knees slows you, and past chest depth you fade back
     // to where you stepped in (main.js).
-    const seaR = PLANET_R + this.hf.waterAt(u), floor = this.ground(u);   // the sea, or a river
+    const seaR = this.groundFn ? -Infinity : PLANET_R + this.hf.waterAt(u), floor = this.ground(u);   // the sea, or a river (B is dry)
     this.depth = Math.max(0, seaR - floor);
     const wade = this.depth > 0.3 ? Math.max(0.35, 1 - (this.depth - 0.3) / 1.4) : 1;
     const speed = (input.run ? LAWS.RUN : LAWS.WALK) * wade;
@@ -120,7 +121,7 @@ export class Player {
       nh = add(vh, scale(gh, dt));                                                     // ballistic ...
       // ... except for a little steering within a couple of metres of the ground, the way a jumper twists
       // (a deliberate mercy, logged in DECISIONS.md; flight higher up is purely ballistic)
-      if (len(this.pos) - floor < 2.5) nh = add(nh, scale(sub(target, nh), Math.min(1, 1.5 * dt)));
+      if (wl > 0 && len(this.pos) - floor < 2.5) nh = add(nh, scale(sub(target, nh), Math.min(1, 1.5 * dt)));
     }
     let nvr = vr + gr * dt;
     if (input.jump && this.grounded) { nvr = Math.max(nvr, 0) + LAWS.JUMP; this.grounded = false; }
@@ -140,7 +141,7 @@ export class Player {
     } else {
       this.grounded = len(this.pos) < gnd + 0.05 || this.supported;
     }
-    if (this.grounded && this.depth === 0 && floor > seaR + 0.2) this.dry = { pos: this.pos.slice(), F: this.F, R: this.R, A: this.A };
+    if (this.grounded && this.depth === 0 && floor > seaR + 0.2) this.dry = { pos: this.pos.slice(), F: this.F, R: this.R, A: this.A, onB: this.onB ?? null };
     this.settleFrame();
   }
 

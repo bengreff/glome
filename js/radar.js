@@ -183,7 +183,7 @@ function radarCamera(RB, t) {
 export const orbitRadar = (dy, de) => { G.state.radar.yaw += dy; G.state.radar.el = Math.max(-1.3, Math.min(1.35, G.state.radar.el + de)); };
 export const zoomRadar = d => { G.state.radar.range = Math.max(RANGE_MIN, Math.min(RANGE_MAX, G.state.radar.range * Math.exp(d))); };
 // Small in the corner or big beside the slice; Tab animates between them.
-function radarRect() {
+export function radarRect() {
   const W = overlay.width, H = overlay.height, k = W / innerWidth, m = Math.round(10 * k), g = G.state.radar.grow;
   const e = g * g * (3 - 2 * g), lerp = (a, b) => a + (b - a) * e;
   const s = Math.round(lerp(Math.min(H * 0.42, W * 0.32), Math.min(H * 0.92, W * 0.6)));

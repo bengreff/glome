@@ -24,6 +24,7 @@ uniform vec4 uF, uR, uU, uA;// view basis: forward, right, up (pitched) and ana
 uniform vec4 uSun;          // unit direction toward the sun
 uniform float uTime;
 uniform float uShadows;
+uniform int uDebug;         // for testing: bits switch features off (1 stars, 2 star row, 4 copies, 8 planet B, 16 objects, 32 trees, 64 hollows, 128 boulders)
 const int MAXB = 32;
 uniform vec4 uBC[MAXB];     // boulders near you: 4D balls (centres) ...
 uniform float uBR[MAXB];    // ... and radii
@@ -62,6 +63,15 @@ float starW(int k) { return uStarW[k >> 2][k & 3]; }
 const float MAXT = 900.0;
 const float SHELL = 48.0;   // terrain lies within uPR-20 .. uPR+SHELL
 
+// An exact integer hash (PCG4D, Jarzynski & Olano 2020) of a lattice cell: float hashes break down under some GPUs'
+// fast maths, which turned the star field into moiré.
+float hashCell(vec4 c) {
+  uvec4 v = uvec4(ivec4(c) + 32768) * 1664525u + 1013904223u;
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+  v ^= v >> 16u;
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+  return float((v.x ^ v.y ^ v.z ^ v.w) >> 8u) / 16777216.0;
+}
 float h41(vec4 p) {
   p = fract(p * vec4(0.1031, 0.1030, 0.0973, 0.1099));
   p += dot(p, p.wzxy + 33.33);
@@ -122,9 +132,30 @@ float heightAt(vec4 n) {
   return sum / wsum;
 }
 
+// Landforms: hollows carved out of the rock (capsules; a ball is a capsule of zero length).
+const int MAXC = 6;
+uniform vec4 uCA[MAXC], uCB[MAXC];
+uniform float uCR[MAXC];
+uniform int uCN;
+uniform vec4 uCBoundC;      // a ball holding every active hollow (outside it they are skipped)
+uniform float uCBoundR;
+float sdCarve(vec4 p) {
+  float d = 1e9;
+  for (int i = 0; i < MAXC; i++) {
+    if (i >= uCN) break;
+    vec4 ab = uCB[i] - uCA[i], ap = p - uCA[i];
+    float L2 = dot(ab, ab), t = L2 > 0.0 ? clamp(dot(ap, ab) / L2, 0.0, 1.0) : 0.0;
+    d = min(d, length(ap - ab * t) - uCR[i]);
+  }
+  return d;
+}
 float sdTerrain(vec4 p) {
   float r = length(p);
-  return (r - uPR - heightAt(p / r)) * 0.6;
+  float d = (r - uPR - heightAt(p / r)) * 0.6;
+  // a hollow only matters below the ground's surface: above it max(d, -carve) >= d > 0 and d alone is a valid
+  // (if slightly cautious) bound, so the capsules are skipped for almost every step of the march
+  if (uCN > 0 && d < 0.4 && (uDebug & 64) == 0 && dot(p - uCBoundC, p - uCBoundC) < uCBoundR * uCBoundR) d = max(d, -sdCarve(p));
+  return d;
 }
 // Gradient from 5 samples on a regular 4-simplex (instead of 8 central differences).
 const vec4 S0 = vec4( 0.5590170, 0.5590170, 0.5590170, -0.25);
@@ -186,16 +217,16 @@ float marchTerrainFar(vec4 ro, vec4 rd) {
   return -1.0;
 }
 
-// Sixteen samples at geometric spacing, 0.3 m to 200 m: the penumbra estimate 8d/t widens as fast as the gaps,
-// and fixed-count loops run well in parallel. (Within 1% of an adaptive march, about 20% cheaper.)
+// Twelve samples at geometric spacing, 0.3 m to 190 m: the penumbra estimate 8d/t widens as fast as the gaps,
+// and fixed-count loops run well in parallel.
 float softShadow(vec4 ro, vec4 rd) {
   float res = 1.0, t = 0.3, rOut = uPR + SHELL;
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 12; i++) {
     vec4 p = ro + rd * t;
     if (dot(p, p) > rOut * rOut && dot(p, rd) > 0.0) break;
     res = min(res, 8.0 * sdTerrain(p) / t);
     if (res < 0.02) break;
-    t *= 1.54;
+    t *= 1.8;
   }
   return clamp(res, 0.0, 1.0);
 }
@@ -328,6 +359,7 @@ float detail(vec4 p, float f, out vec4 g) {
 }
 
 float dayFactor(vec4 up) {
+  if ((uDebug & 512) != 0) return smoothstep(-0.14, 0.18, dot(uSun, up));
   float s = 0.0;
   for (int k = 0; k < 2 * NIMG + 1; k++) s += starW(k) * smoothstep(-0.14, 0.18, dot(uStarD[k], up));
   return s;
@@ -335,6 +367,7 @@ float dayFactor(vec4 up) {
 // Sunlight on a surface: the exact sum over the row of images, each 1/d³, each set behind its own horizon.
 const int NLIT = 5;         // images each side that light surfaces (91% of the light; the share of the rest is folded in)
 float rowLight(vec4 p, vec4 n, vec4 up) {
+  if ((uDebug & 256) != 0) return max(dot(n, uSun), 0.0) * smoothstep(-0.04, 0.06, dot(uSun, up));
   float s = 0.0;
   for (int k = -NLIT; k <= NLIT; k++) {
     vec4 d = uStar0 + float(k) * uL * uHoop - p;
@@ -356,16 +389,16 @@ vec3 skyColor(vec4 rd, vec4 up, float day0) {
   float day = day0 * uAtmos;
   vec3 zen = mix(vec3(0.02, 0.03, 0.075), vec3(0.16, 0.36, 0.75), day);
   vec3 col = mix(horizonColor(up, day0), zen, pow(clamp(el, 0.0, 1.0), 0.45)) * uAtmos;
-  if (day < 0.3) {
+  if (day < 0.3 && (uDebug & 1) == 0) {
     // Stars are points scattered over the 3-sphere of directions, fixed in space (so they wheel across the night
     // as the planet double-spins). A slice only shows directions inside your 3D slice, so a star appears only
     // while its direction is close to it, and fades as you turn through ana.
     vec4 rdi = uSkyM * rd;
     vec4 cell = floor(rdi * 110.0);
-    if (h41(cell + 0.37) > 0.978) {
-      vec4 jit = vec4(h41(cell + 1.1), h41(cell + 2.3), h41(cell + 3.7), h41(cell + 4.9)) * 0.6 + 0.2;
+    if (hashCell(cell) > 0.978) {
+      vec4 jit = vec4(hashCell(cell + vec4(7, 0, 0, 0)), hashCell(cell + vec4(0, 7, 0, 0)), hashCell(cell + vec4(0, 0, 7, 0)), hashCell(cell + vec4(0, 0, 0, 7))) * 0.6 + 0.2;
       vec4 sdir = normalize(cell + jit);
-      float rad = 0.0026 * (0.6 + 0.9 * h41(cell + 5.5));
+      float rad = 0.0026 * (0.6 + 0.9 * hashCell(cell + vec4(3, 5, 7, 11)));
       col += vec3(0.82, 0.88, 1.0) * smoothstep(rad, rad * 0.25, length(rdi - sdir)) * (1.0 - smoothstep(0.04, 0.3, day)) * 1.8;
     }
   }
@@ -412,9 +445,12 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float d5 = f5 > 0.0 ? detail(p, 19.0, g5) : 0.0;
   if (f3 <= 0.0) g3 = vec4(0.0);
   if (f4 <= 0.0) g4 = vec4(0.0);
-  float rocky = 1.0 - smoothstep(0.62, 0.82, slope + 0.08 * d1);
-  float sandy = 1.0 - smoothstep(uSea + 0.4, uSea + 2.2 + 0.8 * d1, h);
-  float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1);
+  // inside a carved hollow everything is bare rock, and the sky's light falls off with depth below the ground above
+  float cave = uCN > 0 && dot(p - uCBoundC, p - uCBoundC) < uCBoundR * uCBoundR ? 1.0 - smoothstep(0.0, 0.6, sdCarve(p)) : 0.0;
+  float caveDark = cave > 0.0 ? mix(1.0, exp(-max(0.0, uPR + heightAt(up) - length(p)) / 2.5), cave) : 1.0;
+  float rocky = max(cave, 1.0 - smoothstep(0.62, 0.82, slope + 0.08 * d1));
+  float sandy = (1.0 - smoothstep(uSea + 0.4, uSea + 2.2 + 0.8 * d1, h)) * (1.0 - cave);
+  float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1) * (1.0 - cave);
   float dirt = smoothstep(-0.42, -0.62, d1 + 0.35 * d2) * (1.0 - rocky) * (1.0 - sandy);
 
   vec4 bump = g1 * 0.9 + g2 * 0.25 * f2 + g3 * 0.06 * f3 + g4 * 0.03 * f4 + g5 * 0.012 * f5;
@@ -453,8 +489,8 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
   vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);   // night: starlight fill
   vec3 bounce = alb * vec3(0.9, 0.8, 0.6) * 0.14 * day;
-  float skyVis = 0.5 + 0.5 * dot(nb, up);
-  return alb * (sunCol * dif * sh * 1.6 + (sky * skyVis + bounce) * ao * ao + lanternLight(p, nb));
+  float skyVis = (0.5 + 0.5 * dot(nb, up)) * caveDark;
+  return alb * (sunCol * dif * sh * 1.6 + (sky * skyVis + bounce * caveDark) * ao * ao + lanternLight(p, nb));
 }
 
 vec3 shadeBoulder(vec4 p, vec4 n, float t) {
@@ -582,6 +618,106 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
   return true;
 }
 
+// Trees: 4D capsules (branches) and balls (foliage), from a float texture: three texels per capsule.
+const int NTREE = 4;          // three trees and the rope
+uniform sampler2D uTreeTex;
+uniform vec4 uTC[NTREE];     // each tree's bounding ball: centre ...
+uniform vec4 uTRad;          // ... and radius
+uniform ivec2 uTS[NTREE];    // first capsule, how many
+uniform int uTN;
+// Ray–capsule (works in any dimension: it only uses dot products).
+float capIntersect(vec4 ro, vec4 rd, vec4 pa, vec4 pb, float r) {
+  vec4 ba = pb - pa, oa = ro - pa;
+  float baba = dot(ba, ba), bard = dot(ba, rd), baoa = dot(ba, oa), rdoa = dot(rd, oa), oaoa = dot(oa, oa);
+  float a = baba - bard * bard, b = baba * rdoa - baoa * bard, c = baba * oaoa - baoa * baoa - r * r * baba;
+  float h = b * b - a * c;
+  if (h >= 0.0 && a > 1e-9) {
+    float t = (-b - sqrt(h)) / a, y = baoa + t * bard;
+    if (y > 0.0 && y < baba) return t;
+  }
+  vec4 oc = (baba < 1e-9 || baoa + ((-b - sqrt(max(h, 0.0))) / max(a, 1e-9)) * bard <= 0.0) ? oa : ro - pb;
+  float bb = dot(rd, oc), cc = dot(oc, oc) - r * r, hh = bb * bb - cc;
+  return hh > 0.0 ? -bb - sqrt(hh) : -1.0;
+}
+float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf) {
+  float best = tMax; leaf = -1.0; nrm = vec4(0.0);
+  for (int k = 0; k < NTREE; k++) {
+    if (k >= uTN) break;
+    vec4 oc = ro - uTC[k];
+    float R = uTRad[k], b = dot(oc, rd), c = dot(oc, oc) - R * R;
+    if (b * b < c || (b > 0.0 && c > 0.0)) continue;
+    int s0 = uTS[k].x, cnt = uTS[k].y;
+    for (int i = 0; i < 96; i++) {
+      if (i >= cnt) break;
+      int j = s0 + i;
+      vec4 pa = texelFetch(uTreeTex, ivec2(3 * j, 0), 0), pb = texelFetch(uTreeTex, ivec2(3 * j + 1, 0), 0), q = texelFetch(uTreeTex, ivec2(3 * j + 2, 0), 0);
+      float t = capIntersect(ro, rd, pa, pb, q.x);
+      if (t > 0.0 && t < best) {
+        best = t; leaf = q.y;
+        vec4 p = ro + rd * t, ba = pb - pa;
+        float L2 = dot(ba, ba), hh = L2 > 0.0 ? clamp(dot(p - pa, ba) / L2, 0.0, 1.0) : 0.0;
+        nrm = (p - pa - ba * hh) / q.x;
+      }
+    }
+  }
+  return best;
+}
+vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t) {
+  vec4 up = normalize(p), g;
+  float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, g);
+  vec3 alb = leaf > 1.5 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                   // rope: hemp
+           : leaf > 0.5 ? mix(vec3(0.09, 0.22, 0.06), vec3(0.24, 0.34, 0.10), 0.5 + 0.5 * d1) : vec3(0.27, 0.21, 0.16) * (0.82 + 0.18 * d1);
+  vec4 nb = normalize(n - (leaf > 0.5 ? 0.35 : 0.12) * (g - n * dot(g, n)));
+  float dif = rowLight(p, nb, up), sh = 1.0;
+  if (dif > 0.0 && uShadows > 0.5) sh = softShadow(p + n * 0.1, uSun);
+  float day = dayFactor(up);
+  vec3 sky = mix(vec3(0.07, 0.085, 0.14), vec3(0.17, 0.25, 0.38), day);
+  return alb * (vec3(1.0, 0.94, 0.84) * dif * sh * 1.6 + sky * (0.6 + 0.4 * dot(nb, up)) + lanternLight(p, nb));
+}
+
+// Planet B: a 120-cell crystal. A ray meets a convex polytope where it has entered every floor's half-space: the
+// entry is the latest crossing among the floors it enters, and it must come before the earliest exit. 120 planes,
+// exactly, for rays that reach B's bounding ball.
+uniform vec4 uPBc;           // B's centre in this frame
+uniform mat4 uPBM;           // this frame -> B's own frame
+uniform float uPBin;         // the floors' distance from B's centre
+uniform sampler2D uPBN;      // the 120 floor normals
+uniform ivec2 uPBK;          // which of B's copies round the hoop to test
+uniform int uPBpad;         // the floor that is B's return pad
+float hitPlanetB(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out int face, out vec4 cB) {
+  float best = tMax; face = -1; nrm = vec4(0.0); cB = uPBc;
+  for (int k = -1; k <= 1; k++) {
+    if (k < uPBK.x || k > uPBK.y) continue;
+    vec4 c = uPBc + float(k) * uL * uHoop, oc = ro - c;
+    float b = dot(oc, rd), R = uPBin * 1.081, cc = dot(oc, oc) - R * R;
+    if (b * b < cc || (b > 0.0 && cc > 0.0)) continue;
+    vec4 o = uPBM * oc, d = uPBM * rd;
+    float tn = -1e9, tf = 1e9; int fi = -1;
+    for (int i = 0; i < 120; i++) {
+      vec4 n = texelFetch(uPBN, ivec2(i, 0), 0);
+      float dn = dot(d, n), on = dot(o, n) - uPBin;
+      if (abs(dn) < 1e-8) { if (on > 0.0) { tn = 1e9; break; } continue; }
+      float t = -on / dn;
+      if (dn < 0.0) { if (t > tn) { tn = t; fi = i; } } else tf = min(tf, t);
+    }
+    if (fi >= 0 && tn < tf && tn > 0.0 && tn < best) { best = tn; face = fi; nrm = texelFetch(uPBN, ivec2(fi, 0), 0) * uPBM; cB = c; }
+  }
+  return best;
+}
+// Pale crystal, each floor a slightly different tint, lit by the row of suns; no air, so the sky adds little.
+vec3 shadePlanetB(vec4 p, vec4 n, int face, vec4 c, vec4 rd) {
+  vec4 up = normalize(p - c);
+  float hs = h41(vec4(float(face) * 1.37, 2.1, 5.3, 0.7));
+  vec4 g1;
+  float d1 = detail((p - c) * 0.35, 1.0, g1);
+  vec3 alb = mix(vec3(0.60, 0.58, 0.70), vec3(0.74, 0.70, 0.80), hs) * (0.92 + 0.08 * d1);
+  if (face == uPBpad) alb = mix(alb, ACCENT, 0.6);
+  float dif = rowLight(p, n, up);
+  vec3 col = alb * (vec3(1.0, 0.95, 0.88) * dif * 1.6 + vec3(0.05, 0.05, 0.08));
+  col += vec3(1.0, 0.95, 0.9) * pow(max(dot(reflect(uSun, n), rd), 0.0), 60.0) * 0.5 * dif;   // a crystal glint
+  return col;
+}
+
 // Trace one 4D ray. Returns colour; tOut = hit distance or -1 for sky.
 vec3 render(vec4 ro, vec4 rd, out float tOut) {
   vec4 upE = normalize(ro);
@@ -594,15 +730,31 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
     if (!under) { if (-b - s > 0.0) tW = -b - s; }
     else tW = -b + s;
   }
-  float tT = marchTerrain(ro, rd);
+  vec4 nPB, cPB; int fPB;
+  float tPB = (uDebug & 8) == 0 ? hitPlanetB(ro, rd, 1e9, nPB, fPB, cPB) : 1e9;
+  if ((uDebug & 8) != 0) fPB = -1;
+  float tT = dot(ro, ro) > (uPR + 400.0) * (uPR + 400.0) ? marchTerrainFar(ro, rd) : marchTerrain(ro, rd);
+  if (fPB >= 0 && (tT < 0.0 || tPB < tT) && (tW < 0.0 || tPB < tW)) {
+    tOut = tPB;
+    vec3 col = shadePlanetB(ro + rd * tPB, nPB, fPB, cPB, rd);
+    return applyFog(col, upE, tPB);
+  }
   int bi;
-  float tB = hitBoulder(ro, rd, tT > 0.0 ? tT : MAXT, bi);
+  float tB = (uDebug & 128) == 0 ? hitBoulder(ro, rd, tT > 0.0 ? tT : MAXT, bi) : MAXT;
+  if ((uDebug & 128) != 0) bi = -1;
   int oi; vec4 on;
-  float tO = hitObject(ro, rd, bi >= 0 ? tB : tT > 0.0 ? tT : MAXT, uOCut, oi, on);
+  float tO = hitObject(ro, rd, bi >= 0 ? tB : tT > 0.0 ? tT : MAXT, (uDebug & 16) == 0 ? uOCut : 0, oi, on);
   if (oi >= 0 && (under || tW < 0.0 || tO < tW)) {             // an object in front of everything else
     tOut = tO;
     vec3 col = shadeObject(ro + rd * tO, on, oi, rd, tO);
     return under ? mix(col, vec3(0.015, 0.10, 0.13), 1.0 - exp(-tO * 0.09)) : applyFog(col, upE, tO);
+  }
+  vec4 nTr = vec4(0.0); float leaf = -1.0;
+  float tTr = uTN > 0 && (uDebug & 32) == 0 ? hitTrees(ro, rd, bi >= 0 ? tB : tT > 0.0 ? tT : MAXT, nTr, leaf) : MAXT;
+  if (leaf >= 0.0 && (under || tW < 0.0 || tTr < tW)) {        // a tree
+    tOut = tTr;
+    vec3 col = shadeTree(ro + rd * tTr, nTr, leaf, rd, tTr);
+    return under ? mix(col, vec3(0.015, 0.10, 0.13), 1.0 - exp(-tTr * 0.09)) : applyFog(col, upE, tTr);
   }
   if (bi >= 0 && (under || tW < 0.0 || tB < tW)) {             // a boulder in front of everything else
     tOut = tB;
@@ -617,7 +769,7 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
   } else if (tT > 0.0 && !(under && tW > 0.0 && tW < tT)) {
     tOut = tT;
     vec4 pT = ro + rd * tT, nT = normalize(pT);
-    float hT = length(pT) - uPR, wl = waterAt(nT);
+    float hT = length(pT) - uPR, wl = (uDebug & 1024) == 0 ? waterAt(nT) : 0.0;
     if (wl > uSea + 0.05 && wl > hT + 0.03) {                // a river: shallow water over its bed
       float down = -dot(rd, nT), tw = max(0.02, tT - (wl - hT) / max(down, 0.08));
       col = shadeWater(ro + rd * tw, rd, tw, tT, ro);
@@ -631,8 +783,8 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
     tOut = -1.0;
     float tc, ts;
     vec3 cc;
-    if (hitCopies(ro, rd, tc, cc)) { col = cc; tOut = tc; }
-    else col = skyColor(rd, upE, uDayE) + starRow(ro, rd, ts);
+    if ((uDebug & 4) == 0 && hitCopies(ro, rd, tc, cc)) { col = cc; tOut = tc; }
+    else col = skyColor(rd, upE, uDayE) + ((uDebug & 2) == 0 ? starRow(ro, rd, ts) : vec3(0.0));
   }
   return col;
 }
@@ -663,6 +815,8 @@ void main() {
   vec3 col = post(hdr * mix(2.2, 1.0, uDayE));
   float vig = 1.0 - 0.25 * dot(vUV * 0.7, vUV * 0.7);
   col *= vig;
+  // dither by half a step of the 8-bit target, so dark gradients (night, space) don't band
+  col += (hashCell(vec4(gl_FragCoord.xy, 3.0, 7.0)) - 0.5) / 255.0;
   outColor = vec4(col, 1.0);
 }`;
 
@@ -680,7 +834,7 @@ void main() {
   vec3 n = texture(uScene, uv + vec2(0.0, px.y)).rgb, s = texture(uScene, uv - vec2(0.0, px.y)).rgb;
   vec3 e = texture(uScene, uv + vec2(px.x, 0.0)).rgb, w = texture(uScene, uv - vec2(px.x, 0.0)).rgb;
   vec3 mn = min(c, min(min(n, s), min(e, w))), mx = max(c, max(max(n, s), max(e, w)));
-  vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
+  vec3 amp = sqrt(clamp(min(mn, 2.0 - mx) / max(mx, 1e-4), 0.0, 1.0)) * smoothstep(0.03, 0.12, mx);   // no sharpening in the dark
   vec3 wt = -amp / mix(8.0, 4.6, uSharp);
   vec3 col = (c + (n + s + e + w) * wt) / (1.0 + 4.0 * wt);
   outColor = vec4(clamp(col, 0.0, 1.0), 1.0);
