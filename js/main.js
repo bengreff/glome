@@ -8,7 +8,7 @@ import { gl, canvas, overlay, octx, fail, tex, tex3D, N, buildAtlas, makeNoise, 
 import { radar, radarRect, drawRadar, blitRadar, drawRadarOverlay, makeRadarVolume, recordTrail, headingTo, orbitRadar, zoomRadar,
          compassAt, logMap } from './radar.js';
 import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulders.js';
-import { keys, mouse, SENS, readInput, actions } from './input.js';
+import { keys, mouse, SENS, readInput, actions, pad, pollPad } from './input.js';
 import { gazePoint, drawFaced, drawGazeDot, updateHUD } from './hud.js';
 import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
 import { LAWS } from './laws.js';
@@ -206,6 +206,15 @@ function frameBody(now) {
   }
   if (mouse.dx || mouse.dy) { state.facing = null; syncFlightFrame(player); }   // looking around cancels an automatic turn
   mouse.dx = mouse.dy = 0;
+  // a gamepad's right stick: radians a second (holding LT: toward ana, and twist)
+  pollPad();
+  if (pad.rx || pad.ry) {
+    const s2 = settings.sens, ry = settings.invert ? -pad.ry : pad.ry;
+    if (pad.alt) { player.rotate('FA', pad.rx * 2.0 * s2 * dt); player.rotate('RA', -ry * 2.0 * s2 * dt); }
+    else { player.rotate('FR', pad.rx * 2.6 * s2 * dt); player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - ry * 2.0 * s2 * dt)); }
+    state.facing = null; syncFlightFrame(player);
+  }
+  if (pad.zoom) zoomRadar(pad.zoom * 1.3 * dt);
   const turnKeys = (keys.has('KeyC') ? 1 : 0) - (keys.has('KeyZ') ? 1 : 0);
   if (turnKeys) { player.rotate('FA', turnKeys * 1.2 * dt); syncFlightFrame(player); }
   if (state.facing && player.turnToward(headingTo(state.facing).dir, 2.2 * dt)) { state.faced = { n: state.facing, what: state.facingWhat, until: G.simT + 5 }; state.facing = null; }

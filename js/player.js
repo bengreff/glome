@@ -110,7 +110,7 @@ export class Player {
     this.depth = Math.max(0, seaR - Math.max(floor, len(this.pos) - 0.02));   // water above your feet (none on a raft)
     const wade = this.depth > 0.3 ? Math.max(0.35, 1 - (this.depth - 0.3) / 1.4) : 1;
     const speed = (input.run ? LAWS.RUN : LAWS.WALK) * wade;
-    const target = wl > 0 ? scale(wish, speed / wl) : [0, 0, 0, 0];
+    const target = wl > 0 ? scale(wish, speed * Math.min(1, wl) / wl) : [0, 0, 0, 0];   // (a stick pushed partway walks slower)
 
     const g = accel(this.pos, this.vel);
     const gr = dot(g, u), gh = sub(g, scale(u, gr));

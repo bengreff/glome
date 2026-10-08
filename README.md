@@ -1,6 +1,6 @@
 # Glome
 
-**A walkable planet in four spatial dimensions.** [Play it in the browser](https://bengreff.github.io/glome/) (desktop, keyboard and mouse, WebGL 2).
+**A walkable planet in four spatial dimensions.** [Play it in the browser](https://bengreff.github.io/glome/) (desktop, keyboard and mouse or a gamepad, WebGL 2).
 
 Glome is a small universe with four space dimensions: one star, two planets, and a fourth direction that closes back on itself every 800 m (the hoop). You are a three-dimensional mind in a four-dimensional body, so your eyes show you a 3D slice of the world; a radar shows you the rest. Nothing is explained. The world behaves as a 4D world must, and you find out by playing.
 
@@ -41,6 +41,7 @@ Nothing is swapped for a cheaper law; where the game approximates, it integrates
 | <kbd>M</kbd> <kbd>P</kbd> <kbd>L</kbd> <kbd>K</kbd> · arrows | radar: heading/compass-up · pin · layers · hide · spin |
 | <kbd>Esc</kbd>, then mouse | drag the radar to spin · hover to inspect · click to face |
 | <kbd>H</kbd> · <kbd>U</kbd> | help, settings, your world (export, import, new) · nothing over the view, for pictures |
+| gamepad | left stick walk · right stick look (LT held: toward ana, twist) · LB RB kata, ana · A jump · X take · RT throw · Y stone · B radar · Start help |
 
 ## How it works
 

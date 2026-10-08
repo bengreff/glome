@@ -177,3 +177,4 @@ Everything the owner decided while defining v1.0, from 2026-10-07. Where this fi
 - **Leafier trees:** the foliage gets a fine layer of leaf clumps (17 cm) with a gentler bump (it looked like blotched plastic balls), its underside is shaded by the canopy, and leaves lit from behind glow faintly through.
 - **A flight in progress is saved exactly** (its inertial position, velocity, frame and time), so a reload carries on the same arc; before, a save caught under 20 m after a launch came back as an ordinary jump.
 - **U clears the view** of everything drawn over it (radar, gaze dot, hint, numbers), for taking pictures; U again brings it back.
+- **Gamepads work** (the standard mapping): sticks walk and look, LT turns the look toward ana, the shoulders step kata and ana, and the face buttons and triggers take, throw, draw a stone, jump. A stick pushed partway walks partway to full speed.

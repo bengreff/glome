@@ -67,10 +67,35 @@ document.addEventListener('pointerlockchange', () => {
   $('hint').hidden = document.pointerLockElement === canvas;
 });
 
+// A gamepad, if one is connected (standard mapping): the left stick walks (as far as it is pushed), the right stick
+// looks (holding LT, it turns toward ana and twists instead), LB/RB step kata/ana, A jumps, a left-stick click runs,
+// X picks up and drops (hold: set down), RT winds up a throw, Y draws an impulse stone, B the big radar, Start help,
+// the d-pad zooms the radar.
+export const pad = { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0, prev: [] };
+const dead = v => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85;
+export function pollPad() {
+  const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected && g.mapping === 'standard');
+  if (!gp) { Object.assign(pad, { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0 }); return; }
+  const on = i => i === 6 || i === 7 ? (gp.buttons[i]?.value || 0) > 0.4 : !!gp.buttons[i]?.pressed;
+  const now = gp.buttons.map((_, i) => on(i)), was = i => !!pad.prev[i], down = i => now[i] && !was(i), up = i => !now[i] && was(i);
+  Object.assign(pad, { connected: true, lx: dead(gp.axes[0] || 0), ly: dead(gp.axes[1] || 0), rx: dead(gp.axes[2] || 0), ry: dead(gp.axes[3] || 0),
+    alt: now[6], jump: now[0], run: now[10], ana: (now[5] ? 1 : 0) - (now[4] ? 1 : 0), zoom: (now[13] ? 1 : 0) - (now[12] ? 1 : 0) });
+  if (down(2)) actions.fDown = true;
+  if (up(2)) actions.fUp = true;
+  if (down(3)) actions.g = true;
+  if (down(7)) actions.mDown = true;
+  if (up(7)) actions.mUp = true;
+  const state = G.state;
+  if (down(1)) state.radar.big = !state.radar.big;
+  if (down(9)) { state.help = !state.help; $('help').hidden = !state.help; $('hud').hidden = !state.help; }
+  if (gp.axes.some(a => Math.abs(a) > 0.3) || now.some(Boolean)) $('hint').hidden = true;
+  pad.prev = now;
+}
+
 export function readInput() {
-  const k = c => keys.has(c) ? 1 : 0;
+  const k = c => keys.has(c) ? 1 : 0, cl = v => Math.max(-1, Math.min(1, v));
   return {
-    fwd: k('KeyW') - k('KeyS'), right: k('KeyD') - k('KeyA'), ana: k('KeyE') - k('KeyQ'),
-    jump: keys.has('Space'), run: keys.has('ShiftLeft') || keys.has('ShiftRight'),
+    fwd: cl(k('KeyW') - k('KeyS') - pad.ly), right: cl(k('KeyD') - k('KeyA') + pad.lx), ana: cl(k('KeyE') - k('KeyQ') + pad.ana),
+    jump: keys.has('Space') || pad.jump, run: keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.run,
   };
 }
