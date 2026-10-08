@@ -13,3 +13,6 @@ solved at tier III (aim found by the space map's predictor after waiting 6 s, ma
 flight completed a full turn). The closed room: walking down the tunnel reaches the chamber floor (14 m under the
 hill). The antipode: anything resting in the summit's bowl opens the vault (the scripted set-down landed short of
 the bowl; the mechanism itself was confirmed by placing a ball in it).
+
+Day two (held things now physical, the bowl carved): mirror key, knot gate and antipode all solved by script again;
+the antipode's ball, set down from the bowl's rim with the ghost, rests 0.26 m from its centre.

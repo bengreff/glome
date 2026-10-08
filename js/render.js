@@ -142,10 +142,11 @@ export function updateDyn(frameSec) {
   if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
   if (dyn.probe) {                                         // judge the last step down
     const p = dyn.probe; dyn.probe = null;
-    // a step that cut the pixels by a fraction f should save about f of a GPU-bound frame: expect at least half,
-    // unless it reached the display's rate (vsync rounds frame times, so a step that just makes it saves less)
-    const r = dyn.scale / p.scale, expect = 1 - 0.5 * (1 - r * r);
-    if (avg > p.avg * expect && avg > 1 / 58.5) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
+    // a step that cut the pixels by a fraction f should save about f of a GPU-bound frame: expect at least a
+    // quarter of that (frame times are noisy), unless it reached the display's rate (vsync rounds frame times, so a
+    // step that just makes it saves less)
+    const r = dyn.scale / p.scale, expect = 1 - 0.25 * (1 - r * r);
+    if (avg > p.avg * expect && avg > 1 / 58.5) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 6; return; }
   }
   const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
   // a resolution that proved too slow is a ceiling for half a minute (at a vsync'd 60 Hz every frame that makes it

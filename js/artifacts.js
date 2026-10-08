@@ -6,6 +6,7 @@
 //        half a turn through ana does.
 //   III  the knot gate: a rope looped round a tall post holds the gate. In 4D no loop can hold on a post.
 //   IV   the antipode: what you leave in the bowl on the summit opens the vault at the planet's opposite point.
+//        (The bowl is carved, in landforms' way: a 4D ball taken out of the summit.)
 import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
@@ -14,6 +15,7 @@ import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
 import { objects, spawn, KINDS } from './objects.js';
 import { launcher } from './launcher.js';
+import { carves } from './landforms.js';
 
 export const artifacts = [];        // { id, name, n (unit position), solved(), vault, part, ... }
 const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
@@ -102,8 +104,12 @@ export function buildArtifacts() {
     const p = partOf(4), n = vec4.norm(p.pos);
     const vault = block(n, 1.0, { lift: -0.4, tag: 'vault4' }); freeze(p);
     const s0 = launcher.n, fr = frameAt(s0), bowl = off(s0, fr.s, 4.2), bf = frameAt(bowl);
-    block(bowl, 1.5, { lift: -1.3, tag: 'bowlfloor' });       // a level stone floor, so what you leave stays put
-    for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) block(off(bowl, vec4.norm(vec4.add(vec4.scale(bf.f, x), vec4.scale(bf.a, y))), 0.9), 0.24, { lift: 0.2, mat: 2, glow: 0.15, tag: 'bowlpost' });
+    // the bowl: a hollow carved in the summit by a 4D ball (in your 3D ground, a round stone basin 1.9 m across and
+    // 0.45 m deep), so what you leave in it rolls to its bottom and stays; six posts mark its rim, two on each of
+    // the ground's three directions
+    const hb = G.player.hf.heightAt(bowl);
+    carves.push({ a: vec4.scale(bowl, PLANET_R + hb + 0.75), b: vec4.scale(bowl, PLANET_R + hb + 0.75), r: 1.2, name: 'bowl' });
+    for (const ax of [bf.f, bf.s, bf.a]) for (const sg of [-1, 1]) block(off(bowl, ax, 1.25 * sg), 0.24, { lift: 0.2, mat: 2, glow: 0.15, tag: 'bowlpost' });
     for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const fv = frameAt(n); block(off(n, vec4.norm(vec4.add(vec4.scale(fv.f, x), vec4.scale(fv.a, y))), 1.5), 0.24, { mat: 2, glow: 0.15 }); }
     const bowlPos = vec4.scale(bowl, PLANET_R + G.player.hf.heightAt(bowl));
     artifacts.push({ id: 'antipode', name: 'the antipode', n, vault, part: p, bowl: bowlPos,

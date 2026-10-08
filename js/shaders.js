@@ -24,7 +24,8 @@ uniform vec4 uF, uR, uU, uA;// view basis: forward, right, up (pitched) and ana
 uniform vec4 uSun;          // unit direction toward the sun
 uniform float uTime;
 uniform float uShadows;
-uniform int uDebug;         // for testing: bits switch features off (1 stars, 2 star row, 4 copies, 8 planet B, 16 objects, 32 trees, 64 hollows, 128 boulders)
+uniform int uDebug;         // for testing: bits switch features off (1 stars, 2 star row, 4 copies, 8 planet B, 16 objects, 32 trees, 64 hollows,
+                            // 128 boulders, 256 one light, 512 one day, 1024 rivers, 2048 shadows, 4096 bumps, 8192 AO, 2^19 hit refinement, 2^20 detail)
 const int MAXB = 32;
 uniform vec4 uBC[MAXB];     // boulders near you: 4D balls (centres) ...
 uniform float uBR[MAXB];    // ... and radii
@@ -132,6 +133,37 @@ float heightAt(vec4 n) {
   return sum / wsum;
 }
 
+// The same height, filtered in full precision. A GPU's hardware filter places a sample between texels to only
+// 1/256 of a texel (about a centimetre here), so the filtered ground is a fine staircase; seen at a grazing angle
+// each tiny step moves the point you see along the ground, and fine texture there showed the stairs. The final
+// placement of a hit near the eye uses this (eight fetches instead of one).
+float chartHeightHQ(vec4 n, int k) {
+  float s = comp(n, k), m = abs(s);
+  vec3 u = (k == 0 ? n.yzw : k == 1 ? vec3(n.x, n.z, n.w) : k == 2 ? vec3(n.x, n.y, n.w) : n.xyz) / m;
+  vec3 pos = clamp((u * 0.5 + 0.5) * (uN - 1.0), 0.0, uN - 1.0);
+  int Ni = int(uN), z0 = (2 * k + (s > 0.0 ? 1 : 0)) * Ni;
+  ivec3 i = min(ivec3(floor(pos)), ivec3(Ni - 2));
+  vec3 f = pos - vec3(i);
+  ivec3 b = ivec3(i.x, i.y, z0 + i.z);
+  float c000 = texelFetch(uAtlas, b, 0).r, c100 = texelFetch(uAtlas, b + ivec3(1, 0, 0), 0).r;
+  float c010 = texelFetch(uAtlas, b + ivec3(0, 1, 0), 0).r, c110 = texelFetch(uAtlas, b + ivec3(1, 1, 0), 0).r;
+  float c001 = texelFetch(uAtlas, b + ivec3(0, 0, 1), 0).r, c101 = texelFetch(uAtlas, b + ivec3(1, 0, 1), 0).r;
+  float c011 = texelFetch(uAtlas, b + ivec3(0, 1, 1), 0).r, c111 = texelFetch(uAtlas, b + ivec3(1, 1, 1), 0).r;
+  return mix(mix(mix(c000, c100, f.x), mix(c010, c110, f.x), f.y), mix(mix(c001, c101, f.x), mix(c011, c111, f.x), f.y), f.z);
+}
+float heightAtHQ(vec4 n) {
+  vec4 a = abs(n);
+  float amax = max(max(a.x, a.y), max(a.z, a.w));
+  float sum = 0.0, wsum = 0.0;
+  for (int k = 0; k < 4; k++) {
+    float w = 1.0 - (amax - comp(a, k)) / (SEAM * amax);
+    if (w <= 0.0) continue;
+    w = w * w * (3.0 - 2.0 * w);
+    sum += w * chartHeightHQ(n, k); wsum += w;
+  }
+  return sum / wsum;
+}
+
 // Landforms: hollows carved out of the rock (capsules; a ball is a capsule of zero length).
 const int MAXC = 6;
 uniform vec4 uCA[MAXC], uCB[MAXC];
@@ -157,6 +189,12 @@ float sdTerrain(vec4 p) {
   if (uCN > 0 && d < 0.4 && (uDebug & 64) == 0 && dot(p - uCBoundC, p - uCBoundC) < uCBoundR * uCBoundR) d = max(d, -sdCarve(p));
   return d;
 }
+float sdTerrainHQ(vec4 p) {
+  float r = length(p);
+  float d = (r - uPR - heightAtHQ(p / r)) * 0.6;
+  if (uCN > 0 && d < 0.4 && (uDebug & 64) == 0 && dot(p - uCBoundC, p - uCBoundC) < uCBoundR * uCBoundR) d = max(d, -sdCarve(p));
+  return d;
+}
 // Gradient from 5 samples on a regular 4-simplex (instead of 8 central differences).
 const vec4 S0 = vec4( 0.5590170, 0.5590170, 0.5590170, -0.25);
 const vec4 S1 = vec4( 0.5590170,-0.5590170,-0.5590170, -0.25);
@@ -169,6 +207,19 @@ vec4 terrainNormal(vec4 p, float t) {
                  + S3 * sdTerrain(p + e * S3) + S4 * sdTerrain(p + e * S4));
 }
 
+// A march stops within ~1 cm of the ground (vertically), on the hardware-filtered (stair-stepped) heights; near the
+// eye, two Newton steps on the precisely filtered heights put the hit on the true surface, so the fine texture
+// sampled there is smooth.
+float refineHit(vec4 ro, vec4 rd, float t) {
+  if (t > 30.0 || (uDebug & 524288) != 0) return t;
+  // two Newton steps: the height precisely, the slope along the ray from the ordinary heights 20 cm apart (wide
+  // enough that their tiny steps hardly matter)
+  float s = (sdTerrain(ro + rd * (t + 0.1)) - sdTerrain(ro + rd * (t - 0.1))) / 0.2;
+  if (s > -1e-3) return t;                     // running along the surface: keep what we have
+  float t1 = t - sdTerrainHQ(ro + rd * t) / s;
+  if (abs(t1 - t) > 0.5) return t;
+  return t1 - sdTerrainHQ(ro + rd * t1) / s;
+}
 float marchTerrain(vec4 ro, vec4 rd) {
   float rOut = uPR + SHELL;
   float t = 0.02;
@@ -367,23 +418,34 @@ float ambientOcclusion(vec4 p, vec4 n) {
   return clamp(1.0 - 0.45 * occ, 0.35, 1.0);
 }
 
-// Surface detail from a tileable 3D gradient noise. Two different 3D projections of the 4D point
-// are summed so that no 4D direction leaves the pattern constant. Returns the value; g = 4D gradient.
+// Surface detail from a tileable 3D gradient noise. Returns the value; g = 4D gradient.
 const float NOISE_P = 16.0;
+// This pixel's primary ray and how it changes to the next pixel across and up (set by the slice shader's main), and
+// the shaded point's step to the next pixel along its surface (footprint()): the shading fades each detail layer
+// out as its features shrink below a few pixels.
+vec4 gRd = vec4(0.0), gDRx = vec4(0.0), gDRy = vec4(0.0), gPx = vec4(0.0), gPy = vec4(0.0);
+void footprint(vec4 p, vec4 n, float s) {
+  float t = length(p - uEye), c = dot(gRd, n);
+  c = c < 0.0 ? min(c, -0.08) : max(c, 0.08);
+  gPx = t * (gDRx - gRd * dot(gDRx, n) / c) * s;
+  gPy = t * (gDRy - gRd * dot(gDRy, n) / c) * s;
+}
 // Detail noise on a surface in 4D from a 3D noise texture: "tetraplanar" mapping, the 4D cousin of triplanar. Four
 // layers, each the noise of p with one coordinate dropped (so it is constant along that axis), weighted by how nearly
 // that axis is the surface's normal n: the axis a layer is smeared along points into the surface, never along it.
 // (Two fixed oblique projections, the old way, streaked wherever their smear direction lay along the ground.)
 float detail(vec4 p, float f, vec4 n, out vec4 g) {
+  if ((uDebug & 1048576) != 0) { g = vec4(0.0); return 0.0; }
   vec4 n2 = n * n, w = n2 * n2 * n2;
   w /= dot(w, vec4(1.0));
-  float v = 0.0;
+  w = max(w - 0.1, 0.0); w /= dot(w, vec4(1.0));          // (a layer of less than a tenth is left out)
+  float v = 0.0, k = f / NOISE_P;
   g = vec4(0.0);
   vec3 q = vec3(0.0); vec4 a;
-  if (w.x > 0.02) { a = texture(uNoise, p.yzw * f / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.x * (a.w - 0.5); g += w.x * vec4(0.0, q); }
-  if (w.y > 0.02) { a = texture(uNoise, (p.xzw * f + vec3(7.3, 1.9, 4.1)) / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.y * (a.w - 0.5); g += w.y * vec4(q.x, 0.0, q.yz); }
-  if (w.z > 0.02) { a = texture(uNoise, (p.xyw * f + vec3(3.7, 11.2, 5.9)) / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.z * (a.w - 0.5); g += w.z * vec4(q.xy, 0.0, q.z); }
-  if (w.w > 0.02) { a = texture(uNoise, (p.xyz * f + vec3(13.1, 2.6, 8.8)) / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.w * (a.w - 0.5); g += w.w * vec4(q, 0.0); }
+  if (w.x > 0.0) { a = texture(uNoise, p.yzw * k); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.x * (a.w - 0.5); g += w.x * vec4(0.0, q); }
+  if (w.y > 0.0) { a = texture(uNoise, p.xzw * k + vec3(0.456, 0.119, 0.256)); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.y * (a.w - 0.5); g += w.y * vec4(q.x, 0.0, q.yz); }
+  if (w.z > 0.0) { a = texture(uNoise, p.xyw * k + vec3(0.231, 0.7, 0.369)); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.z * (a.w - 0.5); g += w.z * vec4(q.xy, 0.0, q.z); }
+  if (w.w > 0.0) { a = texture(uNoise, p.xyz * k + vec3(0.819, 0.163, 0.55)); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.w * (a.w - 0.5); g += w.w * vec4(q, 0.0); }
   g *= f * 1.6;
   return v * 1.6;
 }
@@ -459,6 +521,7 @@ vec3 starRow(vec4 ro, vec4 rd, out float tHit) {
 
 vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec4 n = terrainNormal(p, t);
+  footprint(p, n, 1.0);
   vec4 up = normalize(p);
   float h = length(p) - uPR;
   float slope = dot(n, up);
@@ -467,10 +530,15 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec4 g1, g2, g3, g4;
   float d1 = detail(p, 0.11, n, g1);
   float d2 = detail(p, 0.55, n, g2);
-  float f2 = 1.0 - smoothstep(30.0, 90.0, t), f3 = 1.0 - smoothstep(8.0, 26.0, t), f4 = 1.0 - smoothstep(3.0, 12.0, t);
+  // each finer layer also fades out as its features shrink below a few pixels (the pixel's footprint on the ground,
+  // which grows at grazing angles), so it never aliases into stair-steps
+  float fp = max(length(gPx), length(gPy));
+  float f2 = (1.0 - smoothstep(30.0, 90.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 0.55));
+  float f3 = (1.0 - smoothstep(8.0, 26.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 2.3));
+  float f4 = (1.0 - smoothstep(2.5, 10.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 7.1));
   float d3 = f3 > 0.0 ? detail(p, 2.3, n, g3) : 0.0;
   float d4 = f4 > 0.0 ? detail(p, 7.1, n, g4) : 0.0;
-  float f5 = 1.0 - smoothstep(1.5, 6.0, t);
+  float f5 = (1.0 - smoothstep(1.2, 5.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 19.0));
   vec4 g5 = vec4(0.0);
   float d5 = f5 > 0.0 ? detail(p, 19.0, n, g5) : 0.0;
   if (f3 <= 0.0) g3 = vec4(0.0);
@@ -483,8 +551,9 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1) * (1.0 - cave);
   float dirt = smoothstep(-0.42, -0.62, d1 + 0.35 * d2) * (1.0 - rocky) * (1.0 - sandy);
 
-  vec4 bump = g1 * 0.9 + g2 * 0.25 * f2 + g3 * 0.07 * f3 + g4 * 0.05 * f4 + g5 * 0.025 * f5;
-  bump *= mix(1.0, 2.4, rocky) * mix(1.0, 0.35, sandy + snowy * 0.6);
+  vec4 bump = g1 * 0.9 + g2 * 0.25 * f2 + g3 * 0.06 * f3 + g4 * 0.03 * f4 + g5 * 0.012 * f5;
+  bump *= mix(1.0, 2.4, rocky) * mix(1.0, 0.35, sandy) * mix(1.0, 0.2, snowy);   // (snow lies smooth)
+  if ((uDebug & 4096) != 0) bump = vec4(0.0);
   vec4 nb = normalize(n - (bump - n * dot(bump, n)) * 0.6);
 
   // grass: broad lush/dry patches, clumps, then crisp tufts up close
@@ -509,12 +578,12 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float sunEl = dot(uSun, up);
   float dif = rowLight(p, nb, up);
   float sh = 1.0;
-  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5) {
+  if (withShadow && max(dot(n, uSun), 0.0) > 0.0 && uShadows > 0.5 && (uDebug & 2048) == 0) {
     sh = softShadow(p + n * 0.08, uSun);
     if (sh > 0.02) sh = min(sh, boulderShadow(p + n * 0.08, uSun));
     if (sh > 0.02 && uON > 0 && t < 60.0) sh = min(sh, objectShadow(p + n * 0.08, uSun));   // (beyond 60 m too small to see)
   }
-  float ao = withShadow ? ambientOcclusion(p, n) : 1.0;
+  float ao = withShadow && (uDebug & 8192) == 0 ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
   vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);   // night: starlight fill
@@ -525,6 +594,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
 
 vec3 shadeBoulder(vec4 p, vec4 n, float t) {
   vec4 up = normalize(p);
+  footprint(p, n, 1.0);
   vec4 g1, g2, g3;
   float d1 = detail(p, 0.7, n, g1), d2 = detail(p, 2.6, n, g2);
   float f3 = 1.0 - smoothstep(4.0, 16.0, t);
@@ -559,7 +629,12 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   vec4 q = (p - uOC[i]) * uOM[i];                          // body coordinates
   vec4 g1, g2;
   vec4 nq = n * uOM[i];                                    // the normal in body coordinates
-  float d1 = detail(q * (1.0 / h) * 1.7 + float(i) * 5.31, 1.0, nq, g1), d2 = detail(q * (1.0 / h) * 5.3 + 2.7, 1.0, nq, g2);
+  footprint(p, n, 1.0);
+  vec4 fx = gPx * uOM[i] / h, fy = gPy * uOM[i] / h;
+  gPx = fx * 1.7; gPy = fy * 1.7;
+  float d1 = detail(q * (1.0 / h) * 1.7 + float(i) * 5.31, 1.0, nq, g1);
+  gPx = fx * 5.3; gPy = fy * 5.3;
+  float d2 = detail(q * (1.0 / h) * 5.3 + 2.7, 1.0, nq, g2);
   vec4 nb = n;
   vec3 alb;
   float spec = 0.0;
@@ -622,6 +697,7 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
   tng += 0.5 * vec4(sin(p.y * 1.9 + uTime * 2.1), sin(p.w * 2.3 + uTime * 1.7),
                     sin(p.x * 2.1 - uTime * 1.9), sin(p.z * 1.7 + uTime * 2.3));
   vec4 gw1, gw2;
+  footprint(p, up, 1.0);
   detail(p + vec4(uTime * 0.31, -uTime * 0.23, uTime * 0.17, uTime * 0.27), 0.45, up, gw1);
   detail(p - vec4(uTime * 0.52, uTime * 0.41, -uTime * 0.36, uTime * 0.29), 1.4, up, gw2);
   tng = tng * 0.012 + gw1 * 0.05 + gw2 * 0.018 * (1.0 - smoothstep(10.0, 40.0, tw));
@@ -717,6 +793,7 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf) {
 }
 vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t) {
   vec4 up = normalize(p), g;
+  footprint(p, n, 1.0);
   float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, n, g);
   vec3 alb = leaf > 2.5 ? vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1)                                   // a walker's legs
            : leaf > 1.5 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                   // rope: hemp
@@ -763,6 +840,7 @@ vec3 shadePlanetB(vec4 p, vec4 n, int face, vec4 c, vec4 rd) {
   vec4 up = normalize(p - c);
   float hs = h41(vec4(float(face) * 1.37, 2.1, 5.3, 0.7));
   vec4 g1;
+  footprint(p, n, 0.35);
   float d1 = detail((p - c) * 0.35, 1.0, n, g1);
   vec3 alb = mix(vec3(0.60, 0.58, 0.70), vec3(0.74, 0.70, 0.80), hs) * (0.92 + 0.08 * d1);
   if (face == uPBpad) alb = mix(alb, ACCENT, 0.6);
@@ -788,6 +866,7 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
   float tPB = (uDebug & 8) == 0 ? hitPlanetB(ro, rd, 1e9, nPB, fPB, cPB) : 1e9;
   if ((uDebug & 8) != 0) fPB = -1;
   float tT = dot(ro, ro) > (uPR + 400.0) * (uPR + 400.0) ? marchTerrainFar(ro, rd) : marchTerrain(ro, rd);
+  if (tT > 0.0) tT = refineHit(ro, rd, tT);
   if (fPB >= 0 && (tT < 0.0 || tPB < tT) && (tW < 0.0 || tPB < tW)) {
     int oiB; vec4 onB2;                                       // things standing on B, in front of its floor
     float tOB = hitObject(ro, rd, tPB, (uDebug & 16) == 0 ? uOCut : 0, oiB, onB2);
@@ -861,7 +940,9 @@ in vec2 vUV;
 out vec4 outColor;
 void main() {
   vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
-  vec4 rd = normalize(uF + q.x * uR + q.y * uU);
+  vec4 D = uF + q.x * uR + q.y * uU, rd = normalize(D);
+  { float L = length(D), k = 2.0 * uFov / uRes.y; vec4 ax = uR * k, ay = uU * k;
+    gRd = rd; gDRx = (ax - rd * dot(rd, ax)) / L; gDRy = (ay - rd * dot(rd, ay)) / L; }
   float t;
   vec3 hdr = render(uEye, rd, t);
   if (uGhost >= 0) {                                         // the ghost: a faint glass copy in the accent colour

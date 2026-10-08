@@ -250,11 +250,16 @@ export class World {
     for (const v of struck.values()) this.impacts.push(v);
     // Rolling resistance of soft ground (soil and grass give under a rolling ball): a force c·N against the rolling
     // velocity of a ball on the environment. An approximation of the ground's deformation, which we don't model.
+    // (On stone, a fixed block, it is a hard surface's: 0.02.)
     for (const c of cs) {
-      if (c.a || c.b.shape !== 'glome' || c.ln <= 0 || c.b.kinematic) continue;
-      const b = c.b, vt = sub(b.vel, scale(c.n, dot(b.vel, c.n))), l = len(vt);
+      if (c.ln <= 0) continue;
+      const onFixed = c.a && c.a.fixed && c.b.shape === 'glome' ? 1 : c.a && c.b.fixed && c.a.shape === 'glome' ? 2 : 0;
+      if ((c.a && !onFixed) || (!c.a && c.b.shape !== 'glome')) continue;
+      const b = onFixed === 2 ? c.a : c.b, rr = onFixed ? 0.02 : ROLL_RES;
+      if (b.kinematic) continue;
+      const vt = sub(b.vel, scale(c.n, dot(b.vel, c.n))), l = len(vt);
       if (l < 1e-6) continue;
-      const dv = Math.min(l, ROLL_RES * c.ln * b.invM);
+      const dv = Math.min(l, rr * c.ln * b.invM);
       b.vel = sub(b.vel, scale(vt, dv / l));
       const k = 1 - dv / l;
       for (let i = 0; i < 6; i++) b.omega[i] *= k;            // and the spin with it (it keeps rolling without slipping)

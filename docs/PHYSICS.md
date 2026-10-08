@@ -133,7 +133,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 
 ## Approximations, honestly
 
-- **Terrain** is a heightfield on S³ plus a few carved landforms. Real 4D ground could overhang anywhere; ours does only at designed places.
+- **Terrain** is a heightfield on S³ plus a few carved landforms (the cave, the arch, the overhang, the summit's bowl). Real 4D ground could overhang anywhere; ours does only at designed places.
 - **Rivers** are still water in carved channels (0.5 m deep), not a fluid simulation: they do not flow.
 - **Planet B** is a 120-cell (floors 115 m from its centre, corners 124 m), but its gravity is that of a uniform ball of radius 120 m.
 - **Flight** is a kick-drift-kick leapfrog in the inertial frame at 1/120 s; the space map predicts with the same integrator at 0.02–0.1 s steps. Leaving and landing switch frames exactly (the conversions are rotations and translations).
