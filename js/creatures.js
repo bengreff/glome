@@ -5,7 +5,7 @@
 // walks on two alternating tetrapods, the way a six-legged insect alternates tripods. Walkers are shy: come close
 // and they leave your slice, walking off through ana.
 // Rollers: duocylinders, rolling by turning in two planes at once (a way of moving with no 3D counterpart). They are
-// curious: they come and circle you.
+// curious: they come and circle you, and they play: a ball rolling nearby, they chase and knock on.
 // Behind the scenes: walkers graze where there is grass, keep together in herds, are born when well fed and die when
 // starved or old; rollers live on sunlight. You never see a number; you see herds, and empty valleys.
 // (Gaits are kinematic: feet are placed by rule and the body is carried by them. PHYSICS.md says so.)
@@ -82,6 +82,9 @@ function think(c, all, hf, p, dt) {
       want = vec4.add(want, vec4.scale(vec4.norm(vec4.add(g, [1e-9, 0, 0, 0])), h < 2 ? 1 : -1));
     }
     speed = 0.45;
+    // startled by anything flying past fast: away from it
+    const fly = toys(o => vec4.len(o.vel) > 3 && vec4.dot(vec4.norm(o.pos), n) > Math.cos(8 / PLANET_R), true)[0];
+    if (fly) { want = vec4.add(want, vec4.scale(vec4.norm(proj(vec4.sub(n, vec4.norm(fly.pos)), n)), 2)); speed = 1.8; c.alarm = 1; }
     // shy: within 14 m of you they walk away, out of your slice, through ana
     if (dMe < 14) {
       const away = vec4.norm(proj(vec4.sub(n, me), n)), side = vec4.dot(vec4.sub(n, me), p.A) >= 0 ? 1 : -1;
@@ -94,8 +97,16 @@ function think(c, all, hf, p, dt) {
     c.energy += dt * (0.03 * day - 0.008);
     want = c.heading;
     speed = 0.7;
+    // playful: a ball that is rolling (or was, a few seconds ago) within 25 m, they chase and knock on (below)
+    let toy = null, td = 25;
+    for (const o of toys(o => o.shape === 'glome' && !o.light && (o.toyUntil || 0) > G.simT)) {
+      const d = Math.acos(Math.max(-1, Math.min(1, vec4.dot(vec4.norm(o.pos), n)))) * PLANET_R;
+      if (d < td) { td = d; toy = o; }
+    }
+    c.toy = toy;
+    if (toy) { want = proj(vec4.sub(vec4.norm(toy.pos), n), n); speed = Math.min(3.4, 1 + td); c.alarm = 1; }
     // curious: within 30 m they come and circle you, in your slice, where you can see them
-    if (dMe < 30) {
+    else if (dMe < 30) {
       c.orbit = (c.orbit || rnd() * 6.283) + dt * 0.35;
       const tgt = vec4.norm(vec4.add(vec4.scale(me, Math.cos(5.5 / PLANET_R)), vec4.scale(vec4.norm(vec4.add(vec4.scale(p.F, Math.cos(c.orbit)), vec4.scale(p.R, Math.sin(c.orbit)))), Math.sin(5.5 / PLANET_R))));
       want = proj(vec4.sub(tgt, n), n); speed = Math.min(3, 0.5 + vec4.len(want) * PLANET_R * 0.6); c.alarm = 1;
@@ -104,6 +115,13 @@ function think(c, all, hf, p, dt) {
   }
   const wl = vec4.len(want);
   c.target = wl > 1e-9 ? vec4.scale(proj(want, n), speed / Math.max(1e-9, vec4.len(proj(want, n)))) : [0, 0, 0, 0];
+}
+// The loose things in A's world that creatures notice (G.objects is set by main.js).
+function toys(test, first = false) {
+  const w = G.objects && G.objects.world, out = [];
+  if (!w) return out;
+  for (const o of w.bodies) if (!o.fixed && !o.held && !o.inB && test(o)) { out.push(o); if (first) break; }
+  return out;
 }
 function lifeAndDeath(hf) {
   const L = creatures.list, born = [];
@@ -125,6 +143,7 @@ function lifeAndDeath(hf) {
 export function stepCreatures(dt, hf) {
   const p = G.player;
   creatures.t += dt;
+  for (const o of toys(o => o.shape === 'glome' && vec4.len(o.vel) > 0.4)) o.toyUntil = G.simT + 6;   // a rolling ball is a toy a while
   const thinkNow = creatures.t > 0.5;
   if (thinkNow) { for (const c of creatures.list) think(c, creatures.list, hf, p, creatures.t); creatures.tLife = (creatures.tLife || 0) + creatures.t; creatures.t = 0; }
   if ((creatures.tLife || 0) > 5) { lifeAndDeath(hf); creatures.tLife = 0; }
@@ -142,6 +161,17 @@ export function stepCreatures(dt, hf) {
     c.phase = (c.phase + dt * sp / (2 * WALKER.stride)) % 1;
     c.th1 += dt * sp / ROLLER.a; c.th2 += dt * sp / ROLLER.a * 0.81;
     c.alarm = Math.max(0, c.alarm - dt * 0.5);
+    // a roller that reaches its ball knocks it on: a collision with something much heavier (it bounces off at the
+    // roller's speed, a little more), pushed clear of the roller's body
+    const b = c.toy;
+    if (b && !b.held) {
+      const ctr = vec4.scale(c.n, PLANET_R + hf.heightAt(c.n) + ROLLER.a * Math.SQRT2), d = vec4.sub(b.pos, ctr), l = vec4.len(d), R = ROLLER.a * 1.25 + b.size;
+      if (l < R && l > 1e-6) {
+        const nn = vec4.scale(d, 1 / l), vr = vec4.dot(vec4.sub(c.v, b.vel), nn);
+        b.pos = vec4.add(b.pos, vec4.scale(nn, R - l));
+        if (vr > 0) { b.vel = vec4.add(b.vel, vec4.scale(nn, vr * 1.4)); b.sleeping = false; b.sleepT = 0; }
+      }
+    }
   }
 }
 

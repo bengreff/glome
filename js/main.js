@@ -20,7 +20,7 @@ import { MASSIF } from './world.js';
 import { quality, updateSky } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
-         drawStone, computeGhost, setDown, objectsSave, moveHeld } from './objects.js';
+         drawStone, computeGhost, setDown, objectsSave, moveHeld, carryHeld } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
@@ -88,6 +88,8 @@ function backToDry() {
   p.pos = d.pos.slice(); p.vel = [0, 0, 0, 0];
   if (d.F) { p.F = d.F; p.R = d.R; p.A = d.A; }
   p.settleFrame();
+  moveHeld(p.onB != null);                                 // what you hold comes too
+  carryHeld(p.onB != null ? p.camera() : cameraNow());
 }
 
 // ---------- hands: pick up, carry, set down, throw ----------

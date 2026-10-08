@@ -193,12 +193,13 @@ export function carryHeld(cam) {
 
 // ---------- picking up, dropping, throwing ----------
 // The object under your gaze, within reach (a ray from the eye; a near miss of 0.3 m also counts).
+// Not what you stand on (picking up the raft under your feet would pull you after it).
 export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
   const hit = w.raycast(cam.eye, cam.F, reach, objects.held);
-  if (hit) return hit.body.fixed ? null : hit.body;
+  if (hit) return hit.body.fixed || hit.body === G.player.ride ? null : hit.body;
   let best = null, bd = 0.3;
   for (const b of w.bodies) {
-    if (b === objects.held || b.fixed) continue;
+    if (b === objects.held || b.fixed || b === G.player.ride) continue;
     const d = vec4.sub(b.pos, cam.eye), t = vec4.dot(d, cam.F);
     if (t < 0 || t > reach) continue;
     const miss = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))) - b.bound;
