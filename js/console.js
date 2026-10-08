@@ -101,6 +101,7 @@ export function openConsole() {
   if (!G.flags.orbited) { G.audio?.emit('clack', [0, 0, 0, 0], 0.3); return false; }   // dark: nothing yet
   if (!G.flags.console) { G.flags.console = true; G.audio?.cue('console'); }
   $('console').hidden = false;
+  if (!$('console-src').textContent && consoleFirst.show) consoleFirst.show();
   document.exitPointerLock?.();
   syncDials();
   return true;
@@ -109,6 +110,7 @@ export function closeConsole() { $('console').hidden = true; }
 G.screenOn = false;
 export function updateConsole() { G.screenOn = !!G.flags.orbited; if (G.infinite) objects.pouch = Math.max(objects.pouch, 9); }
 
+const consoleFirst = { show: null };
 // The dials (in symbols, not words: this is the end of a wordless trail).
 const DIALS = [
   ['dial-g', 'G_SCALE', v => +v, v => v],
@@ -141,5 +143,6 @@ export function bindConsole() {
     const b = document.createElement('button'); b.textContent = f;
     b.onclick = async () => { $('console-src').textContent = '…'; try { $('console-src').textContent = await (await fetch('js/' + f)).text(); } catch { $('console-src').textContent = '(could not load)'; } };
     list.appendChild(b);
+    if (f === 'laws.js') consoleFirst.show = b.onclick;          // what the console shows first: the laws
   }
 }
