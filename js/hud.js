@@ -5,7 +5,8 @@ import { G } from './game.js';
 import { canvas, overlay, octx, scene, prof, FOV } from './render.js';
 import { radar, headingTo } from './radar.js';
 import { boulders } from './boulders.js';
-import { floorOf } from './planetB.js';
+import { floorOf, NORMALS, B_IN } from './planetB.js';
+import { bworld } from './console.js';
 
 const $ = id => document.getElementById(id);
 
@@ -54,6 +55,38 @@ export function drawFaced(cam) {
   octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const t = `${f.what || 'here'} · ${Math.round(headingTo(f.n).dist)} m ahead`;
   const w = octx.measureText(t).width + 12 * k; octx.fillRect(X - w / 2, Y - 30 * k, w, 17 * k);
   octx.fillStyle = '#fff'; octx.fillText(t, X, Y - 17 * k);
+  octx.restore();
+}
+
+// On planet B (where the radar is the system map) two marks show the way, in the view: the console (the accent
+// colour) and the return pad (pale). Off the screen they sit on its edge, toward where they are; off your slice, a
+// small caret says which way through ana (orange) or kata (blue), as the radar's colours do.
+export function drawBMarks() {
+  const p = G.player;
+  if (p.onB == null || !bworld.console) return;
+  const c = p.camera(), W = overlay.width, H = overlay.height, k = W / innerWidth, fx = FOV * W / H;
+  const marks = [{ q: bworld.console.pos, col: 'rgba(82, 220, 200, 0.95)' }, { q: vec4.scale(NORMALS[0], B_IN()), col: 'rgba(225, 215, 255, 0.9)' }];
+  octx.save();
+  octx.font = `500 ${11 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'center';
+  for (const m of marks) {
+    const d = vec4.sub(m.q, c.eye), dist = vec4.len(d);
+    if (dist < 3) continue;
+    const z = vec4.dot(d, c.F), x = vec4.dot(d, c.R), y = vec4.dot(d, c.U), a = vec4.dot(d, c.A);
+    let sx = x / Math.max(z, 1e-3) / fx, sy = y / Math.max(z, 1e-3) / FOV;
+    const inside = z > 0 && Math.abs(sx) < 0.92 && Math.abs(sy) < 0.88;
+    if (!inside) { const l = Math.hypot(x, y) || 1; const e = Math.min(0.92 / Math.abs(x / l || 1e-9), 0.86 / Math.abs(y / l || 1e-9)); sx = x / l * e; sy = y / l * e; }
+    const X = (sx * 0.5 + 0.5) * W, Y = (0.5 - sy * 0.5) * H, r = 6 * k;
+    octx.strokeStyle = m.col; octx.fillStyle = m.col.replace(/[\d.]+\)$/, '0.18)'); octx.lineWidth = 1.6 * k;
+    octx.beginPath(); octx.moveTo(X, Y - r); octx.lineTo(X + r, Y); octx.lineTo(X, Y + r); octx.lineTo(X - r, Y); octx.closePath(); octx.fill(); octx.stroke();
+    octx.fillStyle = 'rgba(11, 14, 20, 0.55)'; const t = `${Math.round(dist)} m`, tw = octx.measureText(t).width + 8 * k;
+    octx.fillRect(X - tw / 2, Y + r + 3 * k, tw, 15 * k);
+    octx.fillStyle = m.col; octx.fillText(t, X, Y + r + 14 * k);
+    if (Math.abs(a) > 2) {                                   // off your slice: which way through ana
+      octx.fillStyle = a > 0 ? 'rgba(255, 170, 90, 0.95)' : 'rgba(120, 170, 255, 0.95)';
+      const s2 = a > 0 ? -1 : 1, xx = X + r + 8 * k, yy = Y - s2 * 2.5 * k;   // beside it: pointing up for ana, down for kata
+      octx.beginPath(); octx.moveTo(xx - 4 * k, yy); octx.lineTo(xx + 4 * k, yy); octx.lineTo(xx, yy + s2 * 5 * k); octx.closePath(); octx.fill();
+    }
+  }
   octx.restore();
 }
 

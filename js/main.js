@@ -9,7 +9,7 @@ import { radar, radarRect, drawRadar, blitRadar, drawRadarOverlay, makeRadarVolu
          compassAt, logMap } from './radar.js';
 import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulders.js';
 import { keys, mouse, SENS, readInput, actions, pad, pollPad } from './input.js';
-import { gazePoint, drawFaced, drawGazeDot, updateHUD } from './hud.js';
+import { gazePoint, drawFaced, drawGazeDot, drawBMarks, updateHUD } from './hud.js';
 import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
 import { LAWS } from './laws.js';
 import { accelBodyA } from './cosmos.js';
@@ -314,7 +314,7 @@ function frameBody(now) {
   G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
-  if (!state.bare) { drawFaced(cam); drawGazeDot(); }
+  if (!state.bare) { drawFaced(cam); drawBMarks(); drawGazeDot(); }
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
   if (spaceMode && !state.radar.hidden && !state.bare) {
     const u = player.up(), pc = player.camera(), dir = vec4.dot(pc.F, u) > 0.05 ? pc.F : u;
