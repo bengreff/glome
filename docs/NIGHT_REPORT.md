@@ -51,14 +51,16 @@ The ones a player would have met:
 - **On B the sun, day and night were computed from planet A's centre**, 3 km away; on A, 7° off.
 - **The raft tipped you into the sea.** A light raft floated at 28° because the buoyancy sampling was too coarse for its shallow draft, it never stopped bobbing because water's damping scaled with depth under water, and standing on its slightly tilted deck slid you off. All three were fixed: smooth buoyancy, damping by displaced mass, and footing that holds you as friction would.
 - **The antipode's ball rolled out of the bowl.** It was a flat slab open in the third ground direction, and a ball on stone felt no rolling resistance.
-- **Smaller ones:**
+- **Smaller ones** (several found by three code reviews):
   - the console's flying switch was taken over by orbital flight above 20 m;
   - the radar took clicks from stale data while showing the space map;
   - lifting the raft you stood on yanked you along;
   - fading home dropped what you held;
   - a far pickup dropped the object before it arrived;
   - a save made in mid-flight came back as an ordinary jump;
-  - the resolution controller hunted, or pinned itself, on vsync'd displays.
+  - the resolution controller hunted, or pinned itself, on vsync'd displays;
+  - finished sounds were never disconnected, so a long walk grew the audio graph without bound;
+  - a gamepad unplugged mid-press left a throw winding up for ever.
 
 All four puzzles were solved again by script with the real controls, after these changes: the mirror key, the knot gate, the antipode and the orbit. A save made while holding something reloads with it still in your hand.
 
