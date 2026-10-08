@@ -17,6 +17,7 @@ import * as saveMod from './save.js';
 import * as cosmos from './cosmos.js';
 import { capsuleTerrain, envSD } from './env.js';
 import { quality } from './render.js';
+import { updateSound } from './sounds.js';
 
 const $ = id => document.getElementById(id);
 const state = G.state;
@@ -131,6 +132,7 @@ function frame(now) {
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
   mark('overlay');
   updateHUD(dt, cam, sun);
+  updateSound(dt, cam);
   mark('hud');
   requestAnimationFrame(frame);
 }

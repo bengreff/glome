@@ -49,7 +49,12 @@ Looking along the hoop you see copies of everything, including your own planet, 
 
 ## Sound
 
-Sound obeys the wave equation in four space dimensions. Amplitude falls as **r^(−3/2)**. Because the number of space dimensions is even, a sharp sound is not followed by silence: the wave's response fills the inside of its light cone, so a click arrives with a faint tail that decays after it. (In odd dimensions, like ours, Huygens' principle makes sounds sharp.) The game convolves sounds with the 4D response.
+Sound obeys the wave equation in four space dimensions. Amplitude falls as **r^(−3/2)**. Because the number of space dimensions is even, a sharp sound is not followed by silence: the wave's response fills the inside of its light cone, so a click arrives with a faint tail that decays after it. (In odd dimensions, like ours, Huygens' principle makes sounds sharp.)
+
+- **The Green's function,** from the dimensional recursion G₄ = −(1/2πr)∂G₂/∂r with G₂ = θ(ct − r)/(2πc√(c²t² − r²)): a singular front on the cone plus a tail −(1/4π²c)(c²t² − r²)^(−3/2) inside it. Checked numerically in tools/test-audio.mjs (to 5·10⁻¹¹ against an independent G₂).
+- **For a 1 ms click,** the front falls as r^(−1.53) over 2–400 m (−1.5 in the far field), and 5 ms after the front the tail is −0.5% (2 m), −0.8% (10 m) and −1.0% (50 m) of the front's peak: negative, a faint rarefaction, decaying as t⁻³.
+- **In the game,** each sound is delayed by r/c (c = 343 m/s), scaled by r^(−3/2) and panned by your right axis (ears, 4D or not, sit left and right); the tail is added by convolving with that response from 2.5 ms after the front on (precomputed for 3, 12, 48 and 192 m).
+- **Approximation:** the far-field front also carries an amplitude rise ∝ √frequency (the half-derivative of even dimensions). Taken literally that is +30 dB across the audible range; the game uses a gentle +3.5 dB high shelf instead, the same sign, tamed.
 
 ## Rigid bodies
 

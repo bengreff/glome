@@ -134,7 +134,7 @@ console.log('\n=== 4. buildTailIR() consistency with the ground-truth recursion 
     const ir = buildTailIR(sr, r);
     const { peak } = frontPeak(r, pulseDur, C_SOUND, pulse);
     // spot-check a handful of samples well past the fade-in window
-    for (const ms of [2, 5, 20]) {
+    for (const ms of [5, 20, 100]) {   // past the 4 ms fade-in (the IR holds only the inside-the-cone tail)
       const i = Math.round((ms / 1000) * sr);
       const expected = p4Response(r / C_SOUND + i / sr, r, pulse, pulseDur, C_SOUND, null, 48) / peak;
       const got = ir[i];

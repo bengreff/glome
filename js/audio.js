@@ -204,10 +204,13 @@ export function buildTailIR(sampleRate, r, opts = {}) {
   for (let i = 0; i < n; i++) {
     const tau = i / sampleRate;
     let v = p4Response(r / c + tau, r, pulse, pulseDur, c, null, 48) / norm;
-    // Fade the first half pulse-width in from zero: that instant is the
-    // front's own main lobe, already carried by the dry Gain/Delay path,
-    // so the IR must not double it up.
-    v *= Math.min(1, tau / (pulseDur * 0.5));
+    // The front and its band-limited lobes (the first ~2 pulse widths) are
+    // carried by the dry Gain/Delay path and the tilt shelf, so the IR holds
+    // only the tail INSIDE the cone: zero before 2.5 pulse widths, then a
+    // smooth raised-cosine fade in by 4 (where the response has become the
+    // (c²t² − r²)^(−3/2) tail).
+    const a0 = 2.5 * pulseDur, a1 = 4 * pulseDur;
+    v *= tau <= a0 ? 0 : tau >= a1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * (tau - a0) / (a1 - a0));
     out[i] = v;
   }
   // Short fade-out so truncating the IR at `dur` never produces a click.
