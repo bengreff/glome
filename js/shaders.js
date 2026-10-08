@@ -203,7 +203,7 @@ const vec4 S2 = vec4(-0.5590170, 0.5590170,-0.5590170, -0.25);
 const vec4 S3 = vec4(-0.5590170,-0.5590170, 0.5590170, -0.25);
 const vec4 S4 = vec4( 0.0, 0.0, 0.0, 1.0);
 vec4 terrainNormal(vec4 p, float t) {
-  float e = 0.9 + 0.003 * t;
+  float e = 0.9 + 0.008 * t;            // (wider far off: the heights' texels are 3 m, and a gradient over less than one shows them as facets)
   return normalize(S0 * sdTerrain(p + e * S0) + S1 * sdTerrain(p + e * S1) + S2 * sdTerrain(p + e * S2)
                  + S3 * sdTerrain(p + e * S3) + S4 * sdTerrain(p + e * S4));
 }
@@ -448,10 +448,10 @@ float detail(vec4 p, float f, vec4 n, out vec4 g) {
   float v = 0.0, k = f / NOISE_P;
   g = vec4(0.0);
   vec3 q = vec3(0.0); vec4 a;
-  if (w.x > 0.0) { a = texture(uNoise, p.yzw * k); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.x * (a.w - 0.5); g += w.x * vec4(0.0, q); }
-  if (w.y > 0.0) { a = texture(uNoise, p.xzw * k + vec3(0.456, 0.119, 0.256)); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.y * (a.w - 0.5); g += w.y * vec4(q.x, 0.0, q.yz); }
-  if (w.z > 0.0) { a = texture(uNoise, p.xyw * k + vec3(0.231, 0.7, 0.369)); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.z * (a.w - 0.5); g += w.z * vec4(q.xy, 0.0, q.z); }
-  if (w.w > 0.0) { a = texture(uNoise, p.xyz * k + vec3(0.819, 0.163, 0.55)); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.w * (a.w - 0.5); g += w.w * vec4(q, 0.0); }
+  if (w.x > 0.0) { a = texture(uNoise, p.yzw * k); q = (a.xyz * 2.0 - 1.0) * 4.0; v += w.x * (a.w - 0.5); g += w.x * vec4(0.0, q); }
+  if (w.y > 0.0) { a = texture(uNoise, p.xzw * k + vec3(0.456, 0.119, 0.256)); q = (a.xyz * 2.0 - 1.0) * 4.0; v += w.y * (a.w - 0.5); g += w.y * vec4(q.x, 0.0, q.yz); }
+  if (w.z > 0.0) { a = texture(uNoise, p.xyw * k + vec3(0.231, 0.7, 0.369)); q = (a.xyz * 2.0 - 1.0) * 4.0; v += w.z * (a.w - 0.5); g += w.z * vec4(q.xy, 0.0, q.z); }
+  if (w.w > 0.0) { a = texture(uNoise, p.xyz * k + vec3(0.819, 0.163, 0.55)); q = (a.xyz * 2.0 - 1.0) * 4.0; v += w.w * (a.w - 0.5); g += w.w * vec4(q, 0.0); }
   g *= f * 1.6;
   return v * 1.6;
 }
@@ -533,7 +533,9 @@ vec4 clouds(vec4 ro, vec4 rd, float tMax) {
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
   vec3 col = mix(vec3(0.03, 0.035, 0.06), vec3(0.5, 0.54, 0.6), day) * (1.0 - 0.3 * d)
            + sunCol * smoothstep(-0.1, 0.4, sunEl) * 0.62 * day * lit;
-  return vec4(col, d * 0.9 * exp(-t / 900.0) * uAtmos);    // (thinning toward the horizon, where they would alias)
+  // thinning toward the horizon, where they would alias, and where the view grazes the layer (its edge, seen from
+  // above, would otherwise end in a hard circle)
+  return vec4(col, d * 0.9 * exp(-t / 900.0) * smoothstep(0.0, 0.2, abs(dot(rd, up))) * uAtmos);
 }
 // The shade of the clouds on the ground: how much of the layer the sun shines through on its way to p.
 float cloudShadow(vec4 p) {
@@ -574,19 +576,22 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
 
   // detail at four scales (≈9 m, 2 m, 0.45 m, 0.14 m), each faded out before it would shimmer
   vec4 g1, g2, g3, g4;
-  float d1 = detail(p, 0.11, n, g1);
-  float d2 = detail(p, 0.55, n, g2);
+  // the detail's layers are weighted by the vertical on gentle ground (the true normal has kinks at the heights'
+  // 3 m texels, which a blend of two layers showed as blocks) and by the normal only on steep slopes
+  vec4 wn = normalize(up + (n - up) * smoothstep(0.85, 0.6, slope));
+  float d1 = detail(p, 0.11, wn, g1);
+  float d2 = detail(p, 0.55, wn, g2);
   // each finer layer also fades out as its features shrink below a few pixels (the pixel's footprint on the ground,
   // which grows at grazing angles), so it never aliases into stair-steps
   float fp = max(length(gPx), length(gPy));
   float f2 = (1.0 - smoothstep(30.0, 90.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 0.55));
   float f3 = (1.0 - smoothstep(8.0, 26.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 2.3));
   float f4 = (1.0 - smoothstep(2.5, 10.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 7.1));
-  float d3 = f3 > 0.0 ? detail(p, 2.3, n, g3) : 0.0;
-  float d4 = f4 > 0.0 ? detail(p, 7.1, n, g4) : 0.0;
+  float d3 = f3 > 0.0 ? detail(p, 2.3, wn, g3) : 0.0;
+  float d4 = f4 > 0.0 ? detail(p, 7.1, wn, g4) : 0.0;
   float f5 = (1.0 - smoothstep(1.2, 5.0, t)) * (1.0 - smoothstep(0.2, 0.6, fp * 19.0));
   vec4 g5 = vec4(0.0);
-  float d5 = f5 > 0.0 ? detail(p, 19.0, n, g5) : 0.0;
+  float d5 = f5 > 0.0 ? detail(p, 19.0, wn, g5) : 0.0;
   if (f3 <= 0.0) g3 = vec4(0.0);
   if (f4 <= 0.0) g4 = vec4(0.0);
   // inside a carved hollow everything is bare rock, and the sky's light falls off with depth below the ground above

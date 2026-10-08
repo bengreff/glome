@@ -84,29 +84,38 @@ export function buildAtlas() {
   });
 }
 
-// Tileable 3D value noise with analytic gradient: rgb = gradient / 3, a = value (all mapped to 0..1).
+// Tileable 3D gradient (Perlin) noise with its analytic gradient: rgb = gradient / 4, a = value (mapped to 0..1).
+// 128³ texels over 16³ lattice cells. (Value noise, random numbers on the lattice blended smoothly, was used first;
+// its blobs line up with the lattice, which the tetraplanar layers turn square to the ground, so from above the
+// grass came out in blocks.) Scaled by 1.94 to keep the value noise's spread (standard deviation 0.37).
 export function makeNoise() {
-  const S = 64, P = 16, k = S / P;
+  const S = 128, P = 16, k = S / P, AMP = 1.94;
   let seed = 7;
   const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296) * 2 - 1;
-  const lat = new Float32Array(P * P * P).map(rnd);
-  const L = (x, y, z) => lat[((x % P + P) % P) + P * (((y % P + P) % P) + P * ((z % P + P) % P))];
+  const Gr = new Float32Array(P * P * P * 3);                  // a random unit gradient at each lattice point
+  for (let i = 0; i < P * P * P; i++) {
+    let x, y, z, l;
+    do { x = rnd(); y = rnd(); z = rnd(); l = Math.hypot(x, y, z); } while (l > 1 || l < 0.1);
+    Gr[3 * i] = x / l; Gr[3 * i + 1] = y / l; Gr[3 * i + 2] = z / l;
+  }
   const out = new Uint8Array(S * S * S * 4);
-  const sm = f => f * f * (3 - 2 * f), dsm = f => 6 * f * (1 - f);
+  const I = new Int32Array(S), F = new Float64Array(S), U = new Float64Array(S), D = new Float64Array(S);
+  for (let x = 0; x < S; x++) { const q = (x + 0.5) / k, i = Math.floor(q), f = q - i; I[x] = i; F[x] = f; U[x] = f * f * f * (f * (f * 6 - 15) + 10); D[x] = 30 * f * f * (f - 1) * (f - 1); }
+  const enc = t => Math.max(0, Math.min(255, Math.round((t * 0.5 + 0.5) * 255)));
   for (let z = 0; z < S; z++) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    const q = [(x + 0.5) / k, (y + 0.5) / k, (z + 0.5) / k];
-    const i = q.map(Math.floor), f = q.map((v, j) => v - i[j]);
-    const w = f.map(sm), dw = f.map(dsm);
     let v = 0, gx = 0, gy = 0, gz = 0;
     for (let c = 0; c < 8; c++) {
       const a = c & 1, b = (c >> 1) & 1, d = (c >> 2) & 1;
-      const val = L(i[0] + a, i[1] + b, i[2] + d);
-      const wx = a ? w[0] : 1 - w[0], wy = b ? w[1] : 1 - w[1], wz = d ? w[2] : 1 - w[2];
-      const sx = a ? dw[0] : -dw[0], sy = b ? dw[1] : -dw[1], sz = d ? dw[2] : -dw[2];
-      v += wx * wy * wz * val; gx += sx * wy * wz * val; gy += wx * sy * wz * val; gz += wx * wy * sz * val;
+      const idx = 3 * (((I[x] + a) & 15) + P * (((I[y] + b) & 15) + P * ((I[z] + d) & 15)));
+      const nc = Gr[idx] * (F[x] - a) + Gr[idx + 1] * (F[y] - b) + Gr[idx + 2] * (F[z] - d);
+      const wx = a ? U[x] : 1 - U[x], wy = b ? U[y] : 1 - U[y], wz = d ? U[z] : 1 - U[z], w = wx * wy * wz;
+      v += w * nc;
+      gx += (a ? D[x] : -D[x]) * wy * wz * nc + w * Gr[idx];
+      gy += wx * (b ? D[y] : -D[y]) * wz * nc + w * Gr[idx + 1];
+      gz += wx * wy * (d ? D[z] : -D[z]) * nc + w * Gr[idx + 2];
     }
-    const o = 4 * (x + S * (y + S * z)), enc = t => Math.max(0, Math.min(255, Math.round((t * 0.5 + 0.5) * 255)));
-    out[o] = enc(gx / 3); out[o + 1] = enc(gy / 3); out[o + 2] = enc(gz / 3); out[o + 3] = enc(v);
+    const o = 4 * (x + S * (y + S * z));
+    out[o] = enc(AMP * gx / 4); out[o + 1] = enc(AMP * gy / 4); out[o + 2] = enc(AMP * gz / 4); out[o + 3] = enc(AMP * v);
   }
   const t = gl.createTexture();
   gl.activeTexture(gl.TEXTURE7);
