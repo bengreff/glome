@@ -851,18 +851,26 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf) {
   return best;
 }
 vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t) {
-  vec4 up = normalize(p), g;
+  vec4 up = normalize(p), g, g2 = vec4(0.0);
   footprint(p, n, 1.0);
-  float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, n, g);
+  bool foliage = leaf > 0.5 && leaf < 1.5;
+  float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, n, g), d2 = 0.0;
+  if (foliage && t < 40.0) d2 = detail(p, 7.0, n, g2) * (1.0 - smoothstep(15.0, 40.0, t));   // clumps of leaves
   vec3 alb = leaf > 2.5 ? vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1)                                   // a walker's legs
            : leaf > 1.5 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                   // rope: hemp
-           : leaf > 0.5 ? mix(vec3(0.09, 0.22, 0.06), vec3(0.24, 0.34, 0.10), 0.5 + 0.5 * d1) : vec3(0.27, 0.21, 0.16) * (0.82 + 0.18 * d1);
-  vec4 nb = normalize(n - (leaf > 0.5 ? 0.35 : 0.12) * (g - n * dot(g, n)));
+           : foliage ? mix(vec3(0.07, 0.17, 0.04), vec3(0.24, 0.36, 0.09), clamp(0.5 + 0.35 * d1 + 0.7 * d2, 0.0, 1.0))
+           : vec3(0.27, 0.21, 0.16) * (0.82 + 0.18 * d1);
+  vec4 bg = foliage ? 0.12 * g + 0.09 * g2 : (leaf > 0.5 ? 0.35 : 0.12) * g;
+  vec4 nb = normalize(n - bg + n * dot(bg, n));
   float dif = rowLight(p, nb, up), sh = 1.0;
-  if (dif > 0.0 && uShadows > 0.5) sh = softShadow(p + n * 0.1, uSun);
+  if (uShadows > 0.5) sh = softShadow(p + n * 0.1, uSun);
   float day = dayFactor(up);
-  vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);
-  return alb * (vec3(1.0, 0.94, 0.84) * dif * sh * 1.6 + sky * (0.6 + 0.4 * dot(nb, up)) + lanternLight(p, nb));
+  vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day), sunC = vec3(1.0, 0.94, 0.84);
+  // leaves let light through: lit from behind, the canopy glows a warmer green
+  vec3 through = foliage ? vec3(0.3, 0.42, 0.1) * 0.16 * max(0.0, -dot(n, uSun)) * smoothstep(-0.04, 0.1, dot(uSun, up)) * sh * day : vec3(0.0);
+  // a canopy shades its own underside: less sky, and less still deep in the clumps
+  float under = foliage ? (0.35 + 0.65 * smoothstep(-0.6, 0.6, dot(n, up))) * (0.75 + 0.25 * clamp(0.5 + d2, 0.0, 1.0)) : 1.0;
+  return alb * (sunC * dif * sh * 1.6 + sky * (0.6 + 0.4 * dot(nb, up)) * under + lanternLight(p, nb)) + through * under;
 }
 
 // Planet B: a 120-cell crystal. A ray meets a convex polytope where it has entered every floor's half-space: the
