@@ -413,6 +413,10 @@ function frameBody(now) {
     buildB();
     bindConsole();
     hooks.spin = { save: spinSave, load: spinLoad };
+    // a flight in progress: its exact inertial state, so a reload carries on the same arc (rather than re-entering
+    // flight from the planet's frame, or not at all when the save caught you under 20 m)
+    hooks.flight = { save: () => flight.active ? { x: flight.x.slice(), v: flight.v.slice(), F: flight.F, R: flight.R, A: flight.A, time: flight.time, maxR: flight.maxR } : null,
+                     load: f => { if (f && f.x && f.v) Object.assign(flight, { active: true, x: f.x.slice(), v: f.v.slice(), F: f.F, R: f.R, A: f.A, time: f.time || 0, maxR: f.maxR || 0 }); } };
     // the console's laws (only the ones it can change), and its two switches
     const CONSOLE_LAWS = ['G_SCALE', 'GRAV_DIM', 'L', 'TIME_RATE', 'JUMP', 'WALK', 'RUN'];
     hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly }),
