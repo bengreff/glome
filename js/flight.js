@@ -14,7 +14,7 @@ const ENTER = 20, LEAVE = 14;          // heights above the ground (m) to switch
 
 export function updateFlightMode(p) {
   const above = p.heightAboveGround();
-  if (!flight.active && !p.grounded && above > ENTER) enter(p);
+  if (!flight.active && !p.grounded && above > ENTER && !G.fly) enter(p);   // (the console's flying switch is not flight)
   else if (flight.active && above < LEAVE && vec4.dot(p.vel, p.up()) < 0) leave(p);
 }
 function enter(p) {

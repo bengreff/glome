@@ -294,6 +294,7 @@ function frameBody(now) {
   const onLauncher = launcher.onPad && launcher.tier > 0 && !flight.active;
   const spaceMode = flight.active || onLauncher || player.onB != null || player.heightAboveGround() > 60;
   if (!state.radar.hidden && !spaceMode) rad = drawRadar(cam, sun, G.simT, FOV * scene.w / scene.h);
+  else radar.last = null;                                    // (the space map takes no clicks: nothing stale to pick)
   mark('radar');
   present();
   if (rad) blitRadar(rad);

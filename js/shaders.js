@@ -25,7 +25,7 @@ uniform vec4 uSun;          // unit direction toward the sun
 uniform float uTime;
 uniform float uShadows;
 uniform int uDebug;         // for testing: bits switch features off (1 stars, 2 star row, 4 copies, 8 planet B, 16 objects, 32 trees, 64 hollows,
-                            // 128 boulders, 256 one light, 512 one day, 1024 rivers, 2048 shadows, 4096 bumps, 8192 AO, 2^19 hit refinement, 2^20 detail)
+                            // 128 boulders, 256 one light, 512 one day, 1024 rivers, 2048 shadows, 4096 bumps, 8192 AO, 2^19 hit refinement, 2^20 detail, 2^24 clouds)
 const int MAXB = 32;
 uniform vec4 uBC[MAXB];     // boulders near you: 4D balls (centres) ...
 uniform float uBR[MAXB];    // ... and radii
@@ -503,6 +503,46 @@ vec3 skyColor(vec4 rd, vec4 up, float day0) {
   return col;
 }
 
+// Clouds: a layer of 4D noise on the 3-sphere 90 m above the sea, a shell in 4D that your slice cuts in a sheet. They
+// drift with the wind, and as you turn through ana the slice cuts the layer elsewhere, so the clouds change shape.
+const float CLOUD_H = 90.0;
+// (octaves: 1 the broad shapes only, for the soft shadows on the ground; 2 and 3 add finer structure)
+float cloudDensity(vec4 q, int octaves) {                    // q on the shell
+  vec4 n = normalize(q), g, drift = vec4(0.7, -0.4, 0.5, 0.3) * uTime;
+  float v = detail(q + drift, 0.011, n, g);
+  if (octaves > 1) v += 0.45 * detail(q + drift * 1.6, 0.034, n, g);
+  if (octaves > 2) v += 0.18 * detail(q + drift * 2.3, 0.1, n, g);
+  return smoothstep(0.1, 0.3, v);
+}
+// Where the ray meets the layer (below it: the far side of the shell; above it: the near side), before tMax: the
+// clouds' colour and cover.
+vec4 clouds(vec4 ro, vec4 rd, float tMax) {
+  if (uAtmos <= 0.0 || (uDebug & 16777216) != 0) return vec4(0.0);
+  float Rc = uPR + CLOUD_H, b = dot(ro, rd), c = dot(ro, ro) - Rc * Rc, disc = b * b - c;
+  if (disc < 0.0) return vec4(0.0);
+  float s = sqrt(disc), t = c < 0.0 ? -b + s : -b - s;
+  if (t <= 0.0 || t > tMax) return vec4(0.0);
+  vec4 q = ro + rd * t;
+  float d = cloudDensity(q, 3);
+  if (d <= 0.0) return vec4(0.0);
+  vec4 up = q / Rc;
+  float sunEl = dot(uSun, up), day = dayFactor(up);
+  // the side toward the sun is lit, the side away from it in the cloud's own shade (density a few metres sunward)
+  vec4 st = uSun - up * sunEl;
+  float lit = clamp(1.0 - 2.5 * (cloudDensity(q + st * (6.0 / max(length(st), 0.05)), 2) - d) - 0.35 * d, 0.25, 1.0);
+  vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
+  vec3 col = mix(vec3(0.03, 0.035, 0.06), vec3(0.5, 0.54, 0.6), day) * (1.0 - 0.3 * d)
+           + sunCol * smoothstep(-0.1, 0.4, sunEl) * 0.62 * day * lit;
+  return vec4(col, d * 0.9 * exp(-t / 900.0) * uAtmos);    // (thinning toward the horizon, where they would alias)
+}
+// The shade of the clouds on the ground: how much of the layer the sun shines through on its way to p.
+float cloudShadow(vec4 p) {
+  if (uAtmos <= 0.0 || (uDebug & (16777216 | 33554432)) != 0) return 1.0;
+  float Rc = uPR + CLOUD_H, b = dot(p, uSun), c = dot(p, p) - Rc * Rc, disc = b * b - c;
+  if (disc < 0.0 || c > 0.0) return 1.0;
+  return 1.0 - 0.6 * cloudDensity(p + uSun * (-b + sqrt(disc)), 1);
+}
+
 // The star's images along the ray: their discs (every image has the same surface brightness: radiance is
 // conserved along a ray, in any dimension) and a soft glow, dimmer for an image lying off your slice.
 vec3 starRow(vec4 ro, vec4 rd, out float tHit) {
@@ -588,6 +628,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
     sh = (uDebug & 8388608) == 0 ? softShadow(p + n * 0.08, uSun, t > 80.0 ? 7 : 10) : 1.0;
     if (sh > 0.02 && t < 100.0 && (uDebug & 2097152) == 0) sh = min(sh, boulderShadow(p + n * 0.08, uSun));   // (beyond 100 m, specks)
     if (sh > 0.02 && uON > 0 && t < 60.0 && (uDebug & 4194304) == 0) sh = min(sh, objectShadow(p + n * 0.08, uSun));   // (beyond 60 m too small to see)
+    if (sh > 0.02) sh *= cloudShadow(p);
   }
   float ao = withShadow && (uDebug & 8192) == 0 ? ambientOcclusion(p, n) : 1.0;
   float day = dayFactor(up);
@@ -928,6 +969,13 @@ vec3 render(vec4 ro, vec4 rd, out float tOut) {
     vec3 cc;
     if ((uDebug & 4) == 0 && hitCopies(ro, rd, tc, cc)) { col = cc; tOut = tc; }
     else col = skyColor(rd, upE, uDayE) + ((uDebug & 2) == 0 ? starRow(ro, rd, ts) : vec3(0.0));
+    vec4 cl = clouds(ro, rd, 1e9);
+    col = mix(col, cl.rgb, cl.a);
+    return col;
+  }
+  if (dot(ro, ro) > (uPR + CLOUD_H) * (uPR + CLOUD_H)) {       // from above the clouds: they lie over the ground
+    vec4 cl = clouds(ro, rd, tOut);
+    col = mix(col, cl.rgb, cl.a);
   }
   return col;
 }
