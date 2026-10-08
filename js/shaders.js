@@ -536,11 +536,15 @@ vec4 clouds(vec4 ro, vec4 rd, float tMax) {
   vec4 st = uSun - up * sunEl;
   float lit = clamp(1.0 - 2.5 * (cloudDensity(q + st * (6.0 / max(length(st), 0.05)), 2) - d) - 0.35 * d, 0.25, 1.0);
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
-  vec3 col = mix(vec3(0.03, 0.035, 0.06), vec3(0.5, 0.54, 0.6), day) * (1.0 - 0.3 * d)
-           + sunCol * smoothstep(-0.1, 0.4, sunEl) * 0.62 * day * lit;
+  // undersides take the sky's colour: grey by day, a dusky rose as the sun goes down, near black at night; the sides
+  // toward the sun take its light, golden when it is low
+  float dusk = exp(-pow((sunEl - 0.02) / 0.1, 2.0));          // the sun near the horizon
+  vec3 base = mix(vec3(0.03, 0.035, 0.06), mix(vec3(0.22, 0.16, 0.22), vec3(0.5, 0.54, 0.6), smoothstep(0.08, 0.4, sunEl)), day);
+  vec3 col = base * (1.0 - 0.3 * d) + sunCol * smoothstep(-0.12, 0.3, sunEl) * 0.7 * day * lit * (1.0 - 0.6 * dusk);
+  col += vec3(0.95, 0.34, 0.16) * 0.8 * dusk * (0.5 + 0.5 * lit);   // the glow of a sunset on them
   // thinning toward the horizon, where they would alias, and where the view grazes the layer (its edge, seen from
-  // above, would otherwise end in a hard circle)
-  return vec4(col, d * 0.9 * exp(-t / 900.0) * smoothstep(0.0, 0.2, abs(dot(rd, up))) * uAtmos);
+  // above, would otherwise end in a hard circle); thick cloud hides the stars entirely
+  return vec4(col, d * exp(-t / 900.0) * smoothstep(0.0, 0.2, abs(dot(rd, up))) * uAtmos);
 }
 // The shade of the clouds on the ground: how much of the layer the sun shines through on its way to p.
 float cloudShadow(vec4 p) {
