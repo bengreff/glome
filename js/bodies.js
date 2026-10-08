@@ -205,10 +205,16 @@ export class World {
     }
     // 3. prepare (warm start from last step's impulses on the same features)
     const warm = new Map();
+    this.impacts = [];                    // new contacts that strike (for sound): one per pair, the hardest
+    const struck = new Map();
     for (const c of cs) {
       c.ra = c.a ? sub(c.p, c.a.pos) : null; c.rb = sub(c.p, c.b.pos);
       c.kn = kEff(c.a, c.ra, c.n) + kEff(c.b, c.rb, c.n);
       const vn = dot(sub(pointVel(c.b, c.p), pointVel(c.a, c.p)), c.n);
+      if (vn < -0.8 && !this.warm.has(c.key)) {
+        const k = `${c.a ? c.a.id : 'e'}:${c.b.id}`, prev = struck.get(k);
+        if (!prev || -vn > prev.speed) struck.set(k, { a: c.a, b: c.b, p: c.p, speed: -vn });
+      }
       c.target = vn < -1 ? -Math.min(c.a ? c.a.e : 0.2, c.b.e) * vn : 0;
       c.bias = Math.min(0.8, 0.2 / dt * Math.max(0, c.depth - 0.004));   // capped: deep overlaps ease out, never explode
       c.mu = c.a ? Math.sqrt(c.a.mu * c.b.mu) : Math.sqrt(0.9 * c.b.mu);
@@ -241,6 +247,7 @@ export class World {
       applyImpulse(c.b, dJ, c.p); applyImpulse(c.a, scale(dJ, -1), c.p);
     }
     for (const c of cs) warm.set(c.key, { ln: c.ln, lt: c.lt });
+    for (const v of struck.values()) this.impacts.push(v);
     // Rolling resistance of soft ground (soil and grass give under a rolling ball): a force c·N against the rolling
     // velocity of a ball on the environment. An approximation of the ground's deformation, which we don't model.
     for (const c of cs) {

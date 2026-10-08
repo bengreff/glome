@@ -233,7 +233,7 @@ function frameBody(now) {
       capsuleTerrain(player);
     }
     player.ride = null;
-    if (!flight.active) playerContacts(player);              // the bodies of the planet you are on
+    if (!flight.active) playerContacts(player, undefined, input);   // the bodies of the planet you are on
     if (player.supported && !flight.active && !(G.simT < player.airborneUntil)) player.grounded = true;   // standing on a thing is footing too
     if (!onB) stepBoats(STEP, state.time);
     trackOrbit(flight, state.time);

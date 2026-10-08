@@ -132,7 +132,9 @@ export class Player {
       if (wl > 0 && len(this.pos) - floor < 2.5) nh = add(nh, scale(sub(target, nh), Math.min(1, 1.5 * dt)));
     }
     let nvr = vr + gr * dt;
-    if (input.jump && this.grounded) { nvr = Math.max(nvr, 0) + LAWS.JUMP; this.grounded = false; }
+    // a jump: then no footing for a moment, or the 5 cm grace above the ground would let a held key jump again
+    // (and no jump at the top of a climb: the key you climb with is the jump key)
+    if (input.jump && this.grounded && !(G.simT < this.climbUntil)) { nvr = Math.max(nvr, 0) + LAWS.JUMP; this.grounded = false; this.airborneUntil = G.simT + 0.2; }
     this.vel = add(nh, scale(u, nvr));
     this.supported = false;
     this.contact?.(this, dt, input);                       // obstacles: contact forces before the step

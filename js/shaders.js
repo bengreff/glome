@@ -370,14 +370,22 @@ float ambientOcclusion(vec4 p, vec4 n) {
 // Surface detail from a tileable 3D gradient noise. Two different 3D projections of the 4D point
 // are summed so that no 4D direction leaves the pattern constant. Returns the value; g = 4D gradient.
 const float NOISE_P = 16.0;
-float detail(vec4 p, float f, out vec4 g) {
-  const vec3 c1 = vec3(0.613, -0.418, 0.672);
-  const vec3 c2 = vec3(-0.281, 0.805, 0.523);
-  vec4 a = texture(uNoise, (p.xyz + p.w * c1) * f / NOISE_P);
-  vec4 b = texture(uNoise, ((p.yzx - p.w * c2) * f * 1.13 + 17.0) / NOISE_P);
-  vec3 ga = (a.xyz * 2.0 - 1.0) * 3.0, gb = (b.xyz * 2.0 - 1.0) * 3.0;
-  g = f * vec4(ga, dot(ga, c1)) + f * 1.13 * vec4(gb.z, gb.x, gb.y, -dot(gb, c2));
-  return (a.w + b.w) - 1.0;
+// Detail noise on a surface in 4D from a 3D noise texture: "tetraplanar" mapping, the 4D cousin of triplanar. Four
+// layers, each the noise of p with one coordinate dropped (so it is constant along that axis), weighted by how nearly
+// that axis is the surface's normal n: the axis a layer is smeared along points into the surface, never along it.
+// (Two fixed oblique projections, the old way, streaked wherever their smear direction lay along the ground.)
+float detail(vec4 p, float f, vec4 n, out vec4 g) {
+  vec4 n2 = n * n, w = n2 * n2 * n2;
+  w /= dot(w, vec4(1.0));
+  float v = 0.0;
+  g = vec4(0.0);
+  vec3 q = vec3(0.0); vec4 a;
+  if (w.x > 0.02) { a = texture(uNoise, p.yzw * f / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.x * (a.w - 0.5); g += w.x * vec4(0.0, q); }
+  if (w.y > 0.02) { a = texture(uNoise, (p.xzw * f + vec3(7.3, 1.9, 4.1)) / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.y * (a.w - 0.5); g += w.y * vec4(q.x, 0.0, q.yz); }
+  if (w.z > 0.02) { a = texture(uNoise, (p.xyw * f + vec3(3.7, 11.2, 5.9)) / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.z * (a.w - 0.5); g += w.z * vec4(q.xy, 0.0, q.z); }
+  if (w.w > 0.02) { a = texture(uNoise, (p.xyz * f + vec3(13.1, 2.6, 8.8)) / NOISE_P); q = (a.xyz * 2.0 - 1.0) * 3.0; v += w.w * (a.w - 0.5); g += w.w * vec4(q, 0.0); }
+  g *= f * 1.6;
+  return v * 1.6;
 }
 
 float dayFactor(vec4 up) {
@@ -457,14 +465,14 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
 
   // detail at four scales (≈9 m, 2 m, 0.45 m, 0.14 m), each faded out before it would shimmer
   vec4 g1, g2, g3, g4;
-  float d1 = detail(p, 0.11, g1);
-  float d2 = detail(p, 0.55, g2);
-  float f2 = 1.0 - smoothstep(30.0, 90.0, t), f3 = 1.0 - smoothstep(8.0, 26.0, t), f4 = 1.0 - smoothstep(2.5, 9.0, t);
-  float d3 = f3 > 0.0 ? detail(p, 2.3, g3) : 0.0;
-  float d4 = f4 > 0.0 ? detail(p, 7.1, g4) : 0.0;
-  float f5 = 1.0 - smoothstep(1.0, 4.5, t);
+  float d1 = detail(p, 0.11, n, g1);
+  float d2 = detail(p, 0.55, n, g2);
+  float f2 = 1.0 - smoothstep(30.0, 90.0, t), f3 = 1.0 - smoothstep(8.0, 26.0, t), f4 = 1.0 - smoothstep(3.0, 12.0, t);
+  float d3 = f3 > 0.0 ? detail(p, 2.3, n, g3) : 0.0;
+  float d4 = f4 > 0.0 ? detail(p, 7.1, n, g4) : 0.0;
+  float f5 = 1.0 - smoothstep(1.5, 6.0, t);
   vec4 g5 = vec4(0.0);
-  float d5 = f5 > 0.0 ? detail(p, 19.0, g5) : 0.0;
+  float d5 = f5 > 0.0 ? detail(p, 19.0, n, g5) : 0.0;
   if (f3 <= 0.0) g3 = vec4(0.0);
   if (f4 <= 0.0) g4 = vec4(0.0);
   // inside a carved hollow everything is bare rock, and the sky's light falls off with depth below the ground above
@@ -475,7 +483,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1) * (1.0 - cave);
   float dirt = smoothstep(-0.42, -0.62, d1 + 0.35 * d2) * (1.0 - rocky) * (1.0 - sandy);
 
-  vec4 bump = g1 * 0.9 + g2 * 0.25 * f2 + g3 * 0.06 * f3 + g4 * 0.03 * f4 + g5 * 0.012 * f5;
+  vec4 bump = g1 * 0.9 + g2 * 0.25 * f2 + g3 * 0.07 * f3 + g4 * 0.05 * f4 + g5 * 0.025 * f5;
   bump *= mix(1.0, 2.4, rocky) * mix(1.0, 0.35, sandy + snowy * 0.6);
   vec4 nb = normalize(n - (bump - n * dot(bump, n)) * 0.6);
 
@@ -483,7 +491,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   vec3 lush = vec3(0.11, 0.25, 0.06), dry = vec3(0.38, 0.40, 0.13), moss = vec3(0.17, 0.27, 0.08);
   vec3 grass = mix(lush, dry, smoothstep(-0.35, 0.45, d1 + 0.4 * d2));
   grass = mix(grass, moss, smoothstep(0.2, 0.7, -d2) * 0.5);
-  grass *= 0.86 + 0.12 * d2 + 0.22 * d3 * f3 + 0.17 * d4 * f4 + 0.12 * d5 * f5;
+  grass *= 0.84 + 0.12 * d2 + 0.26 * d3 * f3 + 0.26 * d4 * f4 + 0.2 * d5 * f5;
   grass = mix(grass, vec3(0.30, 0.23, 0.14) * (0.85 + 0.25 * d3 * f3 + 0.2 * d4 * f4), dirt);
   // rock: strata bands, plus dark cracks up close
   float strata = smoothstep(0.3, 0.55, fract(h * 0.38 + 1.4 * d1 + 0.6 * d2));
@@ -518,9 +526,9 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
 vec3 shadeBoulder(vec4 p, vec4 n, float t) {
   vec4 up = normalize(p);
   vec4 g1, g2, g3;
-  float d1 = detail(p, 0.7, g1), d2 = detail(p, 2.6, g2);
+  float d1 = detail(p, 0.7, n, g1), d2 = detail(p, 2.6, n, g2);
   float f3 = 1.0 - smoothstep(4.0, 16.0, t);
-  float d3 = f3 > 0.0 ? detail(p, 9.0, g3) : 0.0;
+  float d3 = f3 > 0.0 ? detail(p, 9.0, n, g3) : 0.0;
   if (f3 <= 0.0) g3 = vec4(0.0);
   vec4 bump = g1 * 0.25 + g2 * 0.08 + g3 * 0.025 * f3;
   vec4 nb = normalize(n - (bump - n * dot(bump, n)) * 0.6);
@@ -550,7 +558,8 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   float h = uOP[i].y, mat = uOP[i].z, glow = uOP[i].w;
   vec4 q = (p - uOC[i]) * uOM[i];                          // body coordinates
   vec4 g1, g2;
-  float d1 = detail(q * (1.0 / h) * 1.7 + float(i) * 5.31, 1.0, g1), d2 = detail(q * (1.0 / h) * 5.3 + 2.7, 1.0, g2);
+  vec4 nq = n * uOM[i];                                    // the normal in body coordinates
+  float d1 = detail(q * (1.0 / h) * 1.7 + float(i) * 5.31, 1.0, nq, g1), d2 = detail(q * (1.0 / h) * 5.3 + 2.7, 1.0, nq, g2);
   vec4 nb = n;
   vec3 alb;
   float spec = 0.0;
@@ -613,8 +622,8 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
   tng += 0.5 * vec4(sin(p.y * 1.9 + uTime * 2.1), sin(p.w * 2.3 + uTime * 1.7),
                     sin(p.x * 2.1 - uTime * 1.9), sin(p.z * 1.7 + uTime * 2.3));
   vec4 gw1, gw2;
-  detail(p + vec4(uTime * 0.31, -uTime * 0.23, uTime * 0.17, uTime * 0.27), 0.45, gw1);
-  detail(p - vec4(uTime * 0.52, uTime * 0.41, -uTime * 0.36, uTime * 0.29), 1.4, gw2);
+  detail(p + vec4(uTime * 0.31, -uTime * 0.23, uTime * 0.17, uTime * 0.27), 0.45, up, gw1);
+  detail(p - vec4(uTime * 0.52, uTime * 0.41, -uTime * 0.36, uTime * 0.29), 1.4, up, gw2);
   tng = tng * 0.012 + gw1 * 0.05 + gw2 * 0.018 * (1.0 - smoothstep(10.0, 40.0, tw));
   tng -= up * dot(tng, up);
   vec4 wn = normalize(up + tng);
@@ -708,7 +717,7 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf) {
 }
 vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t) {
   vec4 up = normalize(p), g;
-  float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, g);
+  float d1 = detail(p, leaf > 0.5 ? 1.7 : 3.2, n, g);
   vec3 alb = leaf > 2.5 ? vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1)                                   // a walker's legs
            : leaf > 1.5 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                   // rope: hemp
            : leaf > 0.5 ? mix(vec3(0.09, 0.22, 0.06), vec3(0.24, 0.34, 0.10), 0.5 + 0.5 * d1) : vec3(0.27, 0.21, 0.16) * (0.82 + 0.18 * d1);
@@ -754,7 +763,7 @@ vec3 shadePlanetB(vec4 p, vec4 n, int face, vec4 c, vec4 rd) {
   vec4 up = normalize(p - c);
   float hs = h41(vec4(float(face) * 1.37, 2.1, 5.3, 0.7));
   vec4 g1;
-  float d1 = detail((p - c) * 0.35, 1.0, g1);
+  float d1 = detail((p - c) * 0.35, 1.0, n, g1);
   vec3 alb = mix(vec3(0.60, 0.58, 0.70), vec3(0.74, 0.70, 0.80), hs) * (0.92 + 0.08 * d1);
   if (face == uPBpad) alb = mix(alb, ACCENT, 0.6);
   float dif = rowLight(p, n, up);

@@ -304,9 +304,9 @@ export function createAudio() {
       if (node) this._fire(node.out, pos, node.gain, node.stop);
     },
 
-    emit(kind, pos, gain = 1) {
+    emit(kind, pos, gain = 1, opts = {}) {
       if (!this.ctx) return;
-      const node = synthOneShot(this.ctx, this._noiseBuf, kind);
+      const node = synthOneShot(this.ctx, this._noiseBuf, kind, opts);
       if (node) this._fire(node.out, pos, gain * node.gain, node.stop);
     },
 
@@ -488,9 +488,54 @@ function synthFootstep(ctx, noiseBuf, surface) {
   }
 }
 
-function synthOneShot(ctx, noiseBuf, kind) {
+// A struck body's ringing: sine partials at f0·ratio, each decaying exponentially, over a short noise transient.
+function partials(ctx, noiseBuf, f0, ratios, amps, decay, click) {
+  const t = ctx.currentTime, mix = ctx.createGain();
+  ratios.forEach((r, i) => {
+    const f = f0 * r;
+    if (f > 12000) return;
+    const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+    const g = ctx.createGain(), d = decay / (1 + 0.6 * i);                 // higher modes die sooner
+    g.gain.setValueAtTime(amps[i], t); g.gain.exponentialRampToValueAtTime(0.0005, t + d);
+    osc.connect(g); g.connect(mix); osc.start(t); osc.stop(t + d + 0.02);
+  });
+  if (click) { const b = noiseBurst(ctx, noiseBuf, { filterType: 'bandpass', freq: Math.min(9000, f0 * 3), Q: 1.5, dur: 0.02, attack: 0.001, gain: click }); b.node.connect(mix); }
+  return { out: mix, stop: decay + 0.05 };
+}
+// The modes of a vibrating 3-sphere: the Laplacian on S³ has eigenvalues l(l+2), so a struck glome's overtones
+// stand at √(l(l+2)) for l = 2, 3, 4, 5 (ratios 1 : 1.369 : 1.732 : 2.092; on an ordinary 2-sphere, √(l(l+1)) gives
+// 1 : 1.414 : 1.826 : 2.236).
+const S3 = [2, 3, 4, 5].map(l => Math.sqrt(l * (l + 2)) / Math.sqrt(8));
+
+function synthOneShot(ctx, noiseBuf, kind, opts = {}) {
   const t = ctx.currentTime;
   switch (kind) {
+    case 'ring': {                         // a struck glome: stone rings briefly, metal (a lantern) long
+      const metal = !!opts.metal, f0 = Math.max(180, Math.min(2600, (metal ? 1500 : 1000) * 0.18 / (opts.size || 0.18)));
+      const r = partials(ctx, noiseBuf, f0, S3, [0.5, 0.3, 0.2, 0.12], metal ? 1.4 : 0.22, metal ? 0.1 : 0.35);
+      return { out: r.out, gain: 0.6, stop: r.stop };
+    }
+    case 'ping': {                         // a metal tesseract: plate-like, inharmonic
+      const f0 = Math.max(150, Math.min(2000, 520 * 0.5 / (opts.size || 0.5)));
+      const r = partials(ctx, noiseBuf, f0, [1, 1.93, 2.87, 3.92], [0.45, 0.3, 0.2, 0.1], 0.9, 0.2);
+      return { out: r.out, gain: 0.5, stop: r.stop };
+    }
+    case 'knock': {                        // wood
+      const f0 = Math.max(90, Math.min(600, 200 * 1.3 / (opts.size || 1.3)));
+      const r = partials(ctx, noiseBuf, f0, [1, 2.3, 4.1], [0.6, 0.25, 0.1], 0.14, 0.4);
+      return { out: r.out, gain: 0.8, stop: r.stop };
+    }
+    case 'block': {                        // a stone tesseract: a dry knock, lower for bigger blocks
+      const size = opts.size || 0.3, f = Math.max(700, Math.min(4000, 3000 * 0.3 / size));
+      const b = noiseBurst(ctx, noiseBuf, { filterType: 'bandpass', freq: f, Q: 5, dur: 0.05, attack: 0.001, gain: 0.8 });
+      const mix = ctx.createGain(); b.node.connect(mix);
+      if (size > 0.4) {                    // and a thump under a heavy one
+        const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.setValueAtTime(110, t); osc.frequency.exponentialRampToValueAtTime(60, t + 0.12);
+        const og = ctx.createGain(); og.gain.setValueAtTime(0.7, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        osc.connect(og); og.connect(mix); osc.start(t); osc.stop(t + 0.17);
+      }
+      return { out: mix, gain: 0.7, stop: 0.18 };
+    }
     case 'thud': {
       const osc = ctx.createOscillator(); osc.type = 'sine';
       osc.frequency.setValueAtTime(90, t); osc.frequency.exponentialRampToValueAtTime(45, t + 0.18);

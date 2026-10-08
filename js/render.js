@@ -142,16 +142,21 @@ export function updateDyn(frameSec) {
   if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
   if (dyn.probe) {                                         // judge the last step down
     const p = dyn.probe; dyn.probe = null;
-    // a step that cut the pixels by a fraction f should save about f of a GPU-bound frame: expect at least half
+    // a step that cut the pixels by a fraction f should save about f of a GPU-bound frame: expect at least half,
+    // unless it reached the display's rate (vsync rounds frame times, so a step that just makes it saves less)
     const r = dyn.scale / p.scale, expect = 1 - 0.5 * (1 - r * r);
-    if (avg > p.avg * expect) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
+    if (avg > p.avg * expect && avg > 1 / 58.5) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
   }
   const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
+  // a resolution that proved too slow is a ceiling for half a minute (at a vsync'd 60 Hz every frame that makes it
+  // looks equally fast, so without one the scale hunts up and down)
+  const ceil = simT < (dyn.ceilUntil || 0) ? dyn.ceil * 0.99 : maxScale();
   dyn.fast = avg < 1 / 59 ? dyn.fast + 1 : 0;
   if (avg > 1 / 57 && dyn.scale > floor + 0.01) {
     dyn.probe = { scale: dyn.scale, avg };
+    dyn.ceil = dyn.scale; dyn.ceilUntil = simT + 30;
     dyn.scale = Math.max(floor, dyn.scale * (avg > 1 / 35 ? 0.8 : avg > 1 / 50 ? 0.9 : 0.95));
-  } else if (dyn.fast >= 3) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.04); dyn.fast = 0; }
+  } else if (dyn.fast >= 3 && dyn.scale < ceil) { dyn.scale = Math.min(ceil, dyn.scale * 1.04); dyn.fast = 0; }
 }
 // Two scene buffers, used in turn: each frame draws into one while the other still holds the last frame, which the
 // console's screen shows (the view fed back into itself).

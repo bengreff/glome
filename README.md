@@ -31,7 +31,7 @@ Nothing is swapped for a cheaper law; where the game approximates, it integrates
 | | |
 |---|---|
 | <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd> <kbd>E</kbd> | walk · step kata / ana |
-| <kbd>Space</kbd> <kbd>Shift</kbd> | jump (or climb a boulder you walk into) · run |
+| <kbd>Space</kbd> <kbd>Shift</kbd> | jump (or climb a boulder or big block you walk into) · run |
 | mouse | turn, look up and down |
 | right-drag or <kbd>Alt</kbd>+mouse · <kbd>Z</kbd> <kbd>C</kbd> | turn toward ana / kata, twist |
 | <kbd>F</kbd> · hold <kbd>F</kbd> | pick up or drop · show where it will rest, release to set it down |

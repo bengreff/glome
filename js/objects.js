@@ -99,6 +99,21 @@ export function stepObjects(cam, kick, w = objects.world, far = 150, gone = 1500
   if (h) holdDrive(h, cam, w, kick);
   w.step();
   if (h) holdRecord(h, cam);
+  soundImpacts(w);
+}
+// What a body sounds like when it strikes something: a glome rings (its overtones a 3-sphere's, audio.js), metal
+// pings, wood knocks, a stone block clacks; louder for a faster strike and a heavier body.
+function soundImpacts(w) {
+  if (!G.audio || !w.impacts) return;
+  const where = w === objects.worldB && objects.toA ? q => objects.toA(q, R4.identity()).pos : q => q;
+  for (const im of w.impacts) for (const b of [im.a, im.b]) {
+    if (!b || b.fixed || b.ghostly || G.simT - (b.soundT ?? -9) < 0.08) continue;
+    b.soundT = G.simT;
+    const gain = Math.min(1.2, im.speed / 5) * Math.max(0.3, Math.min(1.2, 0.4 + 0.25 * Math.log10(b.m)));
+    const [kind, opts] = b.shape === 'glome' ? ['ring', { size: b.size, metal: b.mat === 1 }] : b.mat === 1 ? ['ping', { size: b.size }]
+      : b.mat === 6 ? ['knock', { size: b.size }] : ['block', { size: b.size }];
+    G.audio.emit(kind, where(im.p), gain, opts);
+  }
 }
 // Landing on B or leaving it: what you hold crosses into the other world (it is brought to your hands next step).
 export function moveHeld(toB) {
@@ -270,7 +285,7 @@ export function setDown() {
 // ---------- the player among the objects ----------
 // The capsule stands on objects and is stopped by them; walking into one pushes it (momentum exchanged with you,
 // treated as a body of your mass).
-export function playerContacts(p, w = hereWorld()) {
+export function playerContacts(p, w = hereWorld(), input = null) {
   if (!w) return;
   const cap = p.capsule(), up = p.up();
   for (const c of w.capsuleContacts(cap.a, cap.b, cap.r)) {
@@ -279,6 +294,12 @@ export function playerContacts(p, w = hereWorld()) {
     // you move with the point under your feet (a push along a tilted top, a raft leaning under you, would slide you off)
     const foot = cu > 0.6, dir = foot ? up : c.n;
     p.pos = vec4.add(p.pos, vec4.scale(dir, Math.min(foot ? c.depth / cu : c.depth, 0.2)));
+    // scramble up the side of something big (a large block, the raft, the built blocks), as up a boulder: holding
+    // jump while walking into it, along the steepest way up its face (pressing on it a little, to stay against it)
+    if (input && input.jump && cu < 0.6 && cu > -0.3 && (input.fwd || input.right || input.ana) && (B.size >= 0.45 || B.fixed)) {
+      const climb = vec4.sub(up, vec4.scale(c.n, cu)), cl = vec4.len(climb);
+      if (cl > 1e-3) { p.vel = vec4.add(vec4.add(vec4.scale(climb, LAWS.CLIMB / cl), vec4.scale(c.n, -0.15)), vec4.scale(B.vel, 1)); p.climbUntil = G.simT + 0.35; continue; }
+    }
     const vb = B.kinematic ? B.vel : vec4.add(B.vel, bivApply(B.omega, vec4.sub(c.point, B.pos)));
     if (foot) { p.supported = true; p.ride = B; p.rideVel = vb; }            // standing on it: you move with it
     const vrel = vec4.dot(vec4.sub(p.vel, vb), dir);

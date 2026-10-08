@@ -82,7 +82,7 @@ export function boulderContact(p, dt, input) {
     if (input.jump && nu < 0.85 && nu > -0.3 && (input.fwd || input.right || input.ana)) {
       // scramble: climb along the steepest way up the 4D surface (up, minus its normal part)
       const climb = vec4.sub(up, vec4.scale(n, nu)), cl = vec4.len(climb);
-      if (cl > 1e-3) { p.vel = vec4.scale(climb, LAWS.CLIMB / cl); p.supported = true; continue; }
+      if (cl > 1e-3) { p.vel = vec4.scale(climb, LAWS.CLIMB / cl); p.supported = true; p.climbUntil = G.simT + 0.35; continue; }
     }
     const vn = vec4.dot(p.vel, n);
     if (vn >= 0) continue;
