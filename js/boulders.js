@@ -34,7 +34,7 @@ export function updateBoulders(eye) {
   // A ray of the slice view never leaves your slice, so it can only hit boulders the slice cuts: they go first.
   // A shadow ray from a point p of the slice toward the sun has ana coordinate s·(sun·A) at distance s (p·A = 0),
   // so a boulder at ana coordinate a can only shade the slice if that line passes it within 200 m: next go those.
-  const A = player.A, sa = vec4.dot(sunDir(G.state.time), A);
+  const A = player.A, sa = vec4.dot(G.sun || sunDir(G.state.time), A);
   const rank = x => {
     const a = vec4.dot(x.b.c, A), r = x.b.r;
     if (Math.abs(a) < r) return 2;

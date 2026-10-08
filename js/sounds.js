@@ -28,7 +28,7 @@ function nearWater(p) {
 export function updateSound(dt, cam) {
   const p = G.player;
   if (!p) return;
-  const u = p.up(), above = p.altitude(), day = Math.max(0, Math.min(1, (vec4.dot(sunDir(G.state.time), u) + 0.15) / 0.3));
+  const u = p.up(), above = p.altitude(), day = Math.max(0, Math.min(1, (vec4.dot(G.sun || sunDir(G.state.time), u) + 0.15) / 0.3));
   if ((s.waterT -= dt) <= 0) { s.water = nearWater(p); s.waterT = 0.5; }
   audio.update(dt, {
     pos: cam.eye, R: cam.R,

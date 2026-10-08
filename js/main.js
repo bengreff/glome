@@ -16,8 +16,9 @@ import { accelBodyA } from './cosmos.js';
 import * as saveMod from './save.js';
 import * as cosmos from './cosmos.js';
 import { capsuleTerrain, envSD } from './env.js';
-import { quality } from './render.js';
+import { quality, updateSky } from './render.js';
 import { updateSound } from './sounds.js';
+import { gpuObj } from './objects.js';
 
 const $ = id => document.getElementById(id);
 const state = G.state;
@@ -114,7 +115,7 @@ function frame(now) {
 
   updateDyn(Math.min(0.2, (now - lastRaw) / 1000)); lastRaw = now;
   resize();
-  const cam = player.camera(), sun = sunDir(state.time);
+  const cam = player.camera(), sun = updateSky(state.time, cam.eye);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
   const q = gpuBegin();
@@ -169,7 +170,7 @@ function frame(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

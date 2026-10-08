@@ -3,6 +3,8 @@ import { VERT, SLICE_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG 
 import { PLANET_R, SEA } from './world.js';
 import { G } from './game.js';
 import { boulders } from './boulders.js';
+import { gpuObj } from './objects.js';
+import { skyUniforms } from './cosmos.js';
 
 const $ = id => document.getElementById(id);
 export const canvas = $('view'), overlay = $('overlay');
@@ -123,7 +125,7 @@ export const tex = { atlas: null, noise: null };
 // Render internally at a fraction of the screen, adjusted to hold ~55-60 fps, then upscale with sharpening.
 export const dyn = { scale: 0.6, auto: true, acc: 0, n: 0, fast: 0, probe: null, floor: 0, floorUntil: 0 };
 export const quality = { cap: 1 };                       // the graphics setting: a cap on the resolution
-const maxScale = () => Math.min(1, 1.5 / Math.min(devicePixelRatio || 1, 2)) * quality.cap;
+const maxScale = () => Math.min(1, 1.4 / Math.min(devicePixelRatio || 1, 2)) * quality.cap;
 // Lower the resolution when frames are slow, but check that it helped: if a step down doesn't make frames
 // faster, pixels aren't what limits the frame rate (a capped display, a throttled GPU, the compositor), so
 // undo it and don't go below that resolution for a while.
@@ -139,11 +141,11 @@ export function updateDyn(frameSec) {
     if (avg > p.avg * 0.92) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 10; return; }
   }
   const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
-  dyn.fast = avg < 1 / 58 ? dyn.fast + 1 : 0;
-  if (avg > 1 / 50 && dyn.scale > floor + 0.01) {
+  dyn.fast = avg < 1 / 59 ? dyn.fast + 1 : 0;
+  if (avg > 1 / 57 && dyn.scale > floor + 0.01) {
     dyn.probe = { scale: dyn.scale, avg };
-    dyn.scale = Math.max(floor, dyn.scale * (avg > 1 / 35 ? 0.8 : 0.9));
-  } else if (dyn.fast >= 2) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.08); dyn.fast = 0; }
+    dyn.scale = Math.max(floor, dyn.scale * (avg > 1 / 35 ? 0.8 : avg > 1 / 50 ? 0.9 : 0.95));
+  } else if (dyn.fast >= 3) { dyn.scale = Math.min(maxScale(), dyn.scale * 1.04); dyn.fast = 0; }
 }
 export const scene = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
 function ensureScene(w, h) {
@@ -173,7 +175,32 @@ export function resize() {
 }
 
 // Uniforms every world shader shares: the terrain, the camera, the sun and the boulders near you.
+// The hoop sky, computed once per frame (render.sky); the sun direction used for shadows is its mean.
+export const skyNow = { u: null };
+export function updateSky(t, eye) { skyNow.u = skyUniforms(t, eye); G.sun = skyNow.u.sun; return G.sun; }
 export function setWorld(p, cam, sun) {
+  const sk = skyNow.u;
+  gl.uniform4fv(p.u('uStar0'), sk.star0);
+  gl.uniform4fv(p.u('uHoop'), sk.hoop);
+  gl.uniform1f(p.u('uL'), sk.L);
+  gl.uniform1f(p.u('uStarR'), sk.starR);
+  gl.uniform1f(p.u('uStarI'), sk.starI);
+  gl.uniform4fv(p.u('uStarD'), sk.D);
+  gl.uniform4fv(p.u('uStarW'), sk.W);
+  gl.uniformMatrix4fv(p.u('uSkyM'), false, sk.M);
+  gl.uniform1f(p.u('uDayE'), sk.dayE);
+  // Images and copies lie on lines along the hoop axis, so their offsets from your slice change linearly with k:
+  // the ones a slice ray can reach form a contiguous range.
+  const range = (c0, R, kmax) => {
+    const a0 = vec4dot(c0, cam.A) - vec4dot(cam.eye, cam.A), da = sk.L * vec4dot(sk.hoop, cam.A);
+    let lo = kmax + 1, hi = -kmax - 1;
+    for (let k = -kmax; k <= kmax; k++) if (Math.abs(a0 + k * da) < R) { lo = Math.min(lo, k); hi = Math.max(hi, k); }
+    return [lo, hi];
+  };
+  const sr = range(sk.star0, sk.starR * 6, 7), cr = range([0, 0, 0, 0], PLANET_R + 48, 2);
+  gl.uniform2i(p.u('uStarK'), sr[0], sr[1]);
+  gl.uniform2i(p.u('uCopyK'), cr[0], cr[1]);
+  gl.uniform1f(p.u('uAtmos'), Math.exp(-Math.max(0, Math.hypot(...cam.eye) - PLANET_R - 60) / 220));
   gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_3D, tex.noise);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_3D, tex.atlas);
   gl.uniform1i(p.u('uAtlas'), 0);
@@ -194,8 +221,17 @@ export function setWorld(p, cam, sun) {
   gl.uniform1i(p.u('uBN'), boulders.near.length);
   gl.uniform1i(p.u('uBCut'), boulders.cut);
   gl.uniform1i(p.u('uBShadow'), boulders.shadow);
+  gl.uniform4fv(p.u('uOC'), gpuObj.C);
+  gl.uniformMatrix4fv(p.u('uOM'), false, gpuObj.M);
+  gl.uniform4fv(p.u('uOP'), gpuObj.P);
+  gl.uniform1i(p.u('uON'), gpuObj.n);
+  gl.uniform1i(p.u('uOCut'), gpuObj.cut);
+  gl.uniform4fv(p.u('uLP'), gpuObj.LP);
+  gl.uniform4fv(p.u('uLC'), gpuObj.LC);
+  gl.uniform1i(p.u('uLN'), gpuObj.ln);
 }
 
+const vec4dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 export const FOV = Math.tan(38 * Math.PI / 180);
 
 export function drawSlice(cam, sun, x, y, w, h) {

@@ -195,3 +195,39 @@ export function accelBodyA(xb, vb, t, out = [0, 0, 0, 0]) {
   out[3] += tide[3] + w2 * w2 * xb[3] - 2 * w2 * vb[2];
   return out;
 }
+
+// ---------- the sky, for the renderer ----------
+// Everything the shaders need to draw the hoop sky from A's body frame at time t: the star's main image, the hoop
+// axis, each image's direction and share of the light from A's centre, and the rotation to the inertial frame.
+export const NIMG = 7;
+export function skyUniforms(t, eye) {
+  const h = hoopAxisBody(t), s0 = toBody([0, 0, 0, 0], t), L = LAWS.L;
+  const D = new Float32Array(4 * (2 * NIMG + 1)), W = new Float32Array(16);
+  let sum = 0;
+  const ws = [], mean = [0, 0, 0, 0];
+  for (let k = -NIMG; k <= NIMG; k++) {
+    const c = s0.map((v, i) => v + k * L * h[i]), d = Math.hypot(...c), w = 1 / (d * d * d);
+    ws.push(w); sum += w;
+    D.set(c.map(v => v / d), 4 * (k + NIMG));
+  }
+  ws.forEach((w, i) => { W[i] = w / sum; });
+  const sumLit = ws.slice(NIMG - 5, NIMG + 6).reduce((a, b) => a + b, 0);   // the 11 images that light surfaces
+  // the light's mean direction, as seen from the eye (shadow rays and the sky's colour use it): weight each
+  // image by its share and by how far it stands above the eye's horizon, so the shadows follow the suns that are up
+  const up = eye ? (() => { const l = Math.hypot(...eye); return eye.map(v => v / l); })() : [1, 0, 0, 0];
+  for (let k = 0; k <= 2 * NIMG; k++) {
+    const d = [D[4 * k], D[4 * k + 1], D[4 * k + 2], D[4 * k + 3]], el = dot(d, up);
+    const w = W[k] * Math.max(0, Math.min(1, (el + 0.05) / 0.25));
+    for (let i = 0; i < 4; i++) mean[i] += w * d[i];
+  }
+  let ml = Math.hypot(...mean);
+  const sun = ml > 1e-6 ? mean.map(v => v / ml) : [D[4 * NIMG], D[4 * NIMG + 1], D[4 * NIMG + 2], D[4 * NIMG + 3]];
+  // body -> inertial rotation (columns: the body axes in inertial coordinates)
+  const M = new Float32Array(16);
+  for (let j = 0; j < 4; j++) { const e = [0, 0, 0, 0]; e[j] = 1; M.set(dirToInertial(e, t), 4 * j); }
+  // how much of the row's light is above the eye's horizon, softened like the shader's dayFactor
+  const ss = x => { const t = Math.max(0, Math.min(1, (x + 0.14) / 0.32)); return t * t * (3 - 2 * t); };
+  let dayE = 0;
+  for (let k = 0; k <= 2 * NIMG; k++) dayE += W[k] * ss(D[4 * k] * up[0] + D[4 * k + 1] * up[1] + D[4 * k + 2] * up[2] + D[4 * k + 3] * up[3]);
+  return { star0: s0, hoop: h, L, starR: LAWS.STAR_R, starI: 1 / sumLit, D, W, M, sun, dayE };
+}
