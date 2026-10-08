@@ -27,8 +27,13 @@ The force is the gradient of this. The game uses the formula directly: there is 
 
 ### What this does
 
-- **No orbits near a planet.** In the 4D near field, the effective potential (ℓ² − G₄M)/(2r²) has no minimum. Circular orbits exist only at exactly v = √(G₄M)/r, which is also the escape speed, and any nudge sends the body spiralling in or out. On planet A that speed is 49.5 m/s at the surface.
-- **Stable orbits far away.** Beyond about L, gravity is 3D-like, so Kepler orbits are stable. That is why planets can orbit the star but nothing can orbit a planet closely.
+- **In pure 4D space, no orbit holds.** In the 4D near field the effective potential (ℓ² − G₄M)/(2r²) has no minimum. A circular orbit exists only at exactly v = √(G₄M)/r, which is also the escape speed, and any nudge sends the body spiralling in or out.
+- **The hoop adds a faint cradle.** Near a body (r ≪ L), the pull of its images expands to Φ_img ≈ const + κ(ρ² − 3w²), with κ = G₄M ζ(4)/L⁴ = G₄M π⁴/(90 L⁴). This is a gentle trap in the three open directions and a gentle push along the hoop (it is harmonic, as it must be in empty space).
+  - **Orbits lying flat across the hoop** (in a 3D space w = const) are therefore weakly stable. Their radial oscillation frequency is √(8κ), a period of about 110 s for planet A.
+  - **Orbits tilted into the hoop** fail.
+  - **Checked by direct integration:** circular orbits 100 m up on planet A, each given a 1 m/s nudge. Across the hoop the orbit stays between 328 and 373 m for at least 10 minutes. Tilted into the hoop it hits the ground in 22 s. Without the hoop (pure 4D) it drifts out steadily, 350 → 950 m in 10 minutes.
+  - **On planet A**, the circular speed is 49.9 m/s at the surface and 36 m/s at 100 m up. Because the planet double-rotates, the launch direction that lies across the hoop drifts through the day.
+- **Stable orbits far away.** Beyond about L, gravity is 3D-like, so Kepler orbits are stable. That is how the planets orbit the star.
 - **Lighter summits.** Gravity falls by (R/r)³: on a 40 m peak it is 6.3 m/s², 36% lighter than at sea level.
 - **Gravity varies over the planet.** A's own images pull on it. Where "up" points along the hoop, surface gravity is 8.5% lighter (8.96 m/s²); where it points across, 1.7% heavier (9.97 m/s²). The planet's double spin carries these light zones across the land during the day.
 - **Tides** from the star are 0.09 m/s² (0.9% of g).
@@ -84,7 +89,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 |---|---|
 | Hoop length L | 800 m |
 | Planet A | radius 250 m, surface gravity 9.8 m/s², G₄M = 1.53×10⁸ m⁴/s² |
-| Planet A: circular speed at the surface (4D near field) | 49.5 m/s |
+| Planet A: circular speed at the surface | 49.5 m/s in pure 4D, 49.9 m/s with the hoop |
 | Planet A: escape speed (exact, hoop included) | 56.5 m/s |
 | Planet A: day | its double spin, 300 s in one plane, 300/φ s in the other (φ is the golden ratio) |
 | The star | radius 120 m, about 5 × A's mass, surface gravity 404 m/s² |
@@ -93,6 +98,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 | B's orbit | radius 3.2 km, year 16 min, speed 21 m/s |
 | A → B (minimum-energy transfer) | about 5 m/s beyond escape, 6 min coast; a launcher gives much faster arcs |
 | A's sphere of influence (3D far-field estimate) | about 840 m from its centre |
+| Launcher, straight up from A | 30 m/s → 62 m · 40 m/s → 160 m · 45 m/s → 282 m · 49.5 m/s → 565 m · 52 m/s → 985 m · 56.5 m/s escapes |
 | The sun from A | 3.4° in radius, with images along the hoop at 21.8°, 38.7°, 50.2°, … |
 
 ## Approximations, honestly

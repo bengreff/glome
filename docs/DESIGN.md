@@ -4,6 +4,12 @@
 
 Hoop is a small, wordless, self-contained 4D universe that runs in a browser. It contains one star, two planets, and a fourth direction that closes back on itself (the "hoop"). You arrive on a planet whose ground is a 3-sphere and see it as a 3D slice through your eyes. A 3D radar shows the ground around you. Nothing is explained. Everything is demonstrated by the world behaving exactly as a 4D world must: boulders swell and vanish as you turn, knots fall open, orbits refuse to close, and your own planet hangs in the sky one hoop-length away. It is a sandbox first. Running quietly through it is a chain of wordless artifacts, Myst-like, that leads off the planet, to a second world, and to the console of the simulation itself.
 
+## Story, such as it is
+
+- **You are a 3D mind in a 4D body.** That is why you only ever see a slice: it is all your mind can take in. The radar is the instrument that shows you the rest.
+- **The artifacts were built by someone who is never named.** They read as lessons made for a mind like yours, as if a native of this world were reaching down to you. The trail ends at the console of the simulation itself. Whether the builder is a native, the simulator, or both is never said.
+- **No text tells any of this.** It is in the order of the artifacts, what they teach, and where they lead.
+
 ## Pillars
 
 1. **Exact.** Geometry and physics are never faked. Where we approximate, the approximation is a faithful one (numerical integration, not a different law), and it is written down in [PHYSICS.md](PHYSICS.md).
@@ -25,6 +31,11 @@ You load in on a gentle hillside in the morning. The slice view fills the screen
 - **Copies.** Looking along the hoop you see copies of everything, your own planet included, 800 m up. Light simply goes round.
 
 ## The sandbox
+
+**Rules of play.**
+- Nothing kills you. The worst that happens is a quiet fade back to your last landing spot.
+- You hold one thing at a time; impulse stones go in a pouch.
+- What you have found stays faintly marked on the radar. There is no journal: your memory is the record.
 
 **Moving.** Walk, run, jump and swim, step and turn through ana, and climb boulders by holding Space against them. Your body is a 4D capsule from feet to head, so nothing clips through rock. Gravity weakens with height as 1/r³: summits are light-footed.
 
@@ -57,14 +68,23 @@ An ecosystem runs behind the scenes: grazing, herding, fleeing, births and death
 ## Space
 
 1. **Hop.** The launcher (a found artifact) or a few impulse stones carry you a few hundred metres up. The planet below is a ball, and turning through ana shows other continents on it.
-2. **Fail to orbit.** Near a planet, gravity is truly 4D (1/r³). There, circular speed equals escape speed, so no orbit closes: you spiral down or fly off. You learn it by trying.
+2. **Fail to orbit.** Near a planet, gravity is truly 4D (1/r³). There, circular speed equals escape speed, so an orbit closes only in the one orientation the hoop cradles. Everywhere else you spiral down or fly off. You learn it by trying.
 3. **Loop the star.** Far out (beyond L), gravity is 3D-like and orbits are stable. With enough speed you can coast round the star, see the copies, and reach planet B.
 
-Flight is ballistic with impulse stones for corrections, with no fuel bar and no HUD numbers beyond the map. Re-entry is safe: there is no atmosphere, and landings are gentle by fiat. That is a deliberate mercy, noted in PHYSICS.md.
+The launcher is one machine on planet A, aimed by hand, whose power grows in **tiers**. Each tier is a part found inside a puzzle and carried back:
+
+| Tier | Speed | What it gives |
+|---|---|---|
+| I | 30 m/s | A 60 m hop. |
+| II | 42 m/s | A 200 m arc: the planet is a ball below you. |
+| III | 50 m/s | Orbital speed. Launch sideways and the orbit fails, unless it lies flat across the hoop, where the planet's own copies cradle it (PHYSICS.md). Because the planet double-rotates, that direction drifts through the day, so the one orbit that works is found by timing. |
+| IV | 60 m/s | Escape: the star, the copies, planet B. |
+
+Flight is ballistic, with impulse stones for corrections. There's no fuel bar and no HUD numbers beyond the map. Landings are gentle by fiat (there is no atmosphere). If you hit the star, or drift too long, you fade back to your last landing spot with nothing lost.
 
 ## The puzzle thread (wordless)
 
-Artifacts are stone and metal objects in the same geometric language as everything else. Each one opens only to a genuinely 4D idea. Solving one gives an impulse stone or wakes part of the launcher. Candidates, from which we pick about five for A and three for B:
+Artifacts are stone and metal objects in the same geometric language as everything else. Each one opens only to a genuinely 4D idea. Solving one reveals what it holds: a launcher part (to carry back by hand), impulse stones, or a direction. Some artifacts point, wordlessly, along a straight walk to a landmark or to the next artifact. Candidates, from which we pick about five for A and three for B:
 
 | Artifact | The idea it demonstrates |
 |---|---|
@@ -102,9 +122,10 @@ It is open-ended play after "beating" it. It can always be reset to the true law
 
 ## Art and sound
 
-- **Look:** quiet and natural, with geometric artifacts and creatures in matte stone and brushed metal. One accent colour for things that respond.
+- **Look:** natural, as now: textured ground, soft light, believable skies. The strangeness comes from the geometry alone. Artifacts and creatures are matte stone and brushed metal, with one accent colour for things that respond.
 - **Night:** genuinely dark. Lanterns and the star row matter.
-- **Sound:** wind, water and footsteps, all propagated with 4D falloff. No music, or a single sparse theme.
+- **Sound:** mostly ambient (wind, water, footsteps), all propagated with 4D falloff.
+- **Music:** at a few moments, a great baroque piece: the first sight of the copies, the first escape, landing on B, the console. Use public-domain (CC0) recordings only, checking each licence before use. Kimiko Ishizaka's *Open Goldberg Variations* is one candidate; Bach's canons by inversion are mirror images, which suits a world where a mirror image is just a rotation away.
 
 ## Scope and milestones
 
@@ -136,6 +157,5 @@ Each milestone ships to the live site.
 
 ## Open questions
 
-- Licence for the repository: MIT (permissive) is the usual choice for a project meant to be shared.
 - The exact artifact list (pick from the table during M6 playtests).
 - Whether the star row lights the planet as one blended source or several sharp ones (decide on looks and cost in M5).

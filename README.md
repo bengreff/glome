@@ -52,3 +52,6 @@ No build step: plain ES modules. To run locally, serve the folder with any stati
 2. Things: rocks to throw and spin with true 4D rigid-body rotation, trees branching in three horizontal directions, buildings with 3D walls.
 3. Sky: the w-direction becomes a circle (the "hoop"), giving stable orbits, a sun that appears as a band across the sky, and your own planet seen again along w.
 4. Ropes that can't hold knots, flowing water, sound with its 4D wake, creatures.
+
+## Licence
+MIT. See [LICENSE](LICENSE).
