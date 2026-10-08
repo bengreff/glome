@@ -341,6 +341,24 @@ export function drawRadarOverlay(r, sun) {
     octx.stroke();
   }
 
+  // objects (glomes, tesseracts, stones, lanterns): small accent squares; filled where your slice cuts them
+  if (RB <= 200 && G.objects) {
+    for (const b of G.objects.world.bodies) {
+      if (b.held) continue;
+      const m = logMap(vec4.norm(b.pos), B, u);
+      if (Math.hypot(...m) > RB * 0.97) continue;
+      const P = proj(m), sz = Math.max(2.2 * k, 3.4 * k * Math.min(1.6, b.bound / 0.3));
+      const cut = Math.abs(vec4.dot(vec4.sub(b.pos, G.player.camera().eye), G.player.A)) < b.bound;
+      octx.strokeStyle = 'rgba(82, 220, 200, 0.95)'; octx.lineWidth = 1.3 * k; octx.fillStyle = 'rgba(82, 220, 200, 0.85)';
+      if (cut) octx.fillRect(P[0] - sz / 2, P[1] - sz / 2, sz, sz); else octx.strokeRect(P[0] - sz / 2, P[1] - sz / 2, sz, sz);
+    }
+  }
+  // the pouch: one dot per impulse stone, under the ball
+  if (G.objects && G.objects.pouch > 0) {
+    octx.fillStyle = 'rgba(82, 220, 200, 0.95)';
+    for (let i = 0; i < G.objects.pouch; i++) { octx.beginPath(); octx.arc(rect.x + rect.s / 2 + (i - (G.objects.pouch - 1) / 2) * 9 * k, rect.y + rect.s + 4 * k, 2.6 * k, 0, 7); octx.fill(); }
+  }
+
   // boulders: dots sized by radius; outlined where your slice cuts them (those are the ones you can see)
   const bs = [];
   if (RB <= 200) for (const b of boulders.all) {

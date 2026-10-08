@@ -8,9 +8,9 @@ import { gl, canvas, overlay, octx, fail, tex, tex3D, N, buildAtlas, makeNoise, 
 import { radar, drawRadar, blitRadar, drawRadarOverlay, makeRadarVolume, recordTrail, headingTo, orbitRadar, zoomRadar,
          compassAt, logMap } from './radar.js';
 import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulders.js';
-import { keys, mouse, SENS, readInput } from './input.js';
+import { keys, mouse, SENS, readInput, actions } from './input.js';
 import { gazePoint, drawFaced, drawGazeDot, updateHUD } from './hud.js';
-import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld } from './save.js';
+import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
 import { LAWS } from './laws.js';
 import { accelBodyA } from './cosmos.js';
 import * as saveMod from './save.js';
@@ -19,7 +19,9 @@ import { capsuleTerrain, envSD, tangents } from './env.js';
 import { MASSIF } from './world.js';
 import { quality, updateSky } from './render.js';
 import { updateSound } from './sounds.js';
-import { gpuObj } from './objects.js';
+import { gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
+         drawStone, computeGhost, setDown, objectsSave } from './objects.js';
+import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 
 const $ = id => document.getElementById(id);
 const state = G.state;
@@ -70,6 +72,37 @@ function backToDry() {
   p.settleFrame();
 }
 
+// ---------- hands: pick up, carry, set down, throw ----------
+const hold = { fT: -1, mT: -1, ghostT: 0 };
+const kickPlayer = dv => { if (flight.active) kick(dv); else G.player.vel = vec4.add(G.player.vel, dv); };
+function handleActions(cam) {
+  const now = G.simT;
+  if (actions.fDown) {
+    actions.fDown = false;
+    if (objects.held) hold.fT = now;                       // tap: drop · hold: show where it will rest
+    else { const b = lookedAt(cam); if (b) pickUp(b); }
+  }
+  if (actions.fUp) {
+    actions.fUp = false;
+    if (hold.fT >= 0 && objects.held) { if (now - hold.fT > 0.3 && objects.ghost) setDown(); else drop(); }
+    hold.fT = -1; objects.ghost = null;
+  }
+  if (hold.fT >= 0 && objects.held && now - hold.fT > 0.3 && now - hold.ghostT > 0.2) { computeGhost(cam); hold.ghostT = now; }
+  G.charge = hold.mT >= 0 && objects.held ? (now - hold.mT) / 1.0 : -1;
+  if (actions.g) { actions.g = false; drawStone(cam); }
+  if (actions.mDown) { actions.mDown = false; if (objects.held) hold.mT = now; }
+  if (actions.mUp) {
+    actions.mUp = false;
+    if (hold.mT >= 0 && objects.held) throwHeld(cam, Math.min(1, (now - hold.mT) / 1.0), kickPlayer);
+    hold.mT = -1;
+  }
+}
+// Soft reset: after touching the star or drifting too long, a quiet fade back to the last ground you stood on.
+function softReset() {
+  flight.active = false;
+  fadeOut(backToDry);
+}
+
 // ---------- main loop ----------
 let last = performance.now(), lastRaw = last, physAcc = 0;
 const STEP = 1 / 120;
@@ -89,10 +122,10 @@ function frame(now) {
     player.rotate('FR', mouse.dx * sens);
     player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - mouse.dy * sens));
   }
-  if (mouse.dx || mouse.dy) state.facing = null;          // looking around cancels an automatic turn
+  if (mouse.dx || mouse.dy) { state.facing = null; syncFlightFrame(player); }   // looking around cancels an automatic turn
   mouse.dx = mouse.dy = 0;
   const turnKeys = (keys.has('KeyC') ? 1 : 0) - (keys.has('KeyZ') ? 1 : 0);
-  if (turnKeys) player.rotate('FA', turnKeys * 1.2 * dt);
+  if (turnKeys) { player.rotate('FA', turnKeys * 1.2 * dt); syncFlightFrame(player); }
   if (state.facing && player.turnToward(headingTo(state.facing).dir, 2.2 * dt)) { state.faced = { n: state.facing, what: state.facingWhat, until: G.simT + 5 }; state.facing = null; }
   const k = c => keys.has(c) ? 1 : 0;
   orbitRadar((k('ArrowLeft') - k('ArrowRight')) * 1.6 * dt, (k('ArrowUp') - k('ArrowDown')) * 1.2 * dt);
@@ -104,9 +137,16 @@ function frame(now) {
   updateBoulders(player.camera().eye);
   // physics runs in fixed steps of 1/120 s (PHYSICS.md), as many as the frame needs
   physAcc += dt * LAWS.TIME_RATE;
+  handleActions(player.camera());
   for (let n = 0; physAcc >= STEP && n < 10; n++, physAcc -= STEP) {
-    player.update(STEP, input, accel);
-    capsuleTerrain(player);
+    updateFlightMode(player);
+    if (flight.active) { if (!stepFlight(player, STEP)) softReset(); }
+    else {
+      player.update(STEP, input, accel);
+      capsuleTerrain(player);
+    }
+    playerContacts(player);
+    stepObjects(player.camera());
     state.time += STEP;
   }
   if (player.depth > CHEST) fadeOut(backToDry);
@@ -119,6 +159,7 @@ function frame(now) {
   const cam = player.camera(), sun = updateSky(state.time, cam.eye);
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
+  uploadObjects(cam);
   const q = gpuBegin();
   drawSlice(cam, sun, 0, 0, scene.w, scene.h);
   mark('slice');
@@ -158,11 +199,13 @@ function frame(now) {
       let best = null;
       for (let k = 0; k < 600; k++) {
         const d = vec4.norm([0, 1, 2, 3].map(i => (rand() - 0.5) * T[0][i] + (rand() - 0.5) * T[1][i] + (rand() - 0.5) * T[2][i]));
-        const m = 80 + 20 * rand(), n = vec4.norm(vec4.add(vec4.scale(MASSIF, Math.cos(m / 250)), vec4.scale(d, Math.sin(m / 250))));
+        const m = 75 + 45 * rand(), n = vec4.norm(vec4.add(vec4.scale(MASSIF, Math.cos(m / 250)), vec4.scale(d, Math.sin(m / 250))));
         const h = player.hf.heightAt(n);
-        if (h < 4 || h > 20 || player.hf.waterAt(n) > 0.01) continue;
+        if (h < 4 || h > 22 || player.hf.waterAt(n) > 0.01) continue;
+        // flat ground over a few metres (so the cairn's balls stay put), and closer is better
         let rough = 0;
-        for (const t of tangents(n)) rough += Math.abs(player.hf.heightAt(vec4.norm(vec4.add(n, vec4.scale(t, 2 / 250)))) - h);
+        for (const t of tangents(n)) for (const e of [2, 6]) rough += Math.abs(player.hf.heightAt(vec4.norm(vec4.add(n, vec4.scale(t, e / 250)))) - h) / e;
+        rough += (m - 75) / 400;
         if (!best || rough < best.rough) best = { n, rough };
       }
       if (best) {
@@ -179,6 +222,10 @@ function frame(now) {
     makeRadarVolume();
     makeBoulders(rand);
     player.contact = boulderContact;
+    initObjects(accel, envSD, { height: p => vec4.len(p) - 250 - player.hf.waterAt(vec4.norm(p)), up: p => vec4.norm(p), density: 1000 });
+    placeStart(rand);
+    hooks.objects = objectsSave;
+    G.objects = objects;
     G.home = { pos: player.pos.slice(), F: player.F, R: player.R, A: player.A };
     // start in the morning: sun about 20° up and rising
     const up = player.up();
@@ -196,7 +243,7 @@ function frame(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, hold, handleActions, actions, kickPlayer } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

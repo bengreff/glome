@@ -30,6 +30,7 @@ export const LAWS = {
 
   // the walker
   EYE: 1.62,               // eye height above the feet (m)
+  PLAYER_M: 70,            // your mass (kg): what your throws recoil against
   WALK: 4.2, RUN: 9.5,     // ground speeds (m/s)
   JUMP: 5.2,               // take-off speed (m/s)
   MU: 0.9,                 // Coulomb friction, rock on rock and feet on rock

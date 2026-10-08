@@ -68,6 +68,12 @@ export function drawGazeDot() {
     octx.font = `500 ${10.5 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     octx.fillText(`${Math.round(radar.gaze.t)} m`, W / 2 + 8 * k, H / 2 + 4 * k);
   }
+  // winding up a throw: a ring around the dot fills with the charge
+  const ch = G.charge ?? -1;
+  if (ch >= 0) {
+    octx.strokeStyle = 'rgba(82, 220, 200, 0.9)'; octx.lineWidth = 2 * k;
+    octx.beginPath(); octx.arc(W / 2, H / 2, 9 * k, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.min(1, ch)); octx.stroke();
+  }
   octx.restore();
 }
 

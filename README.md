@@ -25,6 +25,15 @@ The plan is in [docs/DESIGN.md](docs/DESIGN.md), and the laws and numbers are in
 - **No poles, days that never repeat.** The planet spins in two planes at once, at rates in the golden ratio, so every place gets day and night and no two days are alike.
 - **Stars are points on a 3-sphere of directions.** In the slice view you only see the ones close to your slice, so they fade in and out as you turn through ana.
 
+- **Things to carry, stack and throw.** 4D balls and tesseracts in two sizes are true 4D rigid bodies: orientation in SO(4) (as a pair of unit quaternions), angular velocity a bivector, so a thrown tesseract tumbles in two planes at once and its slice keeps changing shape. Contacts carry Coulomb friction in the 3D tangent space; stacks stand. What you hold turns with you, so carrying something through ana and back mirrors it. Hold <kbd>F</kbd> to see a ghost of where it will come to rest.
+- **Impulse stones and recoil.** Stones go into a pouch; throwing one recoils you by exactly m·v/(M+m) (momentum is conserved). In flight that is the only way to steer.
+- **Lanterns** light a small, sharp pool: light from a point fades as 1/r³ in four dimensions.
+- **The hoop sky.** The fourth direction closes every 800 m. The star appears as a row of suns along it, and the sunlight on every surface is the exact sum over the row. Look along the hoop and your own planet hangs in the sky, 800 m away.
+- **A crafted planet.** One great massif (46 m, the highest summit by 13 m), an archipelago whose islands are joined only through ana, and rivers traced from the massif down to the sea.
+- **Exact gravity.** Every mass is felt together with all its images round the hoop, through the closed-form sum; in the planet's frame you also feel its spin (centrifugal and Coriolis) and the star's tide. Summits are lighter (6 m/s² on the massif).
+- **4D sound.** Sounds fall off as r^(−3/2) and carry the faint tail that waves have in even dimensions.
+- **Saves.** The world autosaves in your browser; export and import a `.hoop` file from the help panel.
+
 ## Controls
 | | |
 |---|---|
@@ -35,7 +44,9 @@ The plan is in [docs/DESIGN.md](docs/DESIGN.md), and the laws and numbers are in
 | <kbd>Tab</kbd> · wheel or <kbd>−</kbd> <kbd>=</kbd> | radar big / small · zoom, out to the whole planet |
 | <kbd>M</kbd> <kbd>P</kbd> <kbd>L</kbd> <kbd>K</kbd> · arrows | radar: heading/compass-up · pin · layers · hide · spin |
 | <kbd>Esc</kbd>, then mouse | drag the radar to spin · hover to inspect · click to face |
-| <kbd>H</kbd> | help |
+| <kbd>F</kbd> · hold <kbd>F</kbd> | pick up or drop · show where it will rest, release to set it down |
+| hold the mouse · <kbd>G</kbd> | wind up and throw · take an impulse stone from the pouch |
+| <kbd>H</kbd> | help, settings, your world (export, import, new) |
 
 ## How it works
 - **Terrain:** 4D value noise sampled on a *cubed 3-sphere*: 8 cubic charts, one per tesseract cell. It's generated at load time in 8 web workers and stored in a 3D texture.

@@ -32,6 +32,8 @@
     <dt><kbd>Space</kbd> <kbd>Shift</kbd></dt><dd>jump, or climb a boulder you are walking into · run</dd>
     <dt>mouse</dt><dd>turn left and right, look up and down</dd>
     <dt>right-drag or <kbd>Alt</kbd>+mouse · <kbd>Z</kbd> <kbd>C</kbd></dt><dd>turn toward ana or kata (and twist) · the same from the keyboard</dd>
+    <dt><kbd>F</kbd> · hold <kbd>F</kbd></dt><dd>pick up or drop what you look at · show where it would come to rest, release to set it down there</dd>
+    <dt>hold the mouse · <kbd>G</kbd></dt><dd>wind up and throw what you hold · take an impulse stone from your pouch</dd>
   </dl>
   <h2>The radar</h2>
   <dl>
@@ -46,6 +48,7 @@
   <p><b>The whole planet.</b> Zoom all the way out and the ball holds the entire planet: its whole outer surface is a single point, your antipode, 785 m away by any straight walk. <kbd>P</kbd> pins the ball where you stand; walk and you move through it as a dot, and your slice becomes a curved sheet, a great 2-sphere through you and your antipode.</p>
   <p><b>Compass.</b> Unlike Earth, a 3-sphere can carry a compass with no poles: three perpendicular directions (i, j, k, after the quaternion units) defined everywhere. Walking straight keeps your compass heading fixed but slowly rolls the other two around it, once per lap of the planet.</p>
   <p><b>Boulders</b> are 4D balls. Your slice cuts each in an ordinary sphere whose size depends on how far its centre lies toward ana or kata, so as you turn they swell out of nothing, shrink and vanish. The radar shows them all and rings the ones your slice cuts. They are solid, with friction: push into one and you stop; hold <kbd>Space</kbd> and you climb its surface (which can carry you toward its centre in ana).</p>
+  <p><b>Things</b> are 4D too: balls (glomes) and tesseracts, which tumble by turning in two planes at once, so a thrown tesseract's slice keeps changing shape: cubes, prisms, hexagons. What you hold turns with you: carry a thing, turn through ana, set it down, turn back, and it is its own mirror image. Impulse stones go into a pouch; throw one and you recoil (momentum is conserved), which is how you steer where there is nothing to push against. Lanterns light a small, sharp pool: in four dimensions light fades as 1/r³.</p>
   <p><b>Water.</b> You can't swim. Wade in up to your chest; any deeper and you are back where you stepped in.</p>
   <p>The ground is a 3-sphere: walk straight in any direction and you come back to where you started, about 1.6 km later. The planet spins in two planes at once, so there are no poles and the days never repeat.</p>
   <h2>Settings</h2>
@@ -75,7 +78,7 @@
   <pre id="error-msg"></pre>
 </section>
 
-<script type="importmap">{"imports": {"./js/audio.js": "./js/audio.js?v=20261007231518", "./js/boulders.js": "./js/boulders.js?v=20261007231518", "./js/cosmos.js": "./js/cosmos.js?v=20261007231518", "./js/env.js": "./js/env.js?v=20261007231518", "./js/game.js": "./js/game.js?v=20261007231518", "./js/hud.js": "./js/hud.js?v=20261007231518", "./js/input.js": "./js/input.js?v=20261007231518", "./js/laws.js": "./js/laws.js?v=20261007231518", "./js/main.js": "./js/main.js?v=20261007231518", "./js/noise.js": "./js/noise.js?v=20261007231518", "./js/objects.js": "./js/objects.js?v=20261007231518", "./js/player.js": "./js/player.js?v=20261007231518", "./js/radar.js": "./js/radar.js?v=20261007231518", "./js/render.js": "./js/render.js?v=20261007231518", "./js/save.js": "./js/save.js?v=20261007231518", "./js/shaders.js": "./js/shaders.js?v=20261007231518", "./js/so4.js": "./js/so4.js?v=20261007231518", "./js/sounds.js": "./js/sounds.js?v=20261007231518", "./js/terrain-worker.js": "./js/terrain-worker.js?v=20261007231518", "./js/world.js": "./js/world.js?v=20261007231518"}}</script>
-<script type="module" src="js/main.js?v=20261007231518"></script>
+<script type="importmap">{"imports": {"./js/audio.js": "./js/audio.js?v=20261007233847", "./js/bodies.js": "./js/bodies.js?v=20261007233847", "./js/boulders.js": "./js/boulders.js?v=20261007233847", "./js/cosmos.js": "./js/cosmos.js?v=20261007233847", "./js/env.js": "./js/env.js?v=20261007233847", "./js/flight.js": "./js/flight.js?v=20261007233847", "./js/game.js": "./js/game.js?v=20261007233847", "./js/hud.js": "./js/hud.js?v=20261007233847", "./js/input.js": "./js/input.js?v=20261007233847", "./js/laws.js": "./js/laws.js?v=20261007233847", "./js/main.js": "./js/main.js?v=20261007233847", "./js/noise.js": "./js/noise.js?v=20261007233847", "./js/objects.js": "./js/objects.js?v=20261007233847", "./js/player.js": "./js/player.js?v=20261007233847", "./js/radar.js": "./js/radar.js?v=20261007233847", "./js/render.js": "./js/render.js?v=20261007233847", "./js/save.js": "./js/save.js?v=20261007233847", "./js/shaders.js": "./js/shaders.js?v=20261007233847", "./js/so4.js": "./js/so4.js?v=20261007233847", "./js/sounds.js": "./js/sounds.js?v=20261007233847", "./js/terrain-worker.js": "./js/terrain-worker.js?v=20261007233847", "./js/world.js": "./js/world.js?v=20261007233847"}}</script>
+<script type="module" src="js/main.js?v=20261007233847"></script>
 </body>
 </html>

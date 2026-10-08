@@ -70,6 +70,10 @@ Sound obeys the wave equation in four space dimensions. Amplitude falls as **r^(
   - sequential impulses with several iterations, so stacks stand;
   - resting bodies sleep.
 - **Time step:** fixed at 1/120 s.
+- **In the game** (js/bodies.js, tests in tools/test-bodies.mjs): the impulse J at offset r changes ω by (J ∧ r)/I, checked against the energy change J·v. Densities are 4D (kg/m⁴): stone 2600, metal 7800, wood 450, water 1000, so stone sinks and wood floats. Contacts: ball–ball and ball–tesseract exactly; tesseract–tesseract by separating axes over the eight face normals with the incident box's vertices clamped onto the reference face (edge-on contacts are approximate); against the ground by the 16 vertices. Measured: a free tumbling tesseract keeps L and E to 10⁻⁹; a stack of three stands 30 s with < 0.1 mm drift on a sphere; collisions conserve P and L to 10⁻¹⁴; buoyancy floats a half-density ball exactly half under.
+- **Rolling resistance** (an approximation): soft ground gives under a rolling ball, which rigid-body contact cannot model, so a ball on the ground feels a drag of 0.08 × its normal force. Without it balls roll forever on the gentlest slope.
+- **Water drag** (an approximation): bodies in water lose speed and spin in proportion to how deep they are.
+- **Throwing** conserves momentum exactly: an object of mass m leaving at speed u relative to you (mass M) changes your velocity by −u·m/(M + m). An impulse stone (2.5 kg) always leaves at 80 m/s, so each one is worth 2.76 m/s to a 70 kg you.
 
 ## The player
 

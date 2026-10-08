@@ -228,10 +228,12 @@ float boulderShadow(vec4 ro, vec4 rd) {
 
 // Objects: 4D balls and tesseracts with any orientation in SO(4). The ray is carried into the object's own frame
 // (the transpose of its rotation), where a tesseract is the box |x_i| <= h: a 4D slab test.
+uniform int uGhost;          // the index of the ghost (where a held object would come to rest), or -1
 float hitObject(vec4 ro, vec4 rd, float tMax, int count, out int idx, out vec4 nrm) {
   float best = tMax; idx = -1; nrm = vec4(0.0);
   for (int i = 0; i < MAXO; i++) {
     if (i >= count) break;
+    if (i == uGhost) continue;
     vec4 oc = ro - uOC[i];
     float h = uOP[i].y;
     if (uOP[i].x < 0.5) {
@@ -252,11 +254,28 @@ float hitObject(vec4 ro, vec4 rd, float tMax, int count, out int idx, out vec4 n
   }
   return best;
 }
+float hitObjectOne(vec4 ro, vec4 rd, int i, out vec4 nrm) {
+  vec4 oc = ro - uOC[i];
+  float h = uOP[i].y;
+  nrm = vec4(0.0);
+  if (uOP[i].x < 0.5) {
+    float b = dot(oc, rd), c = dot(oc, oc) - h * h, d = b * b - c;
+    if (d <= 0.0) return -1.0;
+    float t = -b - sqrt(d); nrm = (oc + rd * t) / h; return t;
+  }
+  vec4 o = oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / dd;
+  vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
+  float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
+  if (tNear >= tFar || tNear <= 0.0) return -1.0;
+  nrm = uOM[i] * (vec4(equal(tn, vec4(tNear))) * -sign(dd));
+  return tNear;
+}
 // Shadows from objects along a ray toward the sun: soft for balls, sharp for tesseracts.
 float objectShadow(vec4 ro, vec4 rd) {
   float res = 1.0;
   for (int i = 0; i < MAXO; i++) {
     if (i >= uON) break;
+    if (i == uGhost) continue;
     vec4 oc = uOC[i] - ro;
     float t = dot(oc, rd);
     if (t <= 0.0) continue;
@@ -635,7 +654,13 @@ void main() {
   vec2 q = vUV * vec2(uRes.x / uRes.y, 1.0) * uFov;
   vec4 rd = normalize(uF + q.x * uR + q.y * uU);
   float t;
-  vec3 col = post(render(uEye, rd, t) * mix(2.2, 1.0, uDayE));
+  vec3 hdr = render(uEye, rd, t);
+  if (uGhost >= 0) {                                         // the ghost: a faint glass copy in the accent colour
+    int gi; vec4 gn;
+    float tg = hitObjectOne(uEye, rd, uGhost, gn);
+    if (tg > 0.0 && (t < 0.0 || tg < t)) hdr = mix(hdr, ACCENT * (0.5 + 0.5 * abs(dot(gn, rd))), 0.35) + ACCENT * 0.25 * pow(1.0 - abs(dot(gn, rd)), 3.0);
+  }
+  vec3 col = post(hdr * mix(2.2, 1.0, uDayE));
   float vig = 1.0 - 0.25 * dot(vUV * 0.7, vUV * 0.7);
   col *= vig;
   outColor = vec4(col, 1.0);

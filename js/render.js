@@ -229,6 +229,7 @@ export function setWorld(p, cam, sun) {
   gl.uniform4fv(p.u('uOP'), gpuObj.P);
   gl.uniform1i(p.u('uON'), gpuObj.n);
   gl.uniform1i(p.u('uOCut'), gpuObj.cut);
+  gl.uniform1i(p.u('uGhost'), gpuObj.ghost);
   gl.uniform4fv(p.u('uLP'), gpuObj.LP);
   gl.uniform4fv(p.u('uLC'), gpuObj.LC);
   gl.uniform1i(p.u('uLN'), gpuObj.ln);
