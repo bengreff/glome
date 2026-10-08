@@ -344,7 +344,12 @@ float hitObject(vec4 ro, vec4 rd, float tMax, int count, out int idx, out vec4 n
     if (uOP[i].x < 0.5) {
       float b = dot(oc, rd), c = dot(oc, oc) - h * h, d = b * b - c;
       if (d > 0.0) { float t = -b - sqrt(d); if (t > 0.0 && t < best) { best = t; idx = i; nrm = (oc + rd * t) / h; } }
-    } else if (uOP[i].x > 1.5) {
+      continue;
+    }
+    // a tesseract (circumradius 2h) or a duocylinder (h√2): its bounding ball first, which most rays miss
+    float bb = dot(oc, rd), Rb = uOP[i].x > 1.5 ? 1.415 * h : 2.0 * h;
+    if (bb * bb - dot(oc, oc) + Rb * Rb <= 0.0 || bb > Rb) continue;
+    if (uOP[i].x > 1.5) {
       vec4 n4; float t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4);
       if (t > 0.0 && t < best) { best = t; idx = i; nrm = uOM[i] * n4; }
     } else {
