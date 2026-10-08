@@ -658,7 +658,7 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
     }
   }
   if (tc > 1e8) return false;
-  col = mix(col, skyColor(rd, normalize(ro), uDayE), (1.0 - exp(-tc * 0.0007)) * uAtmos);   // a little haze
+  col = mix(col, skyColor(rd, normalize(ro), uDayE), (1.0 - exp(-tc * 0.0004)) * uAtmos);   // a little haze
   return true;
 }
 
@@ -860,7 +860,7 @@ void main() {
     float tg = hitObjectOne(uEye, rd, uGhost, gn);
     if (tg > 0.0 && (t < 0.0 || tg < t)) hdr = mix(hdr, ACCENT * (0.5 + 0.5 * abs(dot(gn, rd))), 0.35) + ACCENT * 0.25 * pow(1.0 - abs(dot(gn, rd)), 3.0);
   }
-  vec3 col = post(hdr * mix(2.2, 1.0, uDayE));
+  vec3 col = post(hdr * mix(2.2, 1.0, smoothstep(0.0, 0.35, uDayE)));   // the eye adapts only when it is really dark
   float vig = 1.0 - 0.25 * dot(vUV * 0.7, vUV * 0.7);
   col *= vig;
   // dither by half a step of the 8-bit target, so dark gradients (night, space) don't band
