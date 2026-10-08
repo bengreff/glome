@@ -4,6 +4,14 @@
 
 Hoop is not a 3D game with a fourth-dimension gimmick. The world is a genuine 4D ball, and every pixel is a 4D ray traced through it. Geometry, surface normals, sunlight and shadows are all computed in four dimensions.
 
+## Where it is going
+Hoop is becoming a small, wordless, self-contained 4D universe: one star, two planets, and a fourth direction that loops back on itself.
+- **Physics:** exact gravity, with real 4D rigid bodies to throw and stack.
+- **The world:** geometric creatures, caves you can only enter from ana, and a flight off the planet that fails to orbit before it loops the star.
+- **The puzzle:** a quiet chain of artifacts that ends at the console of the simulation itself.
+
+The plan is in [docs/DESIGN.md](docs/DESIGN.md), and the laws and numbers are in [docs/PHYSICS.md](docs/PHYSICS.md).
+
 ## What is real here
 - **The ground is a 3-sphere.** You can walk forward, sideways *and* along a third horizontal direction (ana/kata). Walk straight in any direction and you return to where you started, about 1.6 km later.
 - **Slice view.** The 3D cross-section through your eyes, which is what a 3D visitor would perceive. Turning toward ana sweeps the slice through the landscape.
