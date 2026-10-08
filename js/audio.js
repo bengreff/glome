@@ -525,6 +525,25 @@ function synthOneShot(ctx, noiseBuf, kind, opts = {}) {
       const r = partials(ctx, noiseBuf, f0, [1, 2.3, 4.1], [0.6, 0.25, 0.1], 0.14, 0.4);
       return { out: r.out, gain: 0.8, stop: r.stop };
     }
+    case 'splash': {                       // something meeting the water: a burst of noise falling in pitch
+      const b = noiseBurst(ctx, noiseBuf, { filterType: 'lowpass', freq: 3500, Q: 0.6, dur: 0.45, attack: 0.004, gain: 0.7 });
+      b.filt.frequency.setValueAtTime(3500, t); b.filt.frequency.exponentialRampToValueAtTime(500, t + 0.4);
+      return { out: b.node, gain: 0.8, stop: 0.5 };
+    }
+    case 'tick': {                         // a walker's four feet landing: a dry little click
+      const b = noiseBurst(ctx, noiseBuf, { filterType: 'bandpass', freq: 5200, Q: 8, dur: 0.025, attack: 0.001, gain: 0.6 });
+      return { out: b.node, gain: 0.5, stop: 0.04 };
+    }
+    case 'chirp': {                        // a roller taking an interest: two quick rising notes
+      const mix = ctx.createGain();
+      [0, 0.09].forEach((o, i) => {
+        const osc = ctx.createOscillator(); osc.type = 'sine';
+        osc.frequency.setValueAtTime(900 + 300 * i, t + o); osc.frequency.exponentialRampToValueAtTime(1500 + 400 * i, t + o + 0.07);
+        const g = ctx.createGain(); g.gain.setValueAtTime(0, t + o); g.gain.linearRampToValueAtTime(0.35, t + o + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + o + 0.08);
+        osc.connect(g); g.connect(mix); osc.start(t + o); osc.stop(t + o + 0.09);
+      });
+      return { out: mix, gain: 0.6, stop: 0.2 };
+    }
     case 'block': {                        // a stone tesseract: a dry knock, lower for bigger blocks
       const size = opts.size || 0.3, f = Math.max(700, Math.min(4000, 3000 * 0.3 / size));
       const b = noiseBurst(ctx, noiseBuf, { filterType: 'bandpass', freq: f, Q: 5, dur: 0.05, attack: 0.001, gain: 0.8 });

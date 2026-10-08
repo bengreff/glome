@@ -1,6 +1,6 @@
 // Builds one chart of the terrain atlas off the main thread: the ground's height at N³ points, and the water's
 // level (the sea, or a river 0.5 m above its bed) at (N/2)³ points.
-import { terrainHeight, waterLevel, chartVector } from './world.js?v=20261008112019';
+import { terrainHeight, waterLevel, chartVector } from './world.js?v=20261008112150';
 
 self.onmessage = (e) => {
   const { chart, N } = e.data, NW = N >> 1;

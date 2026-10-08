@@ -103,6 +103,7 @@ function think(c, all, hf, p, dt) {
       const d = Math.acos(Math.max(-1, Math.min(1, vec4.dot(vec4.norm(o.pos), n)))) * PLANET_R;
       if (d < td) { td = d; toy = o; }
     }
+    if (toy && !c.toy && G.audio && dMe < 40) G.audio.emit('chirp', vec4.scale(n, PLANET_R + h + 0.5), 0.8);   // a roller takes an interest
     c.toy = toy;
     if (toy) { want = proj(vec4.sub(vec4.norm(toy.pos), n), n); speed = Math.min(3.4, 1 + td); c.alarm = 1; }
     // curious: within 30 m they come and circle you, in your slice, where you can see them
@@ -158,7 +159,13 @@ export function stepCreatures(dt, hf) {
       c.heading = vec4.norm(vec4.add(vec4.scale(c.heading, 0.9), vec4.scale(c.v, 0.1 / sp)));
     }
     c.heading = vec4.norm(proj(c.heading, c.n));
+    const ph0 = c.phase;
     c.phase = (c.phase + dt * sp / (2 * WALKER.stride)) % 1;
+    // a walker's tetrapod lands twice a stride: a tick, if you are near enough to hear it
+    if (c.kind === 'walker' && G.audio && p && p.onB == null && (Math.floor(ph0 * 2) !== Math.floor(c.phase * 2) || c.phase < ph0)) {
+      const pos = vec4.scale(c.n, PLANET_R + hf.heightAt(c.n)), dd = vec4.len(vec4.sub(pos, p.pos));
+      if (dd < 18) G.audio.emit('tick', pos, 0.5 + 0.3 * Math.random());   // (not the ecosystem's own random stream)
+    }
     c.th1 += dt * sp / ROLLER.a; c.th2 += dt * sp / ROLLER.a * 0.81;
     c.alarm = Math.max(0, c.alarm - dt * 0.5);
     // a roller that reaches its ball knocks it on: a collision with something much heavier (it bounces off at the

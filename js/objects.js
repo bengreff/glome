@@ -106,6 +106,14 @@ export function stepObjects(cam, kick, w = objects.world, far = 150, gone = 1500
 function soundImpacts(w) {
   if (!G.audio || !w.impacts) return;
   const where = w === objects.worldB && objects.toA ? q => objects.toA(q, R4.identity()).pos : q => q;
+  // into the water: a splash, as a body first gets wet coming down
+  for (const b of w.bodies) {
+    if (b.wet > 0 && !(b.wasWet > 0) && !b.held) {
+      const vd = -vec4.dot(b.vel, vec4.norm(b.pos));
+      if (vd > 1.2) G.audio.emit('splash', where(b.pos), Math.min(1.3, vd / 5) * Math.max(0.4, Math.min(1.2, 0.4 + 0.25 * Math.log10(b.m))));
+    }
+    b.wasWet = b.wet;
+  }
   for (const im of w.impacts) for (const b of [im.a, im.b]) {
     if (!b || b.fixed || b.ghostly || G.simT - (b.soundT ?? -9) < 0.08) continue;
     b.soundT = G.simT;
