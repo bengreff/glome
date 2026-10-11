@@ -1,7 +1,7 @@
 // Keyboard and mouse. The look deltas accumulate here and the frame loop consumes them.
 import { G } from './game.js';
 import { canvas, overlay } from './render.js';
-import { radar, RADAR_LAYERS, radarBasis, faceMarkAt, orbitRadar, zoomRadar } from './radar.js';
+import { radar, radarBasis, faceMarkAt, orbitRadar, zoomRadar, legend, toggleLayer, legendHit } from './radar.js';
 
 const $ = id => document.getElementById(id);
 export const keys = new Set();
@@ -17,9 +17,10 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyG') actions.g = true;
   keys.add(e.code);
   const state = G.state;
+  if (/^Digit[1-9]$/.test(e.code) && !e.repeat) toggleLayer(+e.code[5] - 1);   // the radar's layers
   switch (e.code) {
     case 'Tab': state.radar.big = !state.radar.big; break;
-    case 'KeyL': state.radar.layers = (state.radar.layers + 1) % RADAR_LAYERS.length; break;
+    case 'KeyL': legend.open = !legend.open; break;
     case 'KeyK': state.radar.hidden = !state.radar.hidden; break;
     case 'KeyU': state.bare = !state.bare; document.body.classList.toggle('bare', state.bare); break;   // nothing over the view: for pictures
     case 'Escape': if (!$('console').hidden) $('console').hidden = true; break;
@@ -38,6 +39,8 @@ canvas.addEventListener('mousedown', e => {
   if (document.pointerLockElement === canvas) { if (e.button === 0) actions.mDown = true; return; }
   if (e.button !== 0) return;
   const p = devPx(e);
+  const lh = legendHit(p);
+  if (lh != null) { if (lh >= 0) toggleLayer(lh); legend.flashUntil = 0; return; }   // a click on the legend: switch a layer
   if (inRadar(p)) { radar.drag = { p, moved: false }; return; }
   canvas.requestPointerLock?.();
   mouse.dragging = true;

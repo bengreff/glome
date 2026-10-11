@@ -9,7 +9,7 @@ A *glome* is a 4D ball: the planets, the star and the boulders are all glomes.
 ## What is in it
 
 - **The planet.** A 4D ball whose ground is a 3-sphere: walk straight in any direction and you come back about 1.6 km later. It spins in two planes at once, so there are no poles and no two days are alike. A great massif (its summit the highest by 13 m), seas, an archipelago whose islands are joined only through the fourth direction, rivers from the highlands to the sea, a cave, an arch, an overhang, three landmark trees.
-- **The slice and the radar.** Your view is the cross-section through your eyes; turning toward ana or kata (the fourth direction) sweeps it through the world. Boulders swell out of nothing and vanish as you turn. The radar is a glass ball of the 3D ground around you, out to the whole planet.
+- **The slice and the radar.** Your view is the cross-section through your eyes; turning toward ana or kata (the fourth direction) sweeps it through the world. Boulders swell out of nothing and vanish as you turn. The radar is a glass ball of the 3D ground around you, out to the whole planet, with layers you switch on and off: by default the things you can carry, landmarks and your trail of the last two minutes.
 - **The hoop sky.** The star appears as a row of suns along the hoop, and the light on every surface is the exact sum over the row. Look along the hoop and your own planet hangs in the sky, 800 m away. Clouds drift in a 4D layer 90 m up that your slice cuts in a sheet, so they change shape as you turn through ana, and their shadows cross the land.
 - **Things.** 4D balls and tesseracts to carry, stack and throw. What you hold stays a physical body: it turns with you, knocks into what it meets, and heavy things come up slowly and swing as you turn. A thrown tesseract tumbles in two planes at once, its slice changing shape as it turns. Carrying something through ana and back makes it its own mirror image. Impulse stones recoil you (momentum is conserved), lanterns light a sharp 1/r³ pool, a rope cannot hold a knot, a raft floats on the 4-volume it displaces and sails with a sail. A struck ball rings with the overtones of a 3-sphere. Things you carry to planet B stay there.
 - **Creatures.** Walkers, on eight legs that form two alternating tetrapods, are shy and walk out of your slice through ana. Rollers, duocylinders rolling by double rotation, are curious: they circle you, and chase and knock on a ball you set rolling. An ecosystem runs behind the scenes.
@@ -38,7 +38,8 @@ Nothing is swapped for a cheaper law; where the game approximates, it integrates
 | <kbd>F</kbd> · hold <kbd>F</kbd> | pick up or drop · show where it will rest, release to set it down |
 | hold the mouse · <kbd>G</kbd> | wind up and throw · take an impulse stone from the pouch |
 | <kbd>Tab</kbd> · wheel or <kbd>−</kbd> <kbd>=</kbd> | radar big / small · zoom, out to the whole planet |
-| <kbd>M</kbd> <kbd>P</kbd> <kbd>L</kbd> <kbd>K</kbd> · arrows | radar: heading/compass-up · pin · layers · hide · spin |
+| <kbd>1</kbd>–<kbd>9</kbd> · <kbd>L</kbd> | radar layers (things, landmarks, creatures, water, mountains, height shells, summits, boulders, trail) · the legend, where a click switches them too |
+| <kbd>M</kbd> <kbd>P</kbd> <kbd>K</kbd> · arrows | radar: heading/compass-up · pin · hide · spin |
 | <kbd>Esc</kbd>, then mouse | drag the radar to spin · hover to inspect · click to face |
 | <kbd>H</kbd> · <kbd>U</kbd> | help, settings, your world (export, import, new) · nothing over the view, for pictures |
 | gamepad | left stick walk · right stick look (LT held: toward ana, twist) · LB RB kata, ana · A jump · X take · RT throw · Y stone · B radar · Start help |

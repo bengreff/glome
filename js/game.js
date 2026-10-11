@@ -4,7 +4,7 @@
 export const G = {
   state: {
     time: 0, help: false,
-    radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42, layers: 0, hidden: false, grow: 0 },
+    radar: { big: false, range: 90, compass: false, yaw: 0, el: 0.42, show: null, hidden: false, grow: 0 },
     facing: null, faced: null,
   },
   player: null,
