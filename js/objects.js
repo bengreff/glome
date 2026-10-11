@@ -76,13 +76,13 @@ export function placeStart(rand) {
   const p = G.player, home = p.up(), T = tangents(home);
   const at = (a, b, c, m) => vec4.norm(vec4.add(vec4.scale(home, Math.cos(m / PLANET_R)), vec4.scale(vec4.norm([0, 1, 2, 3].map(i => a * T[0][i] + b * T[1][i] + c * T[2][i])), Math.sin(m / PLANET_R))));
   const ahead = (side, ana, m) => vec4.norm(vec4.add(vec4.scale(home, Math.cos(m / PLANET_R)), vec4.scale(vec4.norm(vec4.add(vec4.add(p.F, vec4.scale(p.R, side)), vec4.scale(p.A, ana))), Math.sin(m / PLANET_R))));
-  spawn('tessL', ahead(0.75, 0, 6));
-  spawn('tessS', ahead(1.1, 0, 4.6));
-  spawn('tessS', ahead(0.55, 0.06, 7.5));
-  spawn('glomeS', ahead(-0.55, 0, 4.2));
-  spawn('glomeL', ahead(-0.95, 0, 6.5));
-  spawn('glomeS', ahead(-0.3, 0.35, 5.5));                // just off your slice: turn toward ana to find it
-  spawn('lantern', ahead(-0.15, -0.05, 3.2));
+  spawn('tessL', ahead(-0.42, 0, 5.8));                  // (on the left: the radar covers the lower right)
+  spawn('tessS', ahead(-0.2, 0, 4.4));
+  spawn('tessS', ahead(-0.65, 0.06, 7.2));
+  spawn('glomeS', ahead(0.3, 0, 4.2));
+  spawn('glomeL', ahead(0.5, 0, 6.3));
+  spawn('glomeS', ahead(0.2, 0.35, 5.5));                 // just off your slice: turn toward ana to find it
+  spawn('lantern', ahead(0.05, -0.05, 3.2));
   for (let i = 0; i < 3; i++) spawn('stone', at(rand() - 0.5, rand() - 0.5, rand() - 0.5, 9 + 14 * rand()));
 }
 
@@ -213,6 +213,8 @@ export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
   let best = null, bd = 0.3;
   for (const b of w.bodies) {
     if (b === objects.held || b.fixed || b === G.player.ride) continue;
+    const e0 = b.pos[0] - cam.eye[0], e1 = b.pos[1] - cam.eye[1], e2 = b.pos[2] - cam.eye[2], e3 = b.pos[3] - cam.eye[3], m = reach + b.bound + 0.3;
+    if (e0 * e0 + e1 * e1 + e2 * e2 + e3 * e3 > m * m) continue;
     const d = vec4.sub(b.pos, cam.eye), t = vec4.dot(d, cam.F);
     if (t < 0 || t > reach) continue;
     const miss = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))) - b.bound;
@@ -341,7 +343,7 @@ function drawPose(b, cam, alpha) {
     const C = camRot(cam), r0 = hold.relPrev || hold.rel, r1 = hold.rel;
     return { pos: vec4.add(cam.eye, R4.apply(C, lerp4(r0.p, r1.p, alpha))), rot: R4.compose(C, lerpRot(r0.R, r1.R, alpha)) };
   }
-  if (alpha < 1 && b.prevPos && vec4.len(vec4.sub(b.pos, b.prevPos)) < 1) return { pos: lerp4(b.prevPos, b.pos, alpha), rot: lerpRot(b.prevRot, b.rot, alpha) };
+  if (alpha < 1 && !b.sleeping && b.prevPos && vec4.len(vec4.sub(b.pos, b.prevPos)) < 1) return { pos: lerp4(b.prevPos, b.pos, alpha), rot: lerpRot(b.prevRot, b.rot, alpha) };   // (asleep: still, and not stepped)
   return b;
 }
 export function uploadObjects(cam, alpha = 1) {
@@ -385,24 +387,37 @@ export function uploadObjects(cam, alpha = 1) {
 }
 
 // ---------- saving ----------
+// The things found about the planet (finds.js) are numbered (gen) and rebuilt with the world, so a save holds only
+// those you have moved (and which are gone), with everything else.
 export const objectsSave = {
   save() {
-    const r5 = v => Math.round(v * 1e5) / 1e5;
+    const r5 = v => Math.round(v * 1e5) / 1e5, all = objects.world.bodies.concat(objects.worldB ? objects.worldB.bodies : []);
+    const moved = b => b.gen == null || b.held || b.inB || !b.spawnPos || vec4.len(vec4.sub(b.pos, b.spawnPos)) > 0.02;
+    const present = new Set(all.filter(b => b.gen != null).map(b => b.gen)), gone = [];
+    for (let k = 0; k < (G.genCount || 0); k++) if (!present.has(k)) gone.push(k);
     return {
       pouch: objects.pouch,
       held: objects.held ? objects.held.id : null,
-      bodies: objects.world.bodies.concat(objects.worldB ? objects.worldB.bodies : []).filter(b => !b.fixed).map(b => ({ id: b.id, kind: b.kind, tier: b.tier, pos: b.pos.slice(), vel: b.vel.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) }, omega: b.omega.map(r5), sleeping: b.sleeping, holdRel: b.holdRel || null, tag: b.tag || null, inB: !!b.inB })),
+      gone, gens: G.genCount || 0,
+      bodies: all.filter(b => !b.fixed && moved(b)).map(b => ({ id: b.id, gen: b.gen ?? null, kind: b.kind, tier: b.tier, pos: b.pos.slice(), vel: b.vel.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) }, omega: b.omega.map(r5), sleeping: b.sleeping, holdRel: b.holdRel || null, tag: b.tag || null, inB: !!b.inB })),
     };
   },
   load(s) {
     const w = objects.world;
-    w.bodies = w.bodies.filter(b => b.fixed);                        // fixed things (the launcher) are rebuilt, not saved
+    // fixed things (the launcher) are rebuilt, not saved; the found things stay as the world made them unless saved
+    const gens = new Map(w.bodies.filter(b => b.gen != null).map(b => [b.gen, b]));
+    w.bodies = w.bodies.filter(b => b.fixed || (b.gen != null && s.gens === G.genCount));
     if (objects.worldB) objects.worldB.bodies = objects.worldB.bodies.filter(b => b.fixed);
+    if (s.gens === G.genCount) for (const k of s.gone || []) { const b = gens.get(k); if (b) w.remove(b); }
+    else for (const b of gens.values()) w.add(b), b.sleeping = true;   // (a save from before they existed: keep them all)
     objects.held = null;
     objects.pouch = s.pouch || 0;
     for (const o of s.bodies) {
       if (!KINDS[o.kind]) continue;
-      const b = spawnAt(o.kind, o.pos, !!o.inB && !!objects.worldB);
+      let b = o.gen != null && s.gens === G.genCount ? gens.get(o.gen) : null;
+      if (b && (!!o.inB && !!objects.worldB)) { w.remove(b); b = null; }
+      if (b) { b.pos = o.pos.slice(); b.prevPos = b.pos.slice(); }
+      else { b = spawnAt(o.kind, o.pos, !!o.inB && !!objects.worldB); if (o.gen != null) b.gen = o.gen; }
       b.vel = o.vel; b.rot = o.rot; b.omega = o.omega; b.sleeping = o.sleeping; b.tag = o.tag; b.tier = o.tier;
       if (o.id === s.held) { objects.held = b; b.held = true; b.holdRel = o.holdRel && o.holdRel.l ? o.holdRel : null; hold.last = null; }
     }

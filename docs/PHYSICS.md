@@ -103,7 +103,11 @@ A chain of particles with distance constraints (position-based dynamics) that co
 ## Landforms and trees
 
 - **Hollows** are 4D capsules and balls subtracted from the ground, in the renderer and the physics alike (the walker finds the floor of a hollow below the ground's surface). The cave's only tunnel leaves its chamber toward ana from the path that leads there; there is also an arch through an island and an overhang on the massif.
-- **Trees** are 4D capsules (branches spreading in all three ground directions) and balls (foliage), traced exactly. A slice cuts a branch only where the branch crosses it, so most views of a tree are floating pieces.
+- **Trees** are 4D capsules (branches spreading in all three ground directions), balls (foliage) and, for conifers, 4D cones, traced exactly. A slice cuts a branch only where the branch crosses it, so most views of a tree are floating pieces. (An approximation of foliage, not of geometry: a clump of leaves is a ball whose surface is made ragged and gappy by noise, and so is a cone of needles; their shade on the ground is a soft ball's.)
+
+## Rocks
+
+Rocks are 4D convex solids, each scaled along its own four axes: ellipsoids, tesseracts, 16-cells (|x|+|y|+|z|+|w| ≤ 1), 24-cells (|xᵢ| + |xⱼ| ≤ 1 for every pair) and duocylinders. Rays meet them exactly (as the intersection of their half-spaces, or by their quadrics). For contact they are signed distances: exact on a tesseract and a duocylinder, the largest face distance on the 16- and 24-cells (exact on their faces, a lower bound near edges and corners). They stand still; you and things collide with them as with boulders (Coulomb friction, μ 0.9).
 
 ## Creatures
 
@@ -111,6 +115,7 @@ A chain of particles with distance constraints (position-based dynamics) that co
 - **Gaits** are kinematic: feet are placed by rule, then the body is carried by them.
 - **Walkers** stand on a tetrahedron of four feet, the smallest stable stance on 3D ground, and walk on two alternating tetrapods (eight legs).
 - **Rollers** are duocylinders rolling in two planes at once.
+- **Only what you can see is simulated closely:** creatures within 70 m of you move every frame; the rest move in one step each time they think (twice a second), along the same headings at the same speeds.
 - **In the game:** a walker's eight hips are the corners of its body's bottom cell (a cube), which split into two tetrahedra: the two tetrapods. A slice through a walker's middle misses every leg (they all lie off-centre toward ana or kata), so you see legs only as it moves off your slice. A roller is drawn exactly (a ray is inside a duocylinder while it is inside both solid cylinders), but its rolling is kinematic: it turns in its two planes at rates set by its speed. Populations: walkers gain energy on grass and are born when well fed, if their herd has room; rollers live on sunlight; both age and die.
 
 ## The system (toy scale, tunable)

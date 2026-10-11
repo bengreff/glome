@@ -22,3 +22,10 @@ Run three (gravity raised so the summit measures 9.8 m/s², tiers 28/43/53/72 m/
 and orbit all solved again (the orbit at tier III after 19 tries of the space map's predictor, a full turn, at most
 625 m out). New, `pt_landB.js`: all four parts on the pad, a tier IV launch aimed by the predictor lands on B after
 85 s (predicted 83).
+
+Run three, N3 (the full world: forests, rocks, ruins, creatures): all five solved again. The flight playthroughs now
+search at the moment they jump (the world turns on while a search runs otherwise), and pt_landB aims as a player does
+with the map (tries directions and refines the one passing nearest B): random aiming hits B about once in a thousand.
+Two real bugs were found this way: rocks and trees near the summit could catch a nearly level launch (the summit is now
+clear for 45 m), and the space map counted grazing passes near B as landings (it now lands on B's floors exactly). The
+orbit completed a full turn at most 505 m out; the tier IV launch landed on B after 148 s.

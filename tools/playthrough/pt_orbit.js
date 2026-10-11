@@ -9,23 +9,24 @@ p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0]; p.settleFrame(); await
 out.tier = L.tier;
 // wait for a moment when a launch flat across the hoop exists, and aim with the map's own prediction
 const sweep = (pts) => { let s = 0, last = null; for (const q of pts) { const r = nz(V.sub(q.x, C.orbitOf('A', q.t).c)); if (last) s += Math.acos(Math.max(-1, Math.min(1, V.dot(r, last)))); last = r; } return s; };
-let found = null, tries = 0;
-for (let wait = 0; wait < 400 && !found; wait += 6) {
-  const t = g.state.time + wait;
+// wait for a moment when a launch flat across the hoop exists, and aim with the map's own prediction, made at the
+// moment of the jump (the world turns on while it is searched for otherwise, and the spin carries the pad)
+let found = null, tries = 0, waited = 0;
+for (; waited < 400 && !found; waited += 6) {
+  const t = g.state.time;
   for (let i = 0; i < 40 && !found; i++) {
     tries++;
     const az = Math.random() * 2 * Math.PI, b = Math.random() * Math.PI, e = 0.02 + 0.3 * Math.random();
     const h = nz(V.add(V.sc(T[0], Math.cos(az) * Math.sin(b)), V.add(V.sc(T[1], Math.sin(az) * Math.sin(b)), V.sc(T[2], Math.cos(b)))));
     const dir = nz(V.add(V.sc(h, Math.cos(e)), V.sc(up, Math.sin(e))));
     const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dir, d.TIERS[3]), t), t);
-    const rs = r.pts.map(q => len(V.sub(q.x, C.orbitOf('A', q.t).c))); if (!r.hit && Math.max(...rs) < 900 && sweep(r.pts) > 2.2 * Math.PI) found = { wait, dir, rmax: Math.max(...rs).toFixed(0) };
+    const rs = r.pts.map(q => len(V.sub(q.x, C.orbitOf('A', q.t).c))); if (!r.hit && Math.max(...rs) < 700 && sweep(r.pts) > 2.2 * Math.PI) found = { dir, rmax: Math.max(...rs).toFixed(0) };
   }
+  if (!found) { g.state.time += 6; await gt(0.05); }
 }
 out.tries = tries; out.found = !!found;
 if (!found) return JSON.stringify(out);
-out.waited = found.wait; out.rmax = found.rmax;
-// the world turns to that moment (the player stands and waits), then aim and jump
-g.state.time += found.wait;
+out.waited = waited; out.rmax = found.rmax;
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0];
 const u = p.up(), hz = nz(V.sub(found.dir, V.sc(u, V.dot(found.dir, u)))); p.F = hz; p.settleFrame(); p.pitch = Math.asin(V.dot(found.dir, u));
 g.keys.add('Space'); await gt(0.05); g.keys.delete('Space');

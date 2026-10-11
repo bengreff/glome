@@ -48,7 +48,7 @@ export function growTree(n, h, { height = 7, depth = 3, spread = 0.75, form = 'b
     pushCap(base, vec4.add(base, vec4.scale(up, height * 0.9)), trunk * 0.8, 0);
     // one tall cone of needles from near the ground, and a slimmer one inside its upper half (off the axis, your slice
     // cuts them in rounded domes; through it, in cones)
-    const w = height * (0.2 + 0.07 * rnd()), a0 = vec4.add(base, vec4.scale(up, 0.6)), a1 = vec4.add(base, vec4.scale(up, height * 0.45));
+    const w = height * (0.2 + 0.07 * rnd()), a0 = vec4.add(base, vec4.scale(up, 0.1)), a1 = vec4.add(base, vec4.scale(up, height * 0.45));
     pushCap(a0, top, w, 4); leaves.push([vec4.scale(vec4.add(a0, top), 0.5), w]);
     pushCap(a1, vec4.add(top, vec4.scale(up, 0.4)), w * 0.62, 4);
   } else {
@@ -158,7 +158,7 @@ export function makeForests(hf, home, keepOut, homeSide) {
   let total = 0;
   // where you arrive: a grove off to one side, a few trees close by, and a wood beyond
   total += plantGrove(hf, off(home, homeSide, 30), 16, 80, MIXES.meadow, keepOut, 2.8);
-  total += plantGrove(hf, home, 22, 20, MIXES.meadow, keepOut, 4);
+  total += plantGrove(hf, home, 36, 220, MIXES.meadow, keepOut, 3.2);
   total += plantGrove(hf, off(home, vec4.scale(homeSide, -1), 65), 32, 260, MIXES.wood, keepOut, 2.6);
   for (let i = 0; i < 60000 && total < 9000; i++) {
     const n = randomUnit(), h = hf.heightAt(n);
@@ -173,19 +173,44 @@ export function makeForests(hf, home, keepOut, homeSide) {
     const cnt = Math.round((4 / 3) * Math.PI * r ** 3 / (big || kind === 'pines' ? 60 : 130));
     total += plantGrove(hf, n, r, Math.min(cnt, 180), MIXES[kind], keepOut, big ? 2.6 : 3);
   }
-  return total;
+  // and single trees and shrubs over all the grassland, between the groves
+  let singles = 0, bushes = 0;
+  for (let i = 0; i < 60000 && (singles < 3000 || bushes < 4000); i++) {
+    const n = randomUnit(), h = hf.heightAt(n);
+    if (h < 1.2 || h > 28 || hf.waterAt(n) > h - 0.3 || slope(hf, n) > 0.55 || keepOut(n, 2)) continue;
+    if (bushes < 4000 && (singles >= 3000 || rnd() < 0.57)) { growTree(n, h, { height: 0.8 + 0.9 * rnd(), form: 'shrub' }); bushes++; continue; }
+    const u = rnd(), s = 0.8 + 0.5 * rnd();
+    if (u < 0.55) growTree(n, h, { height: 6.5 * s, depth: 2, spread: 0.6 + 0.3 * rnd(), trunk: 0.32 + 0.18 * s });
+    else if (u < 0.75) growTree(n, h, { height: 7.5 * s + 2, form: 'conifer', trunk: 0.3 });
+    else if (u < 0.92) growTree(n, h, { height: 6 * s + 1.5, depth: 2, spread: 0.45, form: 'birch', trunk: 0.18 });
+    else growTree(n, h, { height: 5 * s, depth: 2, spread: 0.8, form: 'dead', trunk: 0.25 });
+    singles++;
+  }
+  return total + singles;
 }
 
 // ---------- to the GPU, each frame ----------
-const RANGE = 150, near = { at: null, t: 0, list: [] };
+const RANGE = 150, near = { k: 0, list: [], dirty: true };
+// The trees within reach, kept up to date a slice at a time (a thirtieth of them a frame), so no frame scans them all:
+// in within `enter` metres of the eye, out beyond `leave` (each flagged by .near on the item).
+export function nearScan(N, all, eye, enter, leave, key = 'nearT') {
+  // (all at once at the start, and after a jump of more than 30 m: a landing, a fade home)
+  if (!N.at || Math.hypot(N.at[0] - eye[0], N.at[1] - eye[1], N.at[2] - eye[2], N.at[3] - eye[3]) > 30) { for (const t of all) { const c = t.c; t[key] = Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2], c[3] - eye[3]) < enter + t.R; } N.dirty = true; }
+  N.at = eye.slice();
+  const step = Math.ceil(all.length / 30);
+  for (let i = 0; i < step; i++, N.k = (N.k + 1) % all.length) {
+    const t = all[N.k], c = t.c, d = Math.hypot(c[0] - eye[0], c[1] - eye[1], c[2] - eye[2], c[3] - eye[3]) - t.R;
+    if (!t[key] && d < enter) { t[key] = true; N.dirty = true; }
+    else if (t[key] && d > leave) { t[key] = false; N.dirty = true; }
+  }
+  if (N.dirty) { N.list = all.filter(t => t[key]); N.dirty = false; }
+}
 const capA = new Float32Array(4);
 export function treeFrame(cam, sun, W, H, fov) {
   const eye = cam.eye, A = cam.A, D = tgpu.data, aspect = W / H;
   let nc = 0, ng = 0, seedOf = 0;
   const groups = [];
-  if (!near.at || vec4.len(vec4.sub(near.at, eye)) > 10 || near.t++ > 60) {
-    near.at = eye.slice(); near.t = 0; near.list = trees.filter(t => vec4.len(vec4.sub(t.c, eye)) < RANGE + 50 + t.R);
-  }
+  nearScan(near, trees, eye, RANGE + 40, RANGE + 70);
   for (const t of near.list) {
     const d = vec4.sub(t.c, eye), dist2 = vec4.dot(d, d);
     if (dist2 > (RANGE + t.R) ** 2) continue;
@@ -201,7 +226,16 @@ export function treeFrame(cam, sun, W, H, fov) {
     const a2 = S[o + 4] * A[0] + S[o + 5] * A[1] + S[o + 6] * A[2] + S[o + 7] * A[3] - ea;
     if (Math.min(a1, a2) > r || Math.max(a1, a2) < -r) return false;
     const q = nc * 12;
-    for (let k = 0; k < 8; k++) D[q + k] = S[o + k];
+    if (S[o + 9] === 1) {
+      // a clump of leaves (a 4D ball): the slice cuts it in a 3D ball, which goes up in the slice's own coordinates
+      // (forward, right, up from your eye), radius √(r² − a²): one fetch and a 3D test for the shader
+      const c0 = S[o] - eye[0], c1 = S[o + 1] - eye[1], c2 = S[o + 2] - eye[2], c3 = S[o + 3] - eye[3];
+      D[q] = c0 * cam.F[0] + c1 * cam.F[1] + c2 * cam.F[2] + c3 * cam.F[3];
+      D[q + 1] = c0 * cam.R[0] + c1 * cam.R[1] + c2 * cam.R[2] + c3 * cam.R[3];
+      D[q + 2] = c0 * cam.U[0] + c1 * cam.U[1] + c2 * cam.U[2] + c3 * cam.U[3];
+      D[q + 3] = Math.sqrt(Math.max(0, r * r - a1 * a1));
+      for (let k = 0; k < 4; k++) D[q + 4 + k] = S[o + k];         // (the 4D centre, for shading)
+    } else for (let k = 0; k < 8; k++) D[q + k] = S[o + k];
     D[q + 8] = r; D[q + 9] = S[o + 9]; D[q + 10] = seedOf; D[q + 11] = 0;
     nc++;
     return true;
@@ -210,18 +244,29 @@ export function treeFrame(cam, sun, W, H, fov) {
   const circle = (c, R, i) => {                                // the screen circle of a 4D ball's cut by the slice
     const a = vec4.dot(vec4.sub(c, eye), A), rho = Math.sqrt(Math.max(0, R * R - a * a)) + 0.05, cP = vec4.sub(vec4.sub(c, vec4.scale(A, a)), eye);
     const z = vec4.dot(cP, cam.F), x = vec4.dot(cP, cam.R), y = vec4.dot(cP, cam.U);
-    if (z <= rho * 1.05) { Gd.set([W / 2, H / 2, 4 * (W + H), R], 12 * i); return; }
+    if (z < -rho) { Gd.set([-1e5, -1e5, 0, R], 12 * i); return; }                   // wholly behind you
+    if (z <= rho * 1.05) {
+      // beside you, across the plane of your eye: off the screen if its tangent cone misses the view's (the view's
+      // corner is at half-angle atan(fov·√(1 + aspect²)))
+      const dist = Math.hypot(x, y, z);
+      if (dist > rho * 1.02) {
+        const cone = Math.asin(rho / dist), toC = Math.acos(Math.max(-1, Math.min(1, z / dist))), corner = Math.atan(fov * Math.sqrt(1 + aspect * aspect));
+        if (toC - cone > corner) { Gd.set([-1e5, -1e5, 0, R], 12 * i); return; }
+      }
+      Gd.set([W / 2, H / 2, 4 * (W + H), R], 12 * i); return;                        // you are at it: everywhere
+    }
     const k = Math.sqrt(z * z - rho * rho), sx = x / z, sy = y / z, rr = rho / k * Math.sqrt(1 + sx * sx + sy * sy) * 1.15;
     Gd.set([(sx / (fov * aspect) * 0.5 + 0.5) * W, (sy / fov * 0.5 + 0.5) * H, rr / fov * 0.5 * H + 3, R], 12 * i);
   };
-  // the pieces since `first`, in chunks of a few (a branch and its twigs lie together), each with its bounding ball
-  const group = first => {
+  // the pieces since `first`, in chunks of a few (a branch and its twigs lie together), each with its bounding ball;
+  // leafy: a chunk of clumps of leaves only (stored as 3D balls in the slice, their 4D centres second)
+  const group = (first, leafy = false) => {
     for (let s0 = first; s0 < nc && ng < MAXTG; s0 += CHUNK) {
-      const s1 = Math.min(nc, s0 + CHUNK), c = [0, 0, 0, 0];
-      for (let j = s0; j < s1; j++) for (let q = 0; q < 4; q++) c[q] += (D[12 * j + q] + D[12 * j + 4 + q]) / (2 * (s1 - s0));
+      const s1 = Math.min(nc, s0 + CHUNK), c = [0, 0, 0, 0], ends = leafy ? [4] : [0, 4];
+      for (let j = s0; j < s1; j++) for (const e of ends) for (let q = 0; q < 4; q++) c[q] += D[12 * j + e + q] / (ends.length * (s1 - s0));
       let R = 0;
-      for (let j = s0; j < s1; j++) for (const o of [12 * j, 12 * j + 4]) R = Math.max(R, Math.hypot(D[o] - c[0], D[o + 1] - c[1], D[o + 2] - c[2], D[o + 3] - c[3]) + D[12 * j + 8]);
-      Gd.set(c, 12 * ng + 4); Gd[12 * ng + 8] = s0; Gd[12 * ng + 9] = s1 - s0; Gd[12 * ng + 10] = 0; Gd[12 * ng + 11] = 0;
+      for (let j = s0; j < s1; j++) for (const e of ends) { const o = 12 * j + e; R = Math.max(R, Math.hypot(D[o] - c[0], D[o + 1] - c[1], D[o + 2] - c[2], D[o + 3] - c[3]) + D[12 * j + 8]); }
+      Gd.set(c, 12 * ng + 4); Gd[12 * ng + 8] = s0; Gd[12 * ng + 9] = s1 - s0; Gd[12 * ng + 10] = leafy ? 1 : 0; Gd[12 * ng + 11] = 0;
       circle(c, R, ng); ng++;
     }
   };
@@ -246,14 +291,16 @@ export function treeFrame(cam, sun, W, H, fov) {
     if (ng >= MAXTG || nc >= MAXTC - 8) break;
     const fade = Math.min(1, Math.max(0, (RANGE - dist) / (0.15 * RANGE)));   // far ones shrink away, never pop
     const twig = dist > 100 ? 0.2 : dist > 60 ? 0.13 : dist > 30 ? 0.065 : 0;  // far ones drop their twigs
-    const first = nc;
     seedOf = (t.start * 0.6180339887) % 1;
-    for (let i = t.start; i < t.start + t.count && nc < MAXTC; i++) {
-      const o = i * F;
-      if (CAPS[o + 8] < twig && CAPS[o + 9] !== 1) continue;
-      emit(CAPS, o, fade);
+    for (const leafy of [false, true]) {                         // its wood and needles, then its leaves
+      const first = nc;
+      for (let i = t.start; i < t.start + t.count && nc < MAXTC; i++) {
+        const o = i * F, isLeaf = CAPS[o + 9] === 1;
+        if (isLeaf !== leafy || (!isLeaf && CAPS[o + 8] < twig)) continue;
+        emit(CAPS, o, fade);
+      }
+      group(first, leafy);
     }
-    group(first);
   }
   tgpu.nc = nc; tgpu.n = ng;
 

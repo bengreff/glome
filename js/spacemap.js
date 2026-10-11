@@ -6,6 +6,7 @@ import { G } from './game.js';
 import { vec4 } from './player.js';
 import { LAWS } from './laws.js';
 import { gravityInertial, orbitOf, toInertial, velToInertial } from './cosmos.js';
+import { groundRadiusB } from './planetB.js';
 import { overlay, octx } from './render.js';
 
 export const smap = { path: [], t: -1, hit: null, center: 'A', range: 1000, bAt: null };
@@ -17,7 +18,9 @@ export function predict(x, v, t) {
   let hit = null;
   for (let i = 0; t - t0 < 300 && pts.length < 3200; i++) {
     const A = orbitOf('A', t).c, rA = vec4.len(vec4.sub(x, A));
-    const B = orbitOf('B', t).c, rB = Math.min(vec4.len(vec4.sub(x, B)), vec4.len(vec4.sub(x, vec4.add(B, [0, 0, 0, LAWS.L]))), vec4.len(vec4.sub(x, vec4.sub(B, [0, 0, 0, LAWS.L]))));
+    const B = orbitOf('B', t).c;
+    let rB = Infinity, dB = null;                             // the nearest copy of B round the hoop
+    for (const k of [-1, 0, 1]) { const dd = vec4.sub(x, vec4.add(B, [0, 0, 0, k * LAWS.L])), l = vec4.len(dd); if (l < rB) { rB = l; dB = dd; } }
     const dt = rA < 400 || rB < 200 ? 0.02 : 0.1;
     const a0 = gravityInertial(x, t);
     for (let k = 0; k < 4; k++) v[k] += 0.5 * dt * a0[k];
@@ -28,7 +31,7 @@ export function predict(x, v, t) {
     for (let k = 0; k < 4; k++) v[k] += 0.5 * dt * a1[k];
     if (i % 4 === 0) pts.push({ x: x.slice(), t });
     if (rA < LAWS.R_A - 5 && t - t0 > 2) { hit = { what: 'A', t }; break; }
-    if (rB < LAWS.R_B + 6) { hit = { what: 'B', t }; break; }
+    if (rB < LAWS.R_B + 6 && rB < groundRadiusB(vec4.scale(dB, 1 / rB)) + 0.05) { hit = { what: 'B', t }; break; }   // on B's floors (a 120-cell), as flight lands
     if (vec4.len(x) < LAWS.STAR_R) { hit = { what: 'star', t }; break; }
   }
   return { pts, hit };

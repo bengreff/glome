@@ -182,22 +182,28 @@ export class World {
 
   step() {
     const dt = this.dt, bodies = this.bodies;
-    for (const b of bodies) { b.prevPos = b.pos.slice(); b.prevRot = b.rot; }     // (for drawing between steps)
+    // only the awake bodies move: the many asleep (most of the planet's things) cost a check each
+    const awake = [];
+    for (let i = 0; i < bodies.length; i++) { const b = bodies[i]; b.idx = i; if (!b.sleeping && !b.kinematic) awake.push(b); }
+    for (const b of awake) { b.prevPos = b.pos.slice(); b.prevRot = b.rot; }      // (for drawing between steps)
     // 1. forces
-    for (const b of bodies) {
-      if (b.sleeping || b.kinematic) continue;
+    for (const b of awake) {
       const a = this.accel(b.pos, b.vel);
       for (let i = 0; i < 4; i++) b.vel[i] += a[i] * dt;
       if (this.water) b.wet = buoyancy(b, this.water, len(a), dt);
     }
-    // 2. contacts
+    // 2. contacts: each awake body against the environment and every body near it (each pair once)
     const cs = [];
-    for (const b of bodies) if (!b.sleeping && !b.kinematic) envContacts(b, this.env, cs);
-    for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
-      const A = bodies[i], B = bodies[j];
-      if ((A.sleeping || A.kinematic) && (B.sleeping || B.kinematic)) continue;
-      if (A.ghostly || B.ghostly) continue;
-      pairContacts(A, B, cs);
+    for (const b of awake) envContacts(b, this.env, cs);
+    for (const A of awake) {
+      if (A.ghostly) continue;
+      for (const B of bodies) {
+        if (B === A || B.ghostly) continue;
+        if (!B.sleeping && !B.kinematic && B.idx < A.idx) continue;   // (both awake: once, from the first)
+        const d0 = B.pos[0] - A.pos[0], d1 = B.pos[1] - A.pos[1], d2 = B.pos[2] - A.pos[2], d3 = B.pos[3] - A.pos[3], r = A.bound + B.bound + 0.05;
+        if (d0 * d0 + d1 * d1 + d2 * d2 + d3 * d3 > r * r) continue;
+        if (A.idx < B.idx) pairContacts(A, B, cs); else pairContacts(B, A, cs);
+      }
     }
     // a moving body wakes a sleeping one it touches
     for (const c of cs) for (const [s, o] of [[c.a, c.b], [c.b, c.a]]) {
@@ -267,7 +273,7 @@ export class World {
     this.warm = warm;
     this.contacts = cs;
     // 5. integrate, and sleep
-    for (const b of bodies) {
+    for (const b of awake) {
       if (b.sleeping || b.kinematic) continue;
       for (let i = 0; i < 4; i++) b.pos[i] += b.vel[i] * dt;
       b.rot = R4.renorm(rotStep(b.rot, b.omega, dt));
@@ -283,6 +289,7 @@ export class World {
     let best = null;
     for (const b of this.bodies) {
       if (b === skip) continue;
+      if (tMax < Infinity) { const e0 = b.pos[0] - ro[0], e1 = b.pos[1] - ro[1], e2 = b.pos[2] - ro[2], e3 = b.pos[3] - ro[3], m = tMax + b.bound; if (e0 * e0 + e1 * e1 + e2 * e2 + e3 * e3 > m * m) continue; }
       let t = Infinity, n = null;
       const oc = sub(ro, b.pos);
       if (b.shape === 'glome') {

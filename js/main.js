@@ -26,7 +26,7 @@ import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS }
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
 import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
-import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame } from './trees.js';
+import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
 import { Rope } from './rope.js';
 import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
 import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
@@ -37,7 +37,9 @@ import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { orbitOf, toBody, dirToBody, dirToInertial } from './cosmos.js';
 import { RIVERS, ISLANDS, ARCHI } from './world.js';
-import { props, makeRocks, uploadProps, rockContact, rocksAt } from './props.js';
+import { props, makeRocks, uploadProps, rockContact, rocksAt, placeRock, setExtraProps } from './props.js';
+import { finds, makeFinds } from './finds.js';
+import { tiles } from './tiles.js';
 
 const $ = id => document.getElementById(id);
 const state = G.state;
@@ -281,9 +283,9 @@ function frameBody(now) {
     updateArtifacts();
     stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
     const cd = creatureDraw(cam.eye, cam.A, player.hf);
-    G.creatureItems = cd.items; legSlot.caps = cd.caps;
-  } else { G.creatureItems = []; legSlot.caps = []; }
-  G.creatureItems = G.creatureItems.concat(bItems(cam, tR, alpha));   // B's pillars and console, when near
+    setExtraProps(cd.items); legSlot.caps = cd.caps;          // the creatures' bodies are props; their legs go with the trees
+  } else { setExtraProps([]); legSlot.caps = []; }
+  G.creatureItems = bItems(cam, tR, alpha);                  // B's pillars and console, when near
   updateConsole();
   uploadObjects(cam, alpha);
   // the first sight of your own planet's copies round the hoop: a copy inside your slice, in front of you, in the sky
@@ -405,7 +407,11 @@ function frameBody(now) {
       G.partSpots = [p1, p2, p3, p4];
     }
     hooks.objects = objectsSave;
-    initCreatures(player.hf);
+    {
+      // herds where you will go first: near where you arrive, on the way up to the summit, and by each artifact's place
+      const home = player.up(), way = f => vec4.norm(vec4.add(vec4.scale(home, 1 - f), vec4.scale(launcher.n, f)));
+      initCreatures(player.hf, [[home, 45, 8], [home, 75, 7], [way(0.3), 25, 7], [way(0.6), 25, 6], ...(G.partSpots || []).map(n => [vec4.norm(n), 35, 6])]);
+    }
     hooks.creatures = creaturesSave;
     G.creatures = creatures;
     {
@@ -424,7 +430,7 @@ function frameBody(now) {
       // the rocks: clusters of 4D shapes by kind over the whole planet, and a few of each near where you arrive; none
       // on the start, the paths of the artifacts, the launcher, the cave's mouth or the raft's beach
       const hf = player.hf, home = player.up(), keep = [[home, 7]];
-      if (launcher.n) keep.push([launcher.n, 10]);
+      if (launcher.n) keep.push([launcher.n, 45]);                  // (the summit stays clear: a launch leaves it nearly level)
       for (const n of G.partSpots || []) keep.push([vec4.norm(n), 8]);
       for (const a of G.artifacts || []) keep.push([a.n, 9]);
       if (G.cave) keep.push([vec4.norm(G.cave.mouth), 10]);
@@ -432,7 +438,8 @@ function frameBody(now) {
       if (G.knotPost) keep.push([vec4.norm(G.knotPost.a), 8]);
       const keepOut = (n, r) => keep.some(([q, m]) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 < m + r)
         || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < r + 2;
-      G.rocksMade = makeRocks(hf, home, keepOut, [['outcrop', 16, 32], ['erratic', 10, 22], ['crystal', 24, 45], ['scree', 26, 50], ['stone', 12, 45]]);
+      G.rocksMade = makeRocks(hf, home, keepOut, [['outcrop', 16, 32], ['erratic', 10, 22], ['crystal', 24, 45], ['scree', 26, 50], ['stone', 12, 45],
+        ['outcrop', 25, 45], ['outcrop', 30, 60], ['erratic', 15, 35], ['erratic', 20, 40], ['crystal', 35, 60], ['scree', 20, 45]]);
       // the woods: none in a rock or a boulder either
       const bgrid = new Map(), bkey = q => q.map(v => Math.floor(v / 10)).join();
       for (const b of boulders.all) { const k = bkey(b.c); if (!bgrid.has(k)) bgrid.set(k, []); bgrid.get(k).push(b); }
@@ -444,7 +451,21 @@ function frameBody(now) {
           for (const B of bgrid.get([k[0] + a, k[1] + b, k[2] + c, k[3] + d].join()) || []) if (vec4.len(vec4.sub(B.c, q)) < B.r + r) return true;
         return false;
       };
+      // what you see first: whole trees and a 4D rock standing in your slice (turn through ana and they come apart)
+      {
+        const F0 = player.F, R0 = player.R, at = (deg, m) => { const a = deg * Math.PI / 180; return vec4.norm(vec4.add(vec4.scale(home, Math.cos(m / 250)), vec4.scale(vec4.norm(vec4.add(vec4.scale(F0, Math.cos(a)), vec4.scale(R0, Math.sin(a)))), Math.sin(m / 250)))); };
+        const plant = (n, o) => { const h = hf.heightAt(n); if (h > 0.8 && hf.waterAt(n) < 0.01) growTree(n, h, o); };
+        plant(at(-34, 15), { height: 7.5, depth: 3, spread: 0.7, trunk: 0.48 });
+        plant(at(22, 23), { height: 10, form: 'conifer', trunk: 0.36 });
+        plant(at(44, 12), { height: 7.5, depth: 2, spread: 0.45, form: 'birch', trunk: 0.2 });
+        plant(at(-12, 30), { height: 6.5, depth: 2, spread: 0.8, trunk: 0.4 });
+        placeRock('crystal', at(-58, 11), hf); placeRock('crystal', at(-55, 12.5), hf);
+        placeRock('outcrop', at(14, 19), hf);
+      }
       G.treesMade = makeForests(hf, home, (n, r) => keepOut(n, r) || inStone(n, r + 0.5), player.R);
+      // ruins, cairns and caches, and lines of cairns toward the artifacts and the launcher
+      G.findsMade = makeFinds(hf, home, [...(G.artifacts || []).map(a => a.n), launcher.n], keepOut);
+      G.genCount = finds.gen;
     }
     buildB();
     bindConsole();
@@ -495,7 +516,7 @@ function frameBody(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

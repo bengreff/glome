@@ -8,6 +8,7 @@ import { gl, canvas, overlay, octx, dyn, setWorld, progRadar, progBake, progBlit
 import { boulders } from './boulders.js';
 import { trees, groves } from './trees.js';
 import { launcher } from './launcher.js';
+import { finds } from './finds.js';
 
 export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   // all the way out, the ball holds the whole planet
 // What the ball can show, each a layer you switch with the keys 1–9 or by clicking the legend beside it (with the
@@ -386,9 +387,9 @@ export function drawRadarOverlay(r, sun) {
       if (L.kind === 'grove') {                               // a wood: a soft green patch, as wide as it is
         const m = logMap(L.n, B, u); if (Math.hypot(...m) > RB * 0.97) continue;
         const P = proj(m), Q = proj(m.map((v, i) => v + cv.R[i] * L.r)), rr = Math.max(3 * k, Math.hypot(Q[0] - P[0], Q[1] - P[1]));
-        octx.fillStyle = 'rgba(90, 170, 80, 0.22)'; octx.strokeStyle = 'rgba(140, 210, 120, 0.55)'; octx.lineWidth = 1 * k;
-        octx.beginPath(); octx.arc(P[0], P[1], rr, 0, 7); octx.fill(); octx.stroke();
-        drawLandmark('tree', P, k * 0.8);
+        octx.fillStyle = 'rgba(90, 170, 80, 0.16)';
+        octx.beginPath(); octx.arc(P[0], P[1], rr, 0, 7); octx.fill();
+        if (rr > 8 * k) drawLandmark('tree', P, k * 0.7);
         continue;
       }
       const P = at(L.n, L.keep); if (!P) continue;
@@ -530,6 +531,7 @@ export function landmarkList() {
   for (const g of groves) out.push({ n: g.n, kind: 'grove', r: g.r });   // woods as soft patches
   for (const t of trees) if (t.landmark) out.push({ n: t.n, kind: 'tree' });
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
+  for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin' });
   if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: launcher.tier > 0 });
   for (const a of G.artifacts || []) {
     if (!G.flags['seen_' + a.id]) continue;
@@ -548,6 +550,10 @@ export function drawLandmark(kind, P, k, bright) {
   } else if (kind === 'cave') {                               // an arch
     octx.strokeStyle = 'rgba(230, 210, 180, 0.95)'; octx.lineWidth = 1.8 * k;
     octx.beginPath(); octx.moveTo(x - 4.5 * k, y + 3.5 * k); octx.lineTo(x - 4.5 * k, y); octx.arc(x, y, 4.5 * k, Math.PI, 0); octx.lineTo(x + 4.5 * k, y + 3.5 * k); octx.stroke();
+  } else if (kind === 'ruin') {                               // worked stone: two pillars and a lintel
+    octx.strokeStyle = 'rgba(225, 215, 195, 0.9)'; octx.lineWidth = 1.6 * k;
+    octx.beginPath(); octx.moveTo(x - 4 * k, y + 4 * k); octx.lineTo(x - 4 * k, y - 3 * k); octx.moveTo(x + 4 * k, y + 4 * k); octx.lineTo(x + 4 * k, y - 3 * k);
+    octx.moveTo(x - 5.5 * k, y - 3.5 * k); octx.lineTo(x + 5.5 * k, y - 3.5 * k); octx.stroke();
   } else if (kind === 'launcher') {                           // the pad: a square with a rising chevron
     octx.strokeStyle = bright ? ACCENT : 'rgba(200, 210, 225, 0.85)';
     octx.strokeRect(x - 4.5 * k, y - 4.5 * k, 9 * k, 9 * k);

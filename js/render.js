@@ -182,7 +182,7 @@ const maxScale = () => Math.min(1, 1.4 / Math.min(devicePixelRatio || 1, 2)) * q
 export function updateDyn(frameSec) {
   const simT = G.simT;
   dyn.acc += frameSec; dyn.n++;
-  if (dyn.acc < 0.4) return;
+  if (dyn.acc < (dyn.probe ? 0.8 : 0.4)) return;              // (a step down is judged over twice as long)
   const avg = dyn.acc / dyn.n; dyn.acc = 0; dyn.n = 0;
   if (dyn.scale > maxScale()) dyn.scale = maxScale();
   if (!dyn.auto || simT < 3) return;                      // ignore the start-up hitches (shader warm-up, terrain searches)
@@ -191,7 +191,7 @@ export function updateDyn(frameSec) {
     // a step that cut the pixels by a fraction f should save about f of a GPU-bound frame: expect at least a
     // quarter of that (frame times are noisy), unless it reached the display's rate (vsync rounds frame times, so a
     // step that just makes it saves less)
-    const r = dyn.scale / p.scale, expect = 1 - 0.25 * (1 - r * r);
+    const r = dyn.scale / p.scale, expect = 1 - 0.1 * (1 - r * r);   // (noise hides small gains: only a step that gave nothing is undone)
     if (avg > p.avg * expect && avg > 1 / 58.5) { dyn.scale = p.scale; dyn.floor = p.scale; dyn.floorUntil = simT + 6; return; }
   }
   const floor = simT < dyn.floorUntil ? dyn.floor : 0.3;
@@ -391,9 +391,9 @@ function uploadDynamic(w, h) {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1536, rows, gl.RGBA, gl.FLOAT, tgpu.data.subarray(0, rows * 512 * 12));
   }
   if (tgpu.n) { gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, tgTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, tgpu.n * 3, 1, gl.RGBA, gl.FLOAT, tgpu.groups.subarray(0, tgpu.n * 12)); }
-  buildTiles(w, h, [{ data: tgpu.groups, stride: 12, n: tgpu.n }, { data: props.circles, stride: 4, n: props.cut }]);
-  if (tiles.tx !== tileW || tiles.ty !== tileH) { if (tileTab) gl.deleteTexture(tileTab); tileTab = floatTex(gl.TEXTURE10, gl.RGBA, gl.RGBA32F, tiles.tx, tiles.ty); tileW = tiles.tx; tileH = tiles.ty; }
-  gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, tileTab); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, tileW, tileH, gl.RGBA, gl.FLOAT, tiles.tab.subarray(0, tileW * tileH * 4));
+  buildTiles(w, h, [{ data: tgpu.groups, stride: 12, n: tgpu.n }, { data: props.circles, stride: 4, n: props.cut }, { data: props.shCircles, stride: 4, n: props.n }]);
+  if (tiles.tx !== tileW || tiles.ty !== tileH) { if (tileTab) gl.deleteTexture(tileTab); tileTab = floatTex(gl.TEXTURE10, gl.RGBA, gl.RGBA32F, 2 * tiles.tx, tiles.ty); tileW = tiles.tx; tileH = tiles.ty; }
+  gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, tileTab); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 2 * tileW, tileH, gl.RGBA, gl.FLOAT, tiles.tab.subarray(0, tileW * tileH * 8));
   if (tiles.nidx) { const rows = Math.ceil(tiles.nidx / 1024); gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, tileIdxTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, rows, gl.RED, gl.FLOAT, tiles.idx.subarray(0, rows * 1024)); }
   gl.activeTexture(gl.TEXTURE0);
 }

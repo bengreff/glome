@@ -15,13 +15,14 @@ import { LAWS } from './laws.js';
 import { PLANET_R } from './world.js';
 import { tangents } from './env.js';
 import { rot as R4 } from './so4.js';
+import { nearScan } from './trees.js';
 
 export const SHAPE = { ball: 0, box: 1, cross: 2, c24: 3, duo: 4 };
 // materials: rock kinds first, then the creatures'
 export const MAT = { granite: 0, sandstone: 1, crystal: 2, basalt: 3, worked: 4, metal: 5, roller: 6 };
 export const MAXP = 96;                 // props sent to the GPU per frame
 const TEXELS = 8;                       // per prop: centre, four axis columns, half-extents, (shape, mat, glow, R), spare
-export const props = { rocks: [], extra: [], grid: new Map(), data: new Float32Array(MAXP * TEXELS * 4), circles: new Float32Array(MAXP * 4), centres: new Float32Array(MAXP * 4), n: 0, cut: 0, shade0: 0, list: [] };
+export const props = { rocks: [], extra: [], grid: new Map(), data: new Float32Array(MAXP * TEXELS * 4), circles: new Float32Array(MAXP * 4), centres: new Float32Array(MAXP * 4), shCircles: new Float32Array(MAXP * 4), n: 0, cut: 0, shade0: 0, list: [] };
 
 // ---------- shapes ----------
 const PLANES = { [SHAPE.cross]: [], [SHAPE.c24]: [] };
@@ -36,6 +37,8 @@ export function makeProp({ c, rot, e, shape, mat, glow = 0, kind = 'rock' }) {
   p.R = boundR(p);
   return p;
 }
+// A body drawn as a prop (a creature's): centre, SO(4) rotation, half-extents, shape, material, glow.
+export function bodyProp(c, rot, e, shape, mat, glow) { const p = makeProp({ c, rot, e, shape, mat, glow, kind: 'body' }); p.seed = 7; return p; }
 // How far the shape reaches along a unit direction u (its support function).
 export function support(p, u) {
   const l = [0, 1, 2, 3].map(j => vec4.dot(u, p.cols[j]) * p.e[j]), a = l.map(Math.abs);
@@ -140,7 +143,7 @@ const KINDS = {
 };
 const CLUSTER = { outcrop: [3, 7, 7], crystal: [4, 9, 3.5], stone: [2, 5, 4], scree: [10, 22, 6], erratic: [1, 1, 0] };   // count min, max, spread (m)
 // Place one rock of a kind at unit n: its centre sunk a share of its height into the ground.
-function placeRock(kind, n, hf, keepOut) {
+export function placeRock(kind, n, hf, keepOut = () => false) {
   const k = KINDS[kind](), rot = standing(n, k.tilt);
   const p0 = makeProp({ c: [0, 0, 0, 0], rot, e: k.e, shape: k.shape, mat: k.mat });
   const reach = support(p0, n), h = hf.heightAt(n);
@@ -193,7 +196,7 @@ export function makeRocks(hf, home, keepOut, near) {
 // ---------- to the GPU ----------
 // Extra props this frame (the creatures' bodies): { c, cols, e, shape, mat, glow, R }.
 export function setExtraProps(list) { props.extra = list; }
-const RANGE = 160;
+const RANGE = 160, near = { k: 0, list: [], dirty: true };
 export function uploadProps(cam, sun, W, H, fov) {
   const eye = cam.eye, A = cam.A, sa = sun ? vec4.dot(sun, A) : 0, cand = [];
   const consider = p => {
@@ -212,10 +215,8 @@ export function uploadProps(cam, sun, W, H, fov) {
     }
     cand.push({ p, dist, a, cut });
   };
-  if (!props.nearAt || vec4.len(vec4.sub(props.nearAt, eye)) > 10 || props.nearT++ > 60) {   // the rocks within reach, now and then
-    props.nearAt = eye.slice(); props.nearT = 0; props.nearList = props.rocks.filter(p => vec4.len(vec4.sub(p.c, eye)) < RANGE + 50 + p.R);
-  }
-  for (const p of props.nearList) consider(p);
+  nearScan(near, props.rocks, eye, RANGE + 40, RANGE + 70, 'nearP');   // the rocks within reach, a slice at a time
+  for (const p of near.list) consider(p);
   for (const p of props.extra) consider(p);
   // the nearest first; then in three runs: cut and far (seen only), cut and near (seen and shading), near and not
   // cut (shading only), so the shader's two loops (what a ray meets, what shades a point) each take one run
@@ -225,7 +226,7 @@ export function uploadProps(cam, sun, W, H, fov) {
   const isNear = x => x.dist < NEAR + x.p.R;
   const list = seen.filter(x => !isNear(x)).concat(seen.filter(isNear), shade);
   props.list = list; props.n = list.length; props.cut = seen.length; props.shade0 = seen.filter(x => !isNear(x)).length;
-  const D = props.data, C = props.circles, aspect = W / H;
+  const D = props.data, C = props.circles, S = props.shCircles, aspect = W / H;
   list.forEach(({ p, dist, a, cut }, i) => {
     const o = i * TEXELS * 4;
     // the far ones shrink to nothing toward the edge of the range, so they never pop
@@ -236,17 +237,46 @@ export function uploadProps(cam, sun, W, H, fov) {
     if (cut) {
       const rho = Math.sqrt(Math.max(0, p.R * p.R - a * a)) * fade + 0.02, cP = vec4.sub(vec4.sub(p.c, vec4.scale(A, a)), eye);
       const z = vec4.dot(cP, cam.F), x = vec4.dot(cP, cam.R), y = vec4.dot(cP, cam.U);
-      if (z <= rho * 1.05) C.set([W / 2, H / 2, 4 * (W + H), p.R * fade], 4 * i);   // you are at it, or inside it: everywhere
+      if (z < -rho) C.set([-1e5, -1e5, 0, p.R * fade], 4 * i);                       // wholly behind you
+      else if (z <= rho * 1.05) C.set([W / 2, H / 2, 4 * (W + H), p.R * fade], 4 * i);   // you are at it, or inside it: everywhere
       else {
         const k = Math.sqrt(z * z - rho * rho), sx = x / z, sy = y / z, rr = rho / k * Math.sqrt(1 + sx * sx + sy * sy) * 1.15;
         C.set([(sx / (fov * aspect) * 0.5 + 0.5) * W, (sy / fov * 0.5 + 0.5) * H, rr / fov * 0.5 * H + 3, p.R * fade], 4 * i);
       }
     } else C.set([-1e5, -1e5, 0, p.R * fade], 4 * i);
     props.centres.set(p.c, 4 * i);
+    // where its shadow can fall in your slice: its bounding ball swept back along the sun, as far as the sun's ray from
+    // its top takes to reach the ground, cut by the slice, as a circle on the screen (for the shadow tests' tile list)
+    S.set([0, 0, 0, 0], 4 * i);
+    if (sun && dist < 70 + p.R) {
+      const up = vec4.scale(p.c, 1 / vec4.len(p.c)), su = vec4.dot(sun, up), R = p.R * fade;
+      if (su > 0.02) {
+        const L = Math.min(80, 2 * R / su + R);
+        let t0 = 0, t1 = L;
+        if (Math.abs(sa) > 1e-4) { const u0 = (a - R) / sa, u1 = (a + R) / sa; t0 = Math.max(0, Math.min(u0, u1)); t1 = Math.min(L, Math.max(u0, u1)); }
+        else if (Math.abs(a) > R) t1 = -1;
+        if (t1 >= t0) {
+          const c0 = screenCircle(cam, vec4.sub(p.c, vec4.scale(sun, t0)), R * 1.05, W, H, fov), c1 = screenCircle(cam, vec4.sub(p.c, vec4.scale(sun, t1)), R * 1.05, W, H, fov);
+          if (c0 && c1) { const dx = c1[0] - c0[0], dy = c1[1] - c0[1], dd = Math.hypot(dx, dy); S.set([(c0[0] + c1[0]) / 2, (c0[1] + c1[1]) / 2, dd / 2 + Math.max(c0[2], c1[2]), 0], 4 * i); }
+          else if (c0 || c1) S.set(c0 || c1, 4 * i);
+        }
+      }
+    }
   });
   return props;
 }
 
+// The circle on the screen covering a ball (centre c, radius R) as your slice cuts it: (x, y, r) in pixels, the whole
+// screen if you are at it, or null if it lies wholly behind you.
+function screenCircle(cam, c, R, W, H, fov) {
+  const d = vec4.sub(c, cam.eye), a = vec4.dot(d, cam.A);
+  if (Math.abs(a) >= R) return null;
+  const rho = Math.sqrt(R * R - a * a) + 0.02, z = vec4.dot(d, cam.F), x = vec4.dot(d, cam.R), y = vec4.dot(d, cam.U);
+  if (z < -rho) return null;
+  if (z <= rho * 1.05) return [W / 2, H / 2, 4 * (W + H)];
+  const k = Math.sqrt(z * z - rho * rho), sx = x / z, sy = y / z, rr = rho / k * Math.sqrt(1 + sx * sx + sy * sy) * 1.15;
+  return [(sx / (fov * W / H) * 0.5 + 0.5) * W, (sy / fov * 0.5 + 0.5) * H, rr / fov * 0.5 * H + 3];
+}
 // ---------- you among the rocks ----------
 // As with boulders: full 4D contact with Coulomb friction (push in within about 42° of head-on and you stick), footing
 // on any face within 60° of level, and holding Space against a big one scrambles you up its steepest way.

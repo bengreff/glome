@@ -8,22 +8,22 @@ const up = nz(L.site), T = [[-up[1],up[0],up[3],-up[2]],[-up[2],-up[3],up[0],up[
 w.bodies.filter(b => b.kind === 'part').forEach((b, i) => { b.kinematic = false; b.pos = V.add(V.add(L.site, V.sc(i < 3 ? T[i] : V.sc(T[0], -1), 0.7)), V.sc(up, 0.2)); b.sleeping = false; });
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0]; p.settleFrame(); await gt(1);
 out.tier = L.tier;
-let found = null, tries = 0;
-for (let wait = 0; wait < 960 && !found; wait += 20) {
-  const t = g.state.time + wait;
-  for (let i = 0; i < 60 && !found; i++) {
-    tries++;
-    const az = Math.random() * 2 * Math.PI, b = Math.random() * Math.PI, e = 0.05 + 1.3 * Math.random();
-    const h = nz(V.add(V.sc(T[0], Math.cos(az) * Math.sin(b)), V.add(V.sc(T[1], Math.sin(az) * Math.sin(b)), V.sc(T[2], Math.cos(b)))));
-    const dir = nz(V.add(V.sc(h, Math.cos(e)), V.sc(up, Math.sin(e))));
-    const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dir, d.TIERS[4]), t), t);
-    if (r.hit && r.hit.what === 'B') found = { wait, dir, eta: (r.hit.t - t).toFixed(0) };
-  }
+// aim as a player does with the map: try directions, keep the one whose path passes nearest B, and refine it
+let found = null, tries = 0, waited = 0;
+const missB = r => r.hit && r.hit.what === 'B' ? 0 : Math.min(...r.pts.map(q => { const B = C.orbitOf('B', q.t).c; return Math.min(...[-1, 0, 1].map(k => len(V.sub(q.x, V.add(B, [0, 0, 0, k * g.LAWS.L]))))); }));
+const dirOf = ([az, b, e]) => { const h = nz(V.add(V.sc(T[0], Math.cos(az) * Math.sin(b)), V.add(V.sc(T[1], Math.sin(az) * Math.sin(b)), V.sc(T[2], Math.cos(b))))); return nz(V.add(V.sc(h, Math.cos(e)), V.sc(up, Math.sin(e)))); };
+for (; waited < 960 && !found; waited += 60) {
+  const t = g.state.time;                                 // searched at the moment of the jump
+  const run = q => { tries++; const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dirOf(q), d.TIERS[4]), t), t); return { q, m: missB(r), r }; };
+  let best = null;
+  for (let i = 0; i < 80; i++) { const x = run([Math.random() * 2 * Math.PI, Math.random() * Math.PI, 0.05 + 1.3 * Math.random()]); if (!best || x.m < best.m) best = x; }
+  for (let i = 0, st = 0.2; i < 80 && best.m > 0; i++) { const x = run(best.q.map(v => v + (Math.random() - 0.5) * st)); if (x.m < best.m) best = x; else if (i % 10 === 9) st *= 0.6; }
+  if (best.m === 0) found = { dir: dirOf(best.q), eta: (best.r.hit.t - t).toFixed(0) };
+  else { g.state.time += 60; await gt(0.05); }
 }
 out.tries = tries; out.found = !!found;
 if (!found) return JSON.stringify(out);
-out.waited = found.wait; out.predicted = found.eta;
-g.state.time += found.wait;
+out.waited = waited; out.predicted = found.eta;
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0];
 const u = p.up(), hz = nz(V.sub(found.dir, V.sc(u, V.dot(found.dir, u)))); p.F = hz; p.settleFrame(); p.pitch = Math.asin(V.dot(found.dir, u));
 const t0 = g.state.time;
