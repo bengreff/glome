@@ -6,6 +6,7 @@ import { G } from './game.js';
 import { boulders } from './boulders.js';
 import { carves, carveSD } from './landforms.js';
 import { treeSD } from './trees.js';
+import { rockSD } from './props.js';
 
 // Three perpendicular directions along the ground at unit u, defined everywhere (multiply u, as a unit quaternion,
 // by i, j and k): the 3-sphere has no poles to dodge.
@@ -45,8 +46,9 @@ export function boulderSD(p) {
   return best;
 }
 export function envSD(p) {
-  const t = terrainSD(p), b = boulderSD(p);
-  return b.d < t.d ? b : t;
+  const t = terrainSD(p), b = boulderSD(p), r = rockSD(p);
+  const m = b.d < t.d ? b : t;
+  return r.d < m.d ? r : m;
 }
 
 // Keep the upper body out of the ground: walk into a steep bank or under a bulge and your chest and head stop

@@ -1,5 +1,5 @@
 // The GL side: context, programs, textures, the slice view, dynamic resolution, upscaling and the profiler.
-import { VERT, SLICE_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js';
+import { VERT, SLICE_FRAG, HIT_FRAG, SUN_FRAG, SHADE_FRAG, UPSCALE_FRAG, RADAR_BAKE_FRAG, RADAR_FRAG, BLIT_FRAG } from './shaders.js';
 import { PLANET_R, SEA } from './world.js';
 import { G } from './game.js';
 import { boulders } from './boulders.js';
@@ -7,7 +7,9 @@ import { gpuObj } from './objects.js';
 import { skyUniforms } from './cosmos.js';
 import { bUniforms, NORMAL_DATA } from './planetB.js';
 import { carveUniforms } from './landforms.js';
-import { treeUniforms, treeTexData, ropeTexData, rope as ropeSlot, ROPE_CAPS, legs as legSlot, legTexData, LEG_CAPS } from './trees.js';
+import { props, MAXP } from './props.js';
+import { tgpu, MAXTC, MAXTG } from './trees.js';
+import { tiles, buildTiles, MAXIDX } from './tiles.js';
 
 const $ = id => document.getElementById(id);
 export const canvas = $('view'), overlay = $('overlay');
@@ -40,7 +42,42 @@ export function program(fragSrc) {
   p.u = name => (name in locs) ? locs[name] : (locs[name] = gl.getUniformLocation(p, name));
   return p;
 }
-export const progSlice = program(SLICE_FRAG), progUp = program(UPSCALE_FRAG), progRadar = program(RADAR_FRAG), progBake = program(RADAR_BAKE_FRAG), progBlit = program(BLIT_FRAG);
+export const progUp = program(UPSCALE_FRAG), progRadar = program(RADAR_FRAG), progBake = program(RADAR_BAKE_FRAG), progBlit = program(BLIT_FRAG);
+// The view in two passes where float targets can be drawn into (what each ray meets, then its colour: smaller programs
+// keep more pixels in flight), else in one.
+export const hits = { ok: !!gl.getExtension('EXT_color_buffer_float'), on: true, fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0 };
+export const progHit = hits.ok ? program(HIT_FRAG) : null, progShade = hits.ok ? program(SHADE_FRAG) : null, progSun = hits.ok ? program(SUN_FRAG) : null;
+// the ground's shade at half resolution, between the two (RG: shade, distance)
+export const sunbuf = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, on: true };
+function ensureSun(w, h) {
+  if (sunbuf.tex && sunbuf.w === w && sunbuf.h === h) return;
+  if (sunbuf.tex) gl.deleteTexture(sunbuf.tex);
+  sunbuf.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE11); gl.bindTexture(gl.TEXTURE_2D, sunbuf.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, w, h, 0, gl.RG, gl.HALF_FLOAT, null);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, sunbuf.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sunbuf.tex, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) sunbuf.on = false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.activeTexture(gl.TEXTURE0);
+  sunbuf.w = w; sunbuf.h = h;
+}
+let progOne = hits.ok ? null : program(SLICE_FRAG);
+export const progSlice = progShade || progOne;
+for (const p of [progHit, progShade, progSun, progOne]) if (p) p.slice = true;
+function ensureHits(w, h) {
+  if (hits.tex && hits.w === w && hits.h === h) return;
+  if (hits.tex) gl.deleteTexture(hits.tex);
+  hits.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hits.tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, null);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, hits.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, hits.tex, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) hits.ok = false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.activeTexture(gl.TEXTURE0);
+  hits.w = w; hits.h = h;
+}
 export const vao = gl.createVertexArray();
 
 export function tex3D(w, h, d, internal, format, type, filter, data = null) {
@@ -216,16 +253,42 @@ const bTex = (() => {
   gl.activeTexture(gl.TEXTURE0);
   return t;
 })();
-// The trees' capsules, as a float texture (built once the trees have grown).
-let treeTex = null;
-export function uploadTrees() {
-  const { data, count } = treeTexData();
-  treeTex = gl.createTexture();
-  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, Math.max(1, count * 3), 1, 0, gl.RGBA, gl.FLOAT, data);
+// The trees' pieces your slice cuts this frame (trees.js), as a float texture: three texels each, 512 to a row.
+const treeTex = (() => {
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1536, Math.ceil(MAXTC / 512), 0, gl.RGBA, gl.FLOAT, null);
   for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
-  gl.activeTexture(gl.TEXTURE0);
-}
+  gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
+  return t;
+})();
+const floatTex = (unit, fmt, ifmt, w, h) => {
+  const t = gl.createTexture();
+  gl.activeTexture(unit); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, gl.FLOAT, null);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
+  return t;
+};
+const tileIdxTex = floatTex(gl.TEXTURE9, gl.RED, gl.R32F, 1024, MAXIDX / 1024);
+let tileTab = null, tileW = 0, tileH = 0;
+const tgTex = (() => {
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAXTG * 3, 1, 0, gl.RGBA, gl.FLOAT, null);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
+  return t;
+})();
+// The props (rocks, creatures' bodies) this frame, as a float texture: eight texels each (props.js).
+const propTex = (() => {
+  const t = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAXP * 8, 1, 0, gl.RGBA, gl.FLOAT, null);
+  for (const [p, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, p, v);
+  gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
+  return t;
+})();
 // The hoop sky, computed once per frame (render.sky); the sun direction used for shadows is its mean.
 export const skyNow = { u: null };
 export function updateSky(t, eye, up) { skyNow.u = skyUniforms(t, eye, up); skyNow.b = bUniforms(t); G.sun = skyNow.u.sun; return G.sun; }
@@ -289,21 +352,24 @@ export function setWorld(p, cam, sun) {
   gl.uniform1i(p.u('uON'), gpuObj.n);
   gl.uniform1i(p.u('uOCut'), gpuObj.cut);
   gl.uniform1i(p.u('uGhost'), gpuObj.ghost);
-  if (p === progSlice) { gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, scene.prev); gl.uniform1i(p.u('uPrev'), 7); gl.activeTexture(gl.TEXTURE0); }
+  if (p.slice) { gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, scene.prev); gl.uniform1i(p.u('uPrev'), 7); gl.activeTexture(gl.TEXTURE0); }
   gl.uniform1f(p.u('uScreenOn'), G.screenOn ? 1 : 0);
-  if (treeTex && p === progSlice) {                          // the rope and the walkers' legs move: rewrite them
-    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
-    if (ropeSlot.obj) gl.texSubImage2D(gl.TEXTURE_2D, 0, ropeSlot.start * 3, 0, ROPE_CAPS * 3, 1, gl.RGBA, gl.FLOAT, ropeTexData());
-    if (legSlot.caps.length) gl.texSubImage2D(gl.TEXTURE_2D, 0, legSlot.start * 3, 0, LEG_CAPS * 3, 1, gl.RGBA, gl.FLOAT, legTexData());
-    gl.activeTexture(gl.TEXTURE0);
+  if (p.slice) {
+    gl.uniform1i(p.u('uSunTex'), 11); gl.uniform1i(p.u('uHits'), 5);   // (every sampler its own unit, used or not)
+    gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, propTex);
+    gl.uniform1i(p.u('uPropTex'), 3); gl.activeTexture(gl.TEXTURE0);
+    gl.uniform4fv(p.u('uPS'), props.circles); gl.uniform4fv(p.u('uPC'), props.centres);
+    gl.uniform2i(p.u('uPSeen'), 0, props.cut); gl.uniform2i(p.u('uPShade'), props.shade0, props.n);
   }
-  const tu = treeUniforms(cam.eye, cam.A);
-  gl.uniform4fv(p.u('uTC'), tu.C);
-  gl.uniform1fv(p.u('uTRad'), tu.R);
-  gl.uniform2iv(p.u('uTS'), tu.S);
-  gl.uniform1i(p.u('uTN'), treeTex ? tu.n : 0);
-  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex); gl.uniform1i(p.u('uTreeTex'), 6); gl.activeTexture(gl.TEXTURE0);
-  const cu = carveUniforms(cam.eye);
+  if (p.slice) {
+    gl.uniform1i(p.u('uTGN'), tgpu.n);
+    gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, tgTex); gl.uniform1i(p.u('uTGTex'), 8);
+    gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, tileIdxTex); gl.uniform1i(p.u('uTileIdx'), 9);
+    gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, tileTab); gl.uniform1i(p.u('uTileTab'), 10); gl.activeTexture(gl.TEXTURE0);
+    gl.uniform4fv(p.u('uTShC'), tgpu.shC); gl.uniform1fv(p.u('uTShR'), tgpu.shR); gl.uniform1i(p.u('uTShN'), tgpu.shN);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex); gl.uniform1i(p.u('uTreeTex'), 6); gl.activeTexture(gl.TEXTURE0);
+  }
+  const cu = carveUniforms(cam.eye, cam.A);
   gl.uniform4fv(p.u('uCA'), cu.A); gl.uniform4fv(p.u('uCB'), cu.B); gl.uniform1fv(p.u('uCR'), cu.R); gl.uniform1i(p.u('uCN'), cu.n);
   gl.uniform4fv(p.u('uCBoundC'), cu.C); gl.uniform1f(p.u('uCBoundR'), cu.Rb);
   gl.uniform4fv(p.u('uLP'), gpuObj.LP);
@@ -315,13 +381,56 @@ const vec4dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 export let FOV = Math.tan(38 * Math.PI / 180);           // half the view's height at unit distance (a setting: 60–100°)
 export function setFov(deg) { FOV = Math.tan(Math.max(60, Math.min(100, deg || 76)) / 2 * Math.PI / 180); }
 
-export function drawSlice(cam, sun, x, y, w, h) {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+// What changes every frame and is drawn from textures: the props, and the trees' pieces (with the rope and the walkers' legs).
+function uploadDynamic(w, h) {
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, propTex);
+  if (props.n) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, props.n * 8, 1, gl.RGBA, gl.FLOAT, props.data.subarray(0, props.n * 32));
+  if (tgpu.nc) {
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, treeTex);
+    const rows = Math.ceil(tgpu.nc / 512);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1536, rows, gl.RGBA, gl.FLOAT, tgpu.data.subarray(0, rows * 512 * 12));
+  }
+  if (tgpu.n) { gl.activeTexture(gl.TEXTURE8); gl.bindTexture(gl.TEXTURE_2D, tgTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, tgpu.n * 3, 1, gl.RGBA, gl.FLOAT, tgpu.groups.subarray(0, tgpu.n * 12)); }
+  buildTiles(w, h, [{ data: tgpu.groups, stride: 12, n: tgpu.n }, { data: props.circles, stride: 4, n: props.cut }]);
+  if (tiles.tx !== tileW || tiles.ty !== tileH) { if (tileTab) gl.deleteTexture(tileTab); tileTab = floatTex(gl.TEXTURE10, gl.RGBA, gl.RGBA32F, tiles.tx, tiles.ty); tileW = tiles.tx; tileH = tiles.ty; }
+  gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, tileTab); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, tileW, tileH, gl.RGBA, gl.FLOAT, tiles.tab.subarray(0, tileW * tileH * 4));
+  if (tiles.nidx) { const rows = Math.ceil(tiles.nidx / 1024); gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, tileIdxTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, rows, gl.RED, gl.FLOAT, tiles.idx.subarray(0, rows * 1024)); }
+  gl.activeTexture(gl.TEXTURE0);
+}
+function pass(p, fbo, cam, sun, x, y, w, h) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.viewport(x, y, w, h);
-  gl.useProgram(progSlice);
-  setWorld(progSlice, cam, sun);
-  gl.uniform2f(progSlice.u('uRes'), w, h);
-  gl.uniform1f(progSlice.u('uFov'), FOV);
+  gl.useProgram(p);
+  setWorld(p, cam, sun);
+  gl.uniform2f(p.u('uRes'), w, h);
+  gl.uniform1f(p.u('uFov'), FOV);
+}
+export function drawSlice(cam, sun, x, y, w, h) {
+  uploadDynamic(w, h);
+  if (hits.ok && hits.on) {
+    ensureHits(w, h);
+    pass(progHit, hits.fbo, cam, sun, 0, 0, w, h);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (hits.only) return;                                   // (for timing the first pass alone)
+    const sunOn = sunbuf.on && sunbuf.use !== false;
+    if (sunOn) {
+      const sw = Math.ceil(w / 2), sh = Math.ceil(h / 2);
+      ensureSun(sw, sh);
+      pass(progSun, sunbuf.fbo, cam, sun, 0, 0, sw, sh);
+      gl.uniform2f(progSun.u('uFull'), w, h);
+      gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hits.tex); gl.uniform1i(progSun.u('uHits'), 5); gl.activeTexture(gl.TEXTURE0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    pass(progShade, scene.fbo, cam, sun, x, y, w, h);
+    gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, hits.tex); gl.uniform1i(progShade.u('uHits'), 5);
+    gl.activeTexture(gl.TEXTURE11); gl.bindTexture(gl.TEXTURE_2D, sunOn ? sunbuf.tex : null); gl.uniform1i(progShade.u('uSunTex'), 11); gl.uniform1i(progShade.u('uSunOn'), sunOn ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return;
+  }
+  progOne ||= program(SLICE_FRAG);
+  progOne.slice = true;
+  pass(progOne, scene.fbo, cam, sun, x, y, w, h);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 

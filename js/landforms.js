@@ -68,12 +68,14 @@ export function floorRadius(n, rFeet, hf) {
   return rTop;
 }
 // For the renderer: the hollows near the eye.
-export function carveUniforms(eye) {
+// Only the hollows your slice cuts matter to what you see (a view ray never leaves your slice), and only within 120 m.
+export function carveUniforms(eye, sliceA) {
   const A = new Float32Array(MAXC * 4), B = new Float32Array(MAXC * 4), R = new Float32Array(MAXC);
   let k = 0;
   const act = [];
   for (const c of carves) {
-    if (k >= MAXC || sdCapsule(eye, c.a, c.b, c.r) > 160) continue;
+    if (k >= MAXC || sdCapsule(eye, c.a, c.b, c.r) > 120) continue;
+    if (sliceA) { const a1 = vec4.dot(vec4.sub(c.a, eye), sliceA), a2 = vec4.dot(vec4.sub(c.b, eye), sliceA); if (Math.min(a1, a2) > c.r + 0.5 || Math.max(a1, a2) < -c.r - 0.5) continue; }
     A.set(c.a, 4 * k); B.set(c.b, 4 * k); R[k] = c.r; k++; act.push(c);
   }
   // a ball round all of them, padded by a metre (samples outside it skip the hollows)

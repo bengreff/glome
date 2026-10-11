@@ -6,7 +6,7 @@ import { vec4 } from './player.js';
 import { G } from './game.js';
 import { gl, canvas, overlay, octx, dyn, setWorld, progRadar, progBake, progBlit } from './render.js';
 import { boulders } from './boulders.js';
-import { trees } from './trees.js';
+import { trees, groves } from './trees.js';
 import { launcher } from './launcher.js';
 
 export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   // all the way out, the ball holds the whole planet
@@ -383,6 +383,14 @@ export function drawRadarOverlay(r, sun) {
   if (sh.landmarks) {
     const at = (n, keep) => { const m = logMap(n, B, u), r = Math.hypot(...m); return r < RB * 0.95 ? proj(m) : keep ? proj(m.map(v => v / r * RB * 0.95)) : null; };
     for (const L of landmarkList()) {
+      if (L.kind === 'grove') {                               // a wood: a soft green patch, as wide as it is
+        const m = logMap(L.n, B, u); if (Math.hypot(...m) > RB * 0.97) continue;
+        const P = proj(m), Q = proj(m.map((v, i) => v + cv.R[i] * L.r)), rr = Math.max(3 * k, Math.hypot(Q[0] - P[0], Q[1] - P[1]));
+        octx.fillStyle = 'rgba(90, 170, 80, 0.22)'; octx.strokeStyle = 'rgba(140, 210, 120, 0.55)'; octx.lineWidth = 1 * k;
+        octx.beginPath(); octx.arc(P[0], P[1], rr, 0, 7); octx.fill(); octx.stroke();
+        drawLandmark('tree', P, k * 0.8);
+        continue;
+      }
       const P = at(L.n, L.keep); if (!P) continue;
       drawLandmark(L.kind, P, k, L.bright);
     }
@@ -519,7 +527,8 @@ export function drawRadarOverlay(r, sun) {
 // What the Landmarks layer marks: { n (unit position), kind, keep (stay on the rim when out of range), bright }.
 export function landmarkList() {
   const out = [];
-  for (const t of trees) out.push({ n: t.n, kind: 'tree' });
+  for (const g of groves) out.push({ n: g.n, kind: 'grove', r: g.r });   // woods as soft patches
+  for (const t of trees) if (t.landmark) out.push({ n: t.n, kind: 'tree' });
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
   if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: launcher.tier > 0 });
   for (const a of G.artifacts || []) {

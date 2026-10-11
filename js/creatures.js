@@ -203,7 +203,8 @@ export function creatureDraw(eye, A, hf) {
       const hb = WALKER.body / 2, ctr = vec4.scale(n, g + WALKER.height);
       items.push({ pos: ctr, rot: frameRot([f, s, an, up]), shape: 'tesseract', half: hb, size: WALKER.body, mat: 1, glow: 0.6 * c.alarm, d, creature: c });
       // legs are thin: drawn only for the nearest few walkers (they share one bounding ball in the shader)
-      if (d < 25 && caps.length < 64) for (let i = 0; i < 8; i++) {
+      const lg = { caps: [], c: vec4.scale(n, g + 0.3), R: 1.25 };
+      if (d < 25 && caps.length < 8) { caps.push(lg); for (let i = 0; i < 8; i++) {
         const cx = i & 1 ? 1 : -1, cy = i & 2 ? 1 : -1, cz = i & 4 ? 1 : -1, tetA = cx * cy * cz > 0;
         const hip = vec4.add(ctr, vec4.add(vec4.scale(up, -hb), vec4.add(vec4.add(vec4.scale(f, cx * hb), vec4.scale(s, cy * hb)), vec4.scale(an, cz * hb))));
         const out = vec4.norm(vec4.add(vec4.add(vec4.scale(f, cx), vec4.scale(s, cy)), vec4.scale(an, cz)));
@@ -214,8 +215,8 @@ export function creatureDraw(eye, A, hf) {
         const fn = vec4.norm(foot);
         foot = vec4.scale(fn, PLANET_R + hf.heightAt(fn) + (swing ? Math.sin(Math.PI * 2 * ph) * 0.12 * sp : 0) + 0.02);
         const knee = vec4.add(vec4.scale(vec4.add(hip, foot), 0.5), vec4.add(vec4.scale(up, 0.2), vec4.scale(out, 0.08)));
-        caps.push([hip, knee], [knee, foot]);
-      }
+        lg.caps.push([hip, knee, 0.05, 3], [knee, foot, 0.05, 3]);
+      } }
     } else {
       const a = ROLLER.a, ctr = vec4.scale(n, g + a * Math.SQRT2);
       const e0 = vec4.scale(vec4.sub(f, up), Math.SQRT1_2), e2 = vec4.scale(vec4.add(f, up), -Math.SQRT1_2);
