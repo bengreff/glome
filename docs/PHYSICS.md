@@ -29,15 +29,16 @@ The force is the gradient of this. The game uses the formula directly: there is 
 
 - **In pure 4D space, no orbit holds.** In the 4D near field the effective potential (ℓ² − G₄M)/(2r²) has no minimum. A circular orbit exists only at exactly v = √(G₄M)/r, which is also the escape speed, and any nudge sends the body spiralling in or out.
 - **The hoop adds a faint cradle.** Near a body (r ≪ L), the pull of its images expands to Φ_img ≈ const + κ(ρ² − 3w²), with κ = G₄M ζ(4)/L⁴ = G₄M π⁴/(90 L⁴). This is a gentle trap in the three open directions and a gentle push along the hoop (it is harmonic, as it must be in empty space).
-  - **Orbits lying flat across the hoop** (in a 3D space w = const) are therefore weakly stable. Their radial oscillation frequency is √(8κ), a period of about 110 s for planet A.
+  - **Orbits lying flat across the hoop** (in a 3D space w = const) are therefore weakly stable. Their radial oscillation frequency is √(8κ), a period of about 86 s for planet A.
   - **Orbits tilted into the hoop** fail.
-  - **Checked by direct integration:** circular orbits 100 m up on planet A, each given a 1 m/s nudge. Across the hoop the orbit stays between 328 and 373 m for at least 10 minutes. Tilted into the hoop it hits the ground in 22 s. Without the hoop (pure 4D) it drifts out steadily, 350 → 950 m in 10 minutes.
-  - **On planet A**, the circular speed is 49.9 m/s at the surface and 36 m/s at 100 m up. Because the planet double-rotates, the launch direction that lies across the hoop drifts through the day.
+  - **Checked by direct integration:** circular orbits 100 m up on planet A, each given a 1 m/s nudge. Across the hoop the orbit stays between 333 and 368 m for at least 10 minutes. Along the hoop it hits the ground in 18 s, and tilted 30° into it in 148 s. Without the hoop (pure 4D) it drifts out steadily, 350 → 950 m in 10 minutes.
+  - **On planet A**, the circular speed is 63.8 m/s at the surface and 46.4 m/s at 100 m up. Because the planet double-rotates, the launch direction that lies across the hoop drifts through the day.
 - **Stable orbits far away.** Beyond about L, gravity is 3D-like, so Kepler orbits are stable. That is how the planets orbit the star.
-- **Lighter summits.** Gravity falls by (R/r)³: on a 40 m peak it is 6.3 m/s², 36% lighter than at sea level.
-- **Gravity varies over the planet.** A's own images pull on it. Where "up" points along the hoop, surface gravity is 8.5% lighter (8.96 m/s²); where it points across, 1.7% heavier (9.97 m/s²). The planet's double spin carries these light zones across the land during the day.
-- **Tides** from the star are 0.09 m/s² (0.9% of g).
-- **In the planet's frame,** where you walk, everything also feels the spin: a centrifugal pull of up to 0.11 m/s² from the slow plane and 0.29 m/s² from the fast one (at most 2.9% of g), and the Coriolis force on anything moving. The game integrates the exact free-particle acceleration in that frame, a_b = (M S)ᵀ(g − a_A) − W²x − 2Wv: the gravity of the star, A and B with all their images, minus A's own orbital acceleration (which leaves the tides), plus the two spin terms. Measured at the start: 8.89 m/s² (a light zone, 8 m up).
+- **Lighter summits.** Gravity falls by (R/r)³: on a 40 m peak it is 10.3 m/s², 36% lighter than at sea level. Planet A's strength was chosen for this: its summit (42.5 m as you walk it) measures **9.8 m/s²**, Earth's, averaged over the day (8.7–10.2 as the light zones below pass over it), so the bare planet's surface gravity is 16 m/s² and the sea-level average, images and spin included, 15.8 m/s².
+- **Round the hoop.** Planet A's own copy along the hoop is only 300 m beyond its ground where "up" points along the hoop. Rise past halfway and you are falling onto A's far side: a launch straight up at such a moment comes down some 500 m away. Flight, thrown things and the space map keep each position by the nearest copy of the planets, so the landing is an ordinary one.
+- **Gravity varies over the planet.** A's own images pull on it. Where "up" points along the hoop, surface gravity is 8.5% lighter (14.6 m/s² at sea level); where it points across, 1.7% heavier (16.3 m/s²). The planet's double spin carries these light zones across the land during the day.
+- **Tides** from the star are 0.09 m/s² (0.6% of g at sea level).
+- **In the planet's frame,** where you walk, everything also feels the spin: a centrifugal pull of up to 0.11 m/s² from the slow plane and 0.29 m/s² from the fast one (at most 1.8% of g at sea level), and the Coriolis force on anything moving. The game integrates the exact free-particle acceleration in that frame, a_b = (M S)ᵀ(g − a_A) − W²x − 2Wv: the gravity of the star, A and B with all their images, minus A's own orbital acceleration (which leaves the tides), plus the two spin terms. Measured at the start: 14.0 m/s² (7.6 m up).
 
 ## Light
 
@@ -74,7 +75,7 @@ Sound obeys the wave equation in four space dimensions. Amplitude falls as **r^(
 - **In the game** (js/bodies.js, tests in tools/test-bodies.mjs): the impulse J at offset r changes ω by (J ∧ r)/I, checked against the energy change J·v. Densities are 4D (kg/m⁴): stone 2600, metal 7800, wood 450, water 1000, so stone sinks and wood floats. Contacts: ball–ball and ball–tesseract exactly; tesseract–tesseract by separating axes over the eight face normals with the incident box's vertices clamped onto the reference face (edge-on contacts are approximate); against the ground by the 16 vertices. Measured: a free tumbling tesseract keeps L and E to 10⁻⁹; a stack of three stands 30 s with < 0.1 mm drift on a sphere; collisions conserve P and L to 10⁻¹⁴; buoyancy floats a half-density ball exactly half under.
 - **Rolling resistance** (an approximation): soft ground gives under a rolling ball, which rigid-body contact cannot model, so a ball on the ground feels a drag of 0.08 × its normal force. Without it balls roll forever on the gentlest slope.
 - **Water drag** (an approximation): bodies in water lose speed and spin at a rate of 1.5/s times the mass of water they displace over their own mass, so anything afloat settles alike, and a sinking stone is slowed less.
-- **Holding** is physical: what you hold stays an ordinary body, colliding with the ground and with other things. Each step a drive pulls it toward a point before your eyes (lower for bigger things) and turns it toward a fixed attitude to your body: it brings it to the velocity your hands have plus a share of the gap (closing it with a time constant of 0.04 s, after gravity), and turns it at your body's rate plus a share of the remaining rotation (the logarithm in SO(4), time constant 0.05 s). The drive is limited to 2600 N and 400 N·m, so a 13 kg ball tracks your hands to a few centimetres while a 163 kg block comes up in about half a second, sags and swings when you turn. Its reaction is applied to you, so holding conserves momentum (in flight, swinging what you hold moves you). If it snags a metre from your hands and isn't coming closer, you let go after 0.4 s.
+- **Holding** is physical: what you hold stays an ordinary body, colliding with the ground and with other things. Each step a drive pulls it toward a point before your eyes (lower for bigger things) and turns it toward a fixed attitude to your body: it brings it to the velocity your hands have plus a share of the gap (closing it with a time constant of 0.04 s, after gravity), and turns it at your body's rate plus a share of the remaining rotation (the logarithm in SO(4), time constant 0.05 s). The drive is limited to 4200 N and 400 N·m (enough to lift 265 kg at sea level), so a 13 kg ball tracks your hands to a few centimetres while a 163 kg block comes up in about half a second, sags and swings when you turn. Its reaction is applied to you, so holding conserves momentum (in flight, swinging what you hold moves you). If it snags a metre from your hands and isn't coming closer, you let go after 0.4 s.
 - **Throwing** conserves momentum exactly: an object of mass m leaving at speed u relative to you (mass M) changes your velocity by −u·m/(M + m). An impulse stone (2.5 kg) always leaves at 80 m/s, so each one is worth 2.76 m/s to a 70 kg you.
 
 ## The player
@@ -84,6 +85,7 @@ A 4D capsule from 0.3 m to 1.75 m along the local up, radius 0.3 m.
 - **Water:** you cannot swim. Wading slows you as the water deepens (to 35% of your speed); past chest depth (1.3 m) you fade back to the last dry ground you stood on.
 - **Contacts:** full 4D normals with Coulomb friction. A push within about 42° of head-on sticks; a glancing one slides, through ana if that is where the surface leans.
 - **Climbing:** holding Space against a boulder moves you up its surface along the steepest 4D ascent.
+- **Jumping:** a take-off at 6.0 m/s, which rises 1.2–1.3 m on most of the dry land (gravity 13.8–15.0 m/s² there), about 1.8 m on the summit and 3 m on planet B.
 
 ## Boats
 
@@ -116,18 +118,18 @@ A chain of particles with distance constraints (position-based dynamics) that co
 | | Value |
 |---|---|
 | Hoop length L | 800 m |
-| Planet A | radius 250 m, surface gravity 9.8 m/s², G₄M = 1.53×10⁸ m⁴/s² |
-| Planet A: circular speed at the surface | 49.5 m/s in pure 4D, 49.9 m/s with the hoop |
-| Planet A: escape speed (exact, hoop included) | 56.5 m/s |
+| Planet A | radius 250 m, bare surface gravity 16 m/s² (15.8 averaged at sea level; 9.8 on the summit), G₄M = 2.50×10⁸ m⁴/s² |
+| Planet A: circular speed at the surface | 63.2 m/s in pure 4D, 63.8 m/s with the hoop |
+| Planet A: escape speed (exact, hoop included) | 72 m/s |
 | Planet A: day | its double spin, 300 s in one plane, 300/φ s in the other (φ is the golden ratio) |
-| The star | radius 120 m, about 5 × A's mass, surface gravity 404 m/s² |
+| The star | radius 120 m, about 2.8 × A's mass, surface gravity 404 m/s² |
 | A's orbit | radius 2 km, year 8 min, speed 26 m/s |
 | Planet B | radius 120 m, surface gravity 6 m/s², escape speed 27.8 m/s |
 | B's orbit | radius 3.2 km, year 16 min, speed 21 m/s |
 | A → B (minimum-energy transfer) | about 5 m/s beyond escape, 6 min coast; a launcher gives much faster arcs |
-| A's sphere of influence (3D far-field estimate) | about 840 m from its centre |
-| Launcher, straight up from A (sea level) | 30 m/s → 62 m · 40 m/s → 160 m · 45 m/s → 282 m · 49.5 m/s → 565 m · 52 m/s → 985 m · 56.5 m/s escapes |
-| From the massif's summit (46 m, where the launcher stands) | gravity 6.1 m/s² · a 60 m hop 23.7 m/s · a 200 m arc 34.7 m/s · circular across the hoop 42.4 m/s · escape 49.7 m/s · the spin carries the summit at 6.4 m/s. The launcher's tiers: 24, 35, 43, 52 m/s (tier II measured in the game: 203 m). |
+| A's sphere of influence (3D far-field estimate) | about 990 m from its centre |
+| Straight up from A's sea level (across the hoop) | 30 m/s → 33 m · 40 m/s → 70 m · 50 m/s → 146 m · 60 m/s → 368 m · 64 m/s → 610 m · 70 m/s → 2.9 km · 72 m/s escapes |
+| From the massif's summit (42.5 m as walked, where the launcher stands) | gravity 9.8 m/s² (8.7–10.2 over the day) · a 60 m hop 28 m/s · a 200 m arc 43 m/s · circular across the hoop 54.9 m/s inertially (about 49–61 from the launcher, as the spin carries the summit at 6.4 m/s) · escape 63.8 m/s. The launcher's tiers: **28, 43, 53, 72 m/s**, each found by integrating launches over the day (medians: tier I 60 m up, tier II 200 m; tier III leaves a bounded orbit across the hoop at most times of day; tier IV, aimed by the space map, reaches B at most times, in about 60–240 s; in the game: 85 s). |
 | Planet B (120-cell, floors at 115 m) | escape 28 m/s; its return pad gives 33 m/s; a tier IV launch aimed by the space map lands on B after 90–120 s |
 | The sun from A | 3.4° in radius, with images along the hoop at 21.8°, 38.7°, 50.2°, … |
 

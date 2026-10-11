@@ -17,3 +17,8 @@ the bowl; the mechanism itself was confirmed by placing a ball in it).
 
 Day two (held things now physical, the bowl carved): mirror key, knot gate and antipode all solved by script again;
 the antipode's ball, set down from the bowl's rim with the ghost, rests 0.26 m from its centre.
+
+Run three (gravity raised so the summit measures 9.8 m/s², tiers 28/43/53/72 m/s): mirror key, knot gate, antipode
+and orbit all solved again (the orbit at tier III after 19 tries of the space map's predictor, a full turn, at most
+625 m out). New, `pt_landB.js`: all four parts on the pad, a tier IV launch aimed by the predictor lands on B after
+85 s (predicted 83).

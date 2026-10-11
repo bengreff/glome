@@ -9,7 +9,7 @@ import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
 import { objects, spawn, KINDS } from './objects.js';
 
-export const TIERS = [0, 24, 35, 43, 52];             // m/s for tiers 0 (no parts) .. IV
+export const TIERS = [0, 28, 43, 53, 72];             // m/s for tiers 0 (no parts) .. IV (derived by integration: PHYSICS.md)
 export const launcher = { site: null, n: null, pad: null, tier: 0, onPad: false, ring: 3.6 };
 
 // The summit, found by climbing from the massif's centre in many directions (the same every time).

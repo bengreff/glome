@@ -22,6 +22,7 @@ export function predict(x, v, t) {
     const a0 = gravityInertial(x, t);
     for (let k = 0; k < 4; k++) v[k] += 0.5 * dt * a0[k];
     for (let k = 0; k < 4; k++) x[k] += dt * v[k];
+    if (Math.abs(x[3]) > LAWS.L / 2) x[3] -= LAWS.L * Math.round(x[3] / LAWS.L);   // round the hoop, as in flight
     t += dt;
     const a1 = gravityInertial(x, t);
     for (let k = 0; k < 4; k++) v[k] += 0.5 * dt * a1[k];

@@ -22,14 +22,17 @@ export function gHoop(d, GM, h, L = LAWS.L, out = [0, 0, 0, 0]) {
   const w0 = dot(d, h), w = w0 - L * Math.round(w0 / L);
   const p0 = d[0] - w0 * h[0], p1 = d[1] - w0 * h[1], p2 = d[2] - w0 * h[2], p3 = d[3] - w0 * h[3];
   const rho = Math.hypot(p0, p1, p2, p3), k = TAU / L, pref = Math.PI * GM / (2 * L);
-  const x = k * rho, S = Math.sinh(x), C = Math.cosh(x), c = Math.cos(k * w), s = Math.sin(k * w), D = C - c;
+  const x = k * rho, c = Math.cos(k * w), s = Math.sin(k * w);
+  // The ratios S/D, C/D and 1/D (S = sinh x, C = cosh x, D = C − cos kw) are written with e = e^(−x), so they stay
+  // finite far out, where sinh and cosh overflow (beyond some 40 km): q = 1 + e² − 2e·cos kw = 2e·D.
+  const e = Math.exp(-x), q = 1 + e * e - 2 * c * e, SD = (1 - e * e) / q, CD = (1 + e * e) / q, iD = 2 * e / q;
   let gr = 0, gw;
   if (rho > 1e-9) {
-    // kC/ρ − S/ρ² cancels badly for small ρ: use its series (k/ρ)(x²/3 + x⁴/30 + x⁶/840) there
-    const f = x < 0.1 ? (k / rho) * x * x * (1 / 3 + x * x * (1 / 30 + x * x / 840)) : k * C / rho - S / (rho * rho);
-    gr = pref * (f / D - k * S * S / (rho * D * D));             // along the open directions (negative: inward)
-    gw = -pref * k * S * s / (rho * D * D);                       // along the hoop
-  } else gw = -pref * k * k * s / (D * D);                        // on the axis: the limit S/ρ → k
+    // f = kC/ρ − S/ρ² cancels badly for small ρ: use its series (k/ρ)(x²/3 + x⁴/30 + x⁶/840) there
+    const fD = x < 0.1 ? (k / rho) * x * x * (1 / 3 + x * x * (1 / 30 + x * x / 840)) * iD : (k / rho) * CD - SD / (rho * rho);
+    gr = pref * (fD - (k / rho) * SD * SD);                       // along the open directions (negative: inward)
+    gw = -pref * k * s * SD * iD / rho;                           // along the hoop
+  } else gw = -pref * k * k * s * iD * iD;                        // on the axis: the limit S/ρ → k
   const ir = rho > 1e-9 ? gr / rho : 0;
   out[0] = p0 * ir + gw * h[0]; out[1] = p1 * ir + gw * h[1]; out[2] = p2 * ir + gw * h[2]; out[3] = p3 * ir + gw * h[3];
   return out;
@@ -194,8 +197,10 @@ export function gravityInertial(x, t, out = [0, 0, 0, 0]) {
 // Coriolis terms of the spin). A's own field is computed directly in the body frame, where it is large and smooth;
 // the star's and B's arrive as tides (the star's is about 0.09 m/s² on the surface).
 export function accelBodyA(xb, vb, t, out = [0, 0, 0, 0]) {
-  const h = hoopAxisBody(t);
-  gBall(xb, GM.A(), LAWS.R_A, h, out);
+  const h = hoopAxisBody(t), wb = dot(xb, h), L = LAWS.L;
+  // A's own field from its nearest copy round the hoop (past halfway, a thrown thing is falling onto A's other side)
+  const xn = Math.abs(wb) > L / 2 ? [0, 1, 2, 3].map(i => xb[i] - L * Math.round(wb / L) * h[i]) : xb;
+  gBall(xn, GM.A(), LAWS.R_A, h, out);
   const x = toInertial(xb, t), o = orbitOf('A', t), B = orbitOf('B', t).c;
   const gs = gBall(x, GM.star(), LAWS.STAR_R, E_W), gb = gBall([x[0] - B[0], x[1] - B[1], x[2] - B[2], x[3] - B[3]], GM.B(), LAWS.R_B, E_W);
   const tide = dirToBody([0, 1, 2, 3].map(i => gs[i] + gb[i] - o.acc[i]), t);

@@ -52,6 +52,10 @@ export function stepFlight(p, dt) {
   for (let i = 0; i < 4; i++) x[i] += dt * v[i];
   const a1 = gravityInertial(x, t + dt);
   for (let i = 0; i < 4; i++) v[i] += 0.5 * dt * a1[i];
+  // round the hoop: past halfway to a copy of the planets you are nearer that copy, and it is the same planet (the
+  // star and both planets lie at w = 0, so keeping w within half a hoop keeps you by the nearest copy of each)
+  flight.wrapped = Math.abs(x[3]) > LAWS.L / 2;
+  if (flight.wrapped) x[3] -= LAWS.L * Math.round(x[3] / LAWS.L);
   flight.time += dt;
   // back into the planet's frame (at the end of the step); the frame keeps its inertial orientation
   const t1 = t + dt;
@@ -62,7 +66,7 @@ export function stepFlight(p, dt) {
   p.grounded = false;
   const rA = vec4.len(p.pos);
   flight.maxR = Math.max(flight.maxR, rA);
-  if (!G.flags.escaped && rA > 840) { G.flags.escaped = true; G.audio?.cue('escape'); }
+  if (!G.flags.escaped && rA > 1000) { G.flags.escaped = true; G.audio?.cue('escape'); }
   const nb = nearB(x, t1);
   if (nb.r < 140 && nb.r < groundRadiusB(vec4.scale(nb.d, 1 / nb.r)) + 0.05) { landOnB(p, nb); return true; }
   // the star: touching it is the end of this flight (nothing kills you: a quiet fade home)

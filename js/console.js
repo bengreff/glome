@@ -85,7 +85,7 @@ const orbit = { last: null, swept: 0 };
 export function trackOrbit(flight, t) {
   if (!flight.active) { orbit.last = null; orbit.swept = 0; return; }
   const A = orbitOf('A', t).c, r = vec4.sub(flight.x, A), d = vec4.len(r);
-  if (d > 1200) { orbit.last = null; orbit.swept = 0; return; }
+  if (d > 1200 || flight.wrapped) { orbit.last = null; orbit.swept = 0; return; }   // (going round the hoop is not an orbit)
   if (orbit.last) orbit.swept += Math.acos(Math.max(-1, Math.min(1, vec4.dot(vec4.norm(r), orbit.last))));
   orbit.last = vec4.norm(r);
   if (orbit.swept > 2 * Math.PI && !G.flags.orbited) { G.flags.orbited = true; G.audio?.emit('chime', [0, 0, 0, 0], 0.8); }

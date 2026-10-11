@@ -17,6 +17,7 @@ import { PLANET_R } from './world.js';
 import { World, makeBody, DENSITY, applyImpulse } from './bodies.js';
 import { rot as R4, log as rotLog, qnorm, bivApply } from './so4.js';
 import { tangents } from './env.js';
+import { hoopAxisBody } from './cosmos.js';
 
 export const MAXO = 16, MAXL = 4;
 // What the shader draws: the nearest objects, the ones your slice cuts first.
@@ -91,8 +92,11 @@ export function placeStart(rand) {
 export function stepObjects(cam, kick, w = objects.world, far = 150, gone = 1500) {
   if (!w) return;
   const eye = cam.eye, h = objects.held && worldOf(objects.held) === w ? objects.held : null;
+  const hoop = w === objects.world ? hoopAxisBody(G.state.time) : null, L = LAWS.L;
   for (const b of w.bodies) {
     if (b.fixed) continue;
+    // thrown past halfway round the hoop: it is nearer A's other side, so it lives by that copy (accelBodyA)
+    if (hoop && !b.sleeping) { const wb = vec4.dot(b.pos, hoop); if (Math.abs(wb) > L / 2) { const s = L * Math.round(wb / L); b.pos = vec4.sub(b.pos, vec4.scale(hoop, s)); b.prevPos = b.pos.slice(); } }
     if (!b.sleeping && !b.held && vec4.len(vec4.sub(b.pos, eye)) > far) { b.sleeping = true; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; }
     if (vec4.len(b.pos) > gone && !b.held) w.remove(b);        // flown off into space: gone
   }
@@ -139,7 +143,7 @@ export function camRot(c) {
   if (det(M) < 0) for (const r of M) r[2] = -r[2];
   return R4.fromMatrix(M);
 }
-export const HOLD_F = 2600, HOLD_T = 400;        // the drive's strength: newtons (about lifting 265 kg), newton-metres
+export const HOLD_F = 4200, HOLD_T = 400;        // the drive's strength: newtons (lifting about 265 kg at sea level), newton-metres
 const HOLD_TAU = 0.04, HOLD_TAU_R = 0.05;        // how fast it closes a gap, in position and in attitude (s)
 export const hold = { last: null, snag: 0, snapped: false, rel: null, relPrev: null };
 // Your body's frame (the camera's without the head's tilt: forward level, right, ana, up), as a proper rotation.

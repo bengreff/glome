@@ -10,13 +10,14 @@ export const LAWS = {
   // planet A (home): a uniform 4D ball whose surface is a 3-sphere
   R_A: 250,                // radius (m); the terrain atlas is built for this, so it is fixed at load
   SEA: 0,                  // sea level above R_A (m)
-  G_SURF: 9.8,             // surface gravity of the bare planet, ignoring its images (m/s²); G₄M = G_SURF·R_A³
+  G_SURF: 16,              // surface gravity of the bare planet, ignoring its images (m/s²); G₄M = G_SURF·R_A³.
+                           // Chosen so the summit (42.5 m as walked) measures 9.8 m/s² over the day (PHYSICS.md)
   DAY1: 300,               // the double spin: one turn in the first plane (s) ...
   RATIO: PHI,              // ... and the second plane turns φ times faster, so the days never repeat
   ORBIT_A: 2000,           // radius of A's (circular) orbit round the star (m)
 
   // the star: a small, hot 4D ball
-  STAR_R: 120, STAR_G_SURF: 404,   // radius (m), surface gravity (m/s²): about 4.6 times A's mass
+  STAR_R: 120, STAR_G_SURF: 404,   // radius (m), surface gravity (m/s²): about 2.8 times A's mass
 
   // planet B: smaller, crystalline, built
   R_B: 120, B_G_SURF: 6, ORBIT_B: 3200,
@@ -32,7 +33,7 @@ export const LAWS = {
   EYE: 1.62,               // eye height above the feet (m)
   PLAYER_M: 70,            // your mass (kg): what your throws recoil against
   WALK: 4.2, RUN: 9.5,     // ground speeds (m/s)
-  JUMP: 5.2,               // take-off speed (m/s)
+  JUMP: 6.0,               // take-off speed (m/s): a 1.2–1.3 m apex on the middle half of the dry land
   MU: 0.9,                 // Coulomb friction, rock on rock and feet on rock
   CLIMB: 2.2,              // scrambling speed up a boulder (m/s)
 };
