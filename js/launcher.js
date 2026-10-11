@@ -8,6 +8,7 @@ import { tangents } from './env.js';
 import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
 import { objects, spawn, KINDS } from './objects.js';
+import { makeProp, addRock, SHAPE, MAT } from './props.js';
 
 export const TIERS = [0, 28, 43, 53, 72];             // m/s for tiers 0 (no parts) .. IV (derived by integration: PHYSICS.md)
 export const launcher = { site: null, n: null, pad: null, tier: 0, onPad: false, ring: 3.6 };
@@ -50,6 +51,16 @@ export function buildLauncher(hf) {
   objects.world.add(pad);
   launcher.pad = pad;
   launcher.site = vec4.scale(s.p, PLANET_R + s.h + 0.25);
+  // four sockets set into the pad's top, one for each part, at four of its corners (a tetrahedron in the ground's three
+  // directions: your slice shows some of them, turning shows the others): dark until their part lies in the ring. They
+  // stand only 5 cm proud, so nothing on the pad can catch a launch, which leaves it nearly level.
+  const T = tangents(s.p), rot = squareOn(s.p), e = [0.3, 0.3, 0.3, 0.2];
+  launcher.sockets = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(([x, y, z]) => {
+    const off = [0, 1, 2, 3].map(i => 0.8 * (x * T[0][i] + y * T[1][i] + z * T[2][i]));
+    const p = makeProp({ c: vec4.add(vec4.add(launcher.site, off), vec4.scale(s.p, 0.05 - e[3])), rot, e, shape: SHAPE.box, mat: MAT.metal, glow: 0.04 });
+    p.kind = 'socket'; addRock(p);
+    return p;
+  });
 }
 // The four parts, placed now at the places the artifacts will guard (DESIGN.md: carried back by hand).
 export function placeParts(spots) {
@@ -62,7 +73,8 @@ export function updateLauncher(p) {
   for (const b of objects.world.bodies) if (b.kind === 'part' && !b.held && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring) near.add(b.tier);
   let k = 0; while (near.has(k + 1)) k++;
   launcher.tier = k;
-  launcher.pad.glow = 0.15 * k;
+  launcher.pad.glow = k === 4 ? 0.9 : 0.12 * k;                 // a full set lights the pad
+  (launcher.sockets || []).forEach((so, i) => { so.glow = near.has(i + 1) ? 0.9 : 0.04; });   // each socket, as its part arrives
   for (const b of objects.world.bodies) if (b.kind === 'part') b.glow = near.has(b.tier) && b.tier <= k ? 1 : 0.25;
   // standing on the pad: your feet on its top face, within its square
   const d = vec4.sub(p.pos, launcher.site), up = vec4.norm(launcher.site);

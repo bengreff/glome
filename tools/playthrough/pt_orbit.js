@@ -20,17 +20,21 @@ for (; waited < 400 && !found; waited += 6) {
     const h = nz(V.add(V.sc(T[0], Math.cos(az) * Math.sin(b)), V.add(V.sc(T[1], Math.sin(az) * Math.sin(b)), V.sc(T[2], Math.cos(b)))));
     const dir = nz(V.add(V.sc(h, Math.cos(e)), V.sc(up, Math.sin(e))));
     const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dir, d.TIERS[3]), t), t);
-    const rs = r.pts.map(q => len(V.sub(q.x, C.orbitOf('A', q.t).c))); if (!r.hit && Math.max(...rs) < 700 && sweep(r.pts) > 2.2 * Math.PI) found = { dir, rmax: Math.max(...rs).toFixed(0) };
+    // bounded, a turn and more, and with room to spare at its low point (the orbit is marginal by nature: a path
+    // that skims the hills is lost to the smallest difference between the map's steps and flight's)
+    const rs = r.pts.map(q => len(V.sub(q.x, C.orbitOf('A', q.t).c))), lo = Math.min(...rs.slice(rs.length >> 3));
+    if (!r.hit && Math.max(...rs) < 700 && lo > 250 + 48 + 40 && sweep(r.pts) > 2.2 * Math.PI) found = { dir, rmax: Math.max(...rs).toFixed(0), rmin: lo.toFixed(0) };
   }
   if (!found) { g.state.time += 6; await gt(0.05); }
 }
 out.tries = tries; out.found = !!found;
 if (!found) return JSON.stringify(out);
-out.waited = waited; out.rmax = found.rmax;
+out.waited = waited; out.rmax = found.rmax; out.rmin = found.rmin;
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0];
 const u = p.up(), hz = nz(V.sub(found.dir, V.sc(u, V.dot(found.dir, u)))); p.F = hz; p.settleFrame(); p.pitch = Math.asin(V.dot(found.dir, u));
 g.keys.add('Space'); await gt(0.05); g.keys.delete('Space');
-await gt(150);
+await gt(2);                                              // (flight begins 20 m up)
+for (let i = 0; i < 150 && !g.G.flags.orbited && d.flight.active; i++) await gt(2);   // (a large orbit takes a few minutes to come round)
 out.orbited = !!g.G.flags.orbited; out.stillFlying = d.flight.active;
 return JSON.stringify(out);
 })()

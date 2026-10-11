@@ -1262,6 +1262,31 @@ vec4 hitAll(vec4 ro, vec4 rd) {
   if (under) return vec4(tW, 8.0, 0.0, -1.0);
   return vec4(-1.0, 0.0, 0.0, -1.0);
 }
+// Beacons: columns of soft light over the places that matter (an unsolved artifact, a part lying loose), seen when your
+// slice passes within a few metres of their axis, whatever the distance: so they show from afar once you face them
+// (the radar can turn you to). Each is a segment straight up from base; the glow falls off with the ray's least 4D
+// distance from it.
+const int MAXBEACON = 6;
+uniform vec4 uBeacon[MAXBEACON];      // base (on the ground)
+uniform vec4 uBeaconC[MAXBEACON];     // colour × strength, and height
+uniform int uBeaconN;
+vec3 beaconGlow(vec4 ro, vec4 rd, float tEnd) {
+  vec3 g = vec3(0.0);
+  for (int i = 0; i < MAXBEACON; i++) {
+    if (i >= uBeaconN) break;
+    vec4 a = uBeacon[i], up = normalize(a);
+    float H = uBeaconC[i].w;
+    // closest points between the ray (ro + rd·s, 0 <= s <= tEnd) and the axis (a + up·h, 0 <= h <= H)
+    vec4 w = ro - a; float b = dot(rd, up), dw = dot(rd, w), ew = dot(up, w), den = 1.0 - b * b;
+    float s = den > 1e-6 ? clamp((b * ew - dw) / den, 0.0, tEnd) : 0.0;
+    float h = clamp(ew + b * s, 0.0, H);
+    s = clamp(b * h - dw, 0.0, tEnd);
+    vec4 d = w + rd * s - up * h;
+    float dist = length(d), far = length(w), wd = 1.6 + 0.012 * far;
+    g += uBeaconC[i].rgb * exp(-dist * dist / (wd * wd)) * (1.0 - smoothstep(0.55 * H, H, h)) * (0.35 + 0.65 * smoothstep(0.0, 4.0, h));
+  }
+  return g;
+}
 // The normal of the prop i where the ray meets it.
 vec4 propNormal(vec4 ro, vec4 rd, int i) {
   vec4 oc = ro - uPC[i], c0 = propT(i, 1), c1 = propT(i, 2), c2 = propT(i, 3), c3 = propT(i, 4), e = max(propT(i, 5), vec4(1e-3)), g;
@@ -1284,7 +1309,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
     if ((uDebug & 4) == 0 && hitCopies(ro, rd, tc, cc)) { col = cc; tOut = tc; }
     else col = skyColor(rd, upE, uDayE) + ((uDebug & 2) == 0 ? starRow(ro, rd, ts) : vec3(0.0));
     vec4 cl = clouds(ro, rd, 1e9);
-    return mix(col, cl.rgb, cl.a);
+    return mix(col, cl.rgb, cl.a) + beaconGlow(ro, rd, tOut > 0.0 ? tOut : 3000.0);
   }
   vec4 p = ro + rd * t;
   if (kind == 7) {                                            // planet B's floor
@@ -1322,7 +1347,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
     vec4 cl = clouds(ro, rd, tOut);
     col = mix(col, cl.rgb, cl.a);
   }
-  return col;
+  return col + beaconGlow(ro, rd, t);
 }
 // Trace one 4D ray (both halves in one). Returns colour; tOut = hit distance or -1 for sky.
 vec3 render(vec4 ro, vec4 rd, out float tOut) { return shadeHit(ro, rd, hitAll(ro, rd), tOut); }

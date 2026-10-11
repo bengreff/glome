@@ -166,7 +166,7 @@ const slopeAt = (hf, n) => { const T = tangents(n), e = 2; let s = 0; for (const
 // highlands, smooth stones by rivers and shores, scree at the foot of steep ground, and erratic blocks anywhere dry.
 // A few of each near where you arrive. keepOut(n, r) says where none may stand (the start, the artifacts, paths).
 export function makeRocks(hf, home, keepOut, near) {
-  props.rocks.length = 0; props.grid.clear(); seed = 31337;
+  seed = 31337;                                               // (the launcher's sockets are already in)
   const gauss = () => rnd() + rnd() + rnd() + rnd() - 2;
   const randomUnit = () => vec4.norm([gauss(), gauss(), gauss(), gauss()]);
   const want = { outcrop: 450, crystal: 70, stone: 240, scree: 180, erratic: 380 };

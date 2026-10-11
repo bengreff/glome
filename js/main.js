@@ -29,7 +29,7 @@ import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js
 import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
 import { Rope } from './rope.js';
 import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
-import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
+import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts, updateBeacons } from './artifacts.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad } from './cosmos.js';
 import { stepBoats, windAt } from './boats.js';
@@ -298,6 +298,7 @@ function frameBody(now) {
       }
     }
   }
+  if (player.onB == null) updateBeacons(cam.eye);
   uploadProps(cam, sun, scene.w, scene.h, FOV);
   treeFrame(cam, sun, scene.w, scene.h, FOV);
   const q = gpuBegin();

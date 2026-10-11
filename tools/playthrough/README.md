@@ -29,3 +29,8 @@ with the map (tries directions and refines the one passing nearest B): random ai
 Two real bugs were found this way: rocks and trees near the summit could catch a nearly level launch (the summit is now
 clear for 45 m), and the space map counted grazing passes near B as landings (it now lands on B's floors exactly). The
 orbit completed a full turn at most 505 m out; the tier IV launch landed on B after 148 s.
+
+Run three, N4 (sockets set into the launcher's pad, beacons): all five solved. pt_orbit now also wants room to spare at
+the orbit's low point (at least 40 m above the highest ground: the orbit is marginal by nature, and the flight drifts
+from the map's prediction by a few metres a minute at first, so a path that skims the hills can be lost) and waits up
+to 300 s for the turn. Two runs: full turns at 553 and 572 m out. Tier IV: landed on B after 69 s (predicted 68).

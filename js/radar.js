@@ -533,10 +533,14 @@ export function landmarkList() {
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
   for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin' });
   if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: launcher.tier > 0 });
+  let next = null, nd = Infinity;
+  const me = G.player && G.player.onB == null ? G.player.up() : null;
   for (const a of G.artifacts || []) {
-    if (!G.flags['seen_' + a.id]) continue;
-    out.push({ n: a.n, kind: 'artifact', keep: true, bright: !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1)) });
+    const solved = !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1));
+    if (G.flags['seen_' + a.id]) out.push({ n: a.n, kind: 'artifact', keep: true, bright: solved });
+    if (!solved && me) { const d = vec4.dot(a.n, me); if (-d < nd) { nd = -d; next = a; } }
   }
+  if (next) out.push({ n: next.n, kind: 'next', keep: true });   // the nearest not yet solved: a slow pulse, on the rim if far
   return out;
 }
 const ACCENT = 'rgba(82, 220, 200, 0.95)';
@@ -550,6 +554,11 @@ export function drawLandmark(kind, P, k, bright) {
   } else if (kind === 'cave') {                               // an arch
     octx.strokeStyle = 'rgba(230, 210, 180, 0.95)'; octx.lineWidth = 1.8 * k;
     octx.beginPath(); octx.moveTo(x - 4.5 * k, y + 3.5 * k); octx.lineTo(x - 4.5 * k, y); octx.arc(x, y, 4.5 * k, Math.PI, 0); octx.lineTo(x + 4.5 * k, y + 3.5 * k); octx.stroke();
+  } else if (kind === 'next') {                               // the nearest unsolved artifact: a ring that pulses slowly
+    const ph = (performance.now() / 1600) % 1;
+    octx.strokeStyle = `rgba(82, 220, 200, ${(0.9 * (1 - ph)).toFixed(3)})`; octx.lineWidth = 1.6 * k;
+    octx.beginPath(); octx.arc(x, y, (4 + 9 * ph) * k, 0, 7); octx.stroke();
+    octx.fillStyle = 'rgba(82, 220, 200, 0.9)'; octx.beginPath(); octx.arc(x, y, 2 * k, 0, 7); octx.fill();
   } else if (kind === 'ruin') {                               // worked stone: two pillars and a lintel
     octx.strokeStyle = 'rgba(225, 215, 195, 0.9)'; octx.lineWidth = 1.6 * k;
     octx.beginPath(); octx.moveTo(x - 4 * k, y + 4 * k); octx.lineTo(x - 4 * k, y - 3 * k); octx.moveTo(x + 4 * k, y + 4 * k); octx.lineTo(x + 4 * k, y - 3 * k);

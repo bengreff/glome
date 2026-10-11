@@ -157,3 +157,28 @@ export function syncArtifacts() {
     else freeze(a.part);
   }
 }
+
+// ---------- beacons ----------
+// Columns of soft light (shaders.js): over each artifact not yet solved, over each part lying loose (out of its vault and
+// not yet on the launcher's ring), and over the launcher while you carry a part. The nearest six.
+export const beacons = { B: new Float32Array(24), C: new Float32Array(24), n: 0 };
+const ACC = [0.32 * 1.4, 0.86 * 1.4, 0.78 * 1.4];
+export function updateBeacons(eye) {
+  const hf = G.player.hf, list = [];
+  const ground = n => vec4.scale(n, PLANET_R + Math.max(hf.heightAt(n), 0));
+  for (const a of artifacts) {
+    const solved = G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1);
+    if (!solved) list.push({ base: ground(a.n), c: ACC, h: 150 });          // (tall: on a 250 m planet a column of height H shows over the horizon out to about √(500·H) m)
+  }
+  const held = objects.held;
+  for (const b of objects.world.bodies) {
+    if (b.kind !== 'part' || b.kinematic || b.held) continue;
+    if (launcher.site && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring) continue;
+    list.push({ base: ground(vec4.norm(b.pos)), c: ACC.map(v => v * 0.8), h: 90 });
+  }
+  if (held && held.kind === "part" && launcher.n) list.push({ base: ground(launcher.n), c: [1.1, 1.1, 1.0], h: 150 });
+  list.forEach(x => { x.d = vec4.len(vec4.sub(x.base, eye)); });
+  list.sort((x, y) => x.d - y.d);
+  beacons.n = Math.min(6, list.length);
+  for (let i = 0; i < beacons.n; i++) { beacons.B.set(list[i].base, 4 * i); beacons.C.set([...list[i].c, list[i].h], 4 * i); }
+}
