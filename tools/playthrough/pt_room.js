@@ -30,8 +30,9 @@ out.depth = (len(p.pos) - 250 - p.hf.heightAt(nz(p.pos))).toFixed(1);
 // 3. take the part: walk to it and look at it
 for (let i = 0; i < 40 && !(d.objects.held && d.objects.held.kind === 'part'); i++) {
   const r = rel(); faceGoal();
-  k.delete('KeyE'); k.delete('KeyQ'); k.delete('KeyW');
-  if (Math.abs(r.a) > 0.5) k.add(r.a > 0 ? 'KeyE' : 'KeyQ'); else if (Math.hypot(r.f, r.r) > 1.6) k.add('KeyW');
+  k.delete('KeyE'); k.delete('KeyQ'); k.delete('KeyW'); k.delete('KeyS');
+  // (off it first: the key is a ring a metre across, and what you stand on you can't lift)
+  if (Math.abs(r.a) > 0.5) k.add(r.a > 0 ? 'KeyE' : 'KeyQ'); else if (Math.hypot(r.f, r.r) > 1.6) k.add('KeyW'); else if (Math.hypot(r.f, r.r) < 1.1 || p.ride) k.add('KeyS');
   await gt(0.3);
   look(d.guide.goal.pos);
   if (G.canTake) { d.actions.fDown = true; await gt(0.3); }

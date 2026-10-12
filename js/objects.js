@@ -162,11 +162,26 @@ function bodyRot(c) {
   const f = vec4.norm(vec4.sub(c.F, vec4.scale(c.up, vec4.dot(c.F, c.up))));
   return camRot({ F: f, R: c.R, A: c.A, U: c.up });
 }
+// How far a compound body at attitude rot reaches from its centre along unit direction dir.
+function reachAlong(b, rot, dir) {
+  const M = R4.toRows(rot), ax = [0, 1, 2, 3].map(j => vec4.dot([M[0][j], M[1][j], M[2][j], M[3][j]], dir));
+  let r = 0;
+  for (const q of b.parts) {
+    const c = q.c[0] * ax[0] + q.c[1] * ax[1] + q.c[2] * ax[2] + q.c[3] * ax[3];
+    const e = q.shape === 'glome' ? q.r : q.shape === 'cap' ? q.r + q.h * Math.abs(ax[3]) : q.e[0] * Math.abs(ax[0]) + q.e[1] * Math.abs(ax[1]) + q.e[2] * Math.abs(ax[2]) + q.e[3] * Math.abs(ax[3]);
+    r = Math.max(r, c + e);
+  }
+  return r;
+}
 function handTarget(b, cam) {
   const C = bodyRot(cam);
   if (!b.holdRel || !b.holdRel.l) b.holdRel = R4.compose(R4.inverse(C), b.rot);   // (a save from before keeps the attitude it has)
-  // in front of you, a bigger thing lower down (carried at the chest, not held up before your eyes)
-  return { pos: vec4.add(vec4.add(cam.eye, vec4.scale(cam.F, 0.55 + b.bound)), vec4.scale(cam.up, -(0.22 + 0.9 * b.half))), rot: R4.compose(C, b.holdRel) };
+  // in front of you, a bigger thing lower down (carried at the chest, not held up before your eyes); a compound one
+  // (a ring) by how far it really reaches along your gaze and how deep it is, so a wide flat ring is carried level
+  // before you, not far out and low where its edge would dig into a slope
+  const rot = R4.compose(C, b.holdRel);
+  const out = b.parts ? reachAlong(b, rot, cam.F) : b.bound, down = b.parts ? reachAlong(b, rot, cam.up) : b.half;
+  return { pos: vec4.add(vec4.add(cam.eye, vec4.scale(cam.F, 0.55 + out)), vec4.scale(cam.up, -(0.22 + 0.9 * down))), rot };
 }
 function holdDrive(b, cam, w, kick) {
   const T = handTarget(b, cam), L = hold.last, dt = w.dt;
