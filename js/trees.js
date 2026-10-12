@@ -11,13 +11,15 @@ import { PLANET_R, riverAt } from './world.js';
 import { vec4 } from './player.js';
 import { tangents } from './env.js';
 import { fbm4 } from './noise.js';
+import { flora, FLORA_RANGE } from './flora.js';
 
-// kinds of piece: 0 bark, 1 leaves, 2 rope, 3 a walker's leg, 4 a conifer's needles (a cone), 5 pale bark (birch), 6 dead wood
+// kinds of piece: 0 bark, 1 leaves, 2 rope, 3 a walker's leg, 4 a conifer's needles (a cone), 5 pale bark (birch), 6 dead wood,
+// and the flora's (flora.js): 7 a green stem, 8 a flower head, 9 a tuft of grass (a cone)
 const F = 10;                                   // floats per piece: a (4), b (4), radius, kind
 let CAPS = new Float32Array(1 << 16), ncap = 0;
 export const trees = [];                        // { n, base, start, count, c, R, crown: { c, r }, kind }
 export const groves = [];                       // { n, r, count }: for the radar
-export const MAXTG = 320, MAXTC = 3072, MAXTSH = 16, CHUNK = 12;
+export const MAXTG = 640, MAXTC = 6144, MAXTSH = 16, CHUNK = 12;
 export const rope = { obj: null, alpha: 1 };
 export const legs = { caps: [] };
 export const tgpu = { data: new Float32Array(MAXTC * 12), nc: 0, groups: new Float32Array(MAXTG * 12), n: 0,
@@ -160,7 +162,7 @@ export function makeForests(hf, home, keepOut, homeSide) {
   total += plantGrove(hf, off(home, homeSide, 30), 16, 80, MIXES.meadow, keepOut, 2.8);
   total += plantGrove(hf, home, 36, 220, MIXES.meadow, keepOut, 3.2);
   total += plantGrove(hf, off(home, vec4.scale(homeSide, -1), 65), 32, 260, MIXES.wood, keepOut, 2.6);
-  for (let i = 0; i < 60000 && total < 9000; i++) {
+  for (let i = 0; i < 120000 && total < 14000; i++) {
     const n = randomUnit(), h = hf.heightAt(n);
     if (h < 1 || h > 26 || hf.waterAt(n) > h - 0.3) continue;
     const rv = riverAt(n), nearRiver = rv && rv.d < 20, w = woodiness(n);
@@ -175,12 +177,12 @@ export function makeForests(hf, home, keepOut, homeSide) {
   }
   // and single trees and shrubs over all the grassland, between the groves
   let singles = 0, bushes = 0;
-  for (let i = 0; i < 60000 && (singles < 3000 || bushes < 4000); i++) {
+  for (let i = 0; i < 120000 && (singles < 6500 || bushes < 2000); i++) {
     const n = randomUnit(), h = hf.heightAt(n);
     if (h < 1.2 || h > 28 || hf.waterAt(n) > h - 0.3 || slope(hf, n) > 0.55 || keepOut(n, 2)) continue;
-    if (bushes < 4000 && (singles >= 3000 || rnd() < 0.57)) { growTree(n, h, { height: 0.8 + 0.9 * rnd(), form: 'shrub' }); bushes++; continue; }
+    if (bushes < 2000 && (singles >= 6500 || rnd() < 0.24)) { growTree(n, h, { height: 0.8 + 0.9 * rnd(), form: 'shrub' }); bushes++; continue; }
     const u = rnd(), s = 0.8 + 0.5 * rnd();
-    if (u < 0.55) growTree(n, h, { height: 6.5 * s, depth: 2, spread: 0.6 + 0.3 * rnd(), trunk: 0.32 + 0.18 * s });
+    if (u < 0.45) growTree(n, h, { height: 6.5 * s, depth: 2, spread: 0.6 + 0.3 * rnd(), trunk: 0.32 + 0.18 * s });
     else if (u < 0.75) growTree(n, h, { height: 7.5 * s + 2, form: 'conifer', trunk: 0.3 });
     else if (u < 0.92) growTree(n, h, { height: 6 * s + 1.5, depth: 2, spread: 0.45, form: 'birch', trunk: 0.18 });
     else growTree(n, h, { height: 5 * s, depth: 2, spread: 0.8, form: 'dead', trunk: 0.25 });
@@ -287,6 +289,33 @@ export function treeFrame(cam, sun, W, H, fov) {
     for (const [a, b, r, kind] of e.caps) { if (nc >= MAXTC) break; tmp.set(a, 0); tmp.set(b, 4); tmp[8] = r; tmp[9] = kind; emit(tmp, 0, 1); }
     group(first);
   }
+  // the flora near you (flora.js): the clusters your slice cuts, nearest first, a group to a plant (so its circle on
+  // the screen is small), within a share of the budget
+  const fl = [];
+  for (const t of flora.list) {
+    const d = vec4.sub(t.c, eye), dist2 = vec4.dot(d, d);
+    if (dist2 > (FLORA_RANGE + t.R) ** 2 || Math.abs(vec4.dot(d, A)) > t.R) continue;
+    fl.push({ t, dist: Math.sqrt(dist2) });
+  }
+  fl.sort((x, y) => x.dist - y.dist);
+  const ngF = Math.min(MAXTG, ng + 300), ncF = Math.min(MAXTC, nc + 2400);
+  for (const { t, dist } of fl) {
+    if (ng >= ngF - 4 || nc >= ncF - 32) break;
+    const fade = Math.min(1, Math.max(0, (FLORA_RANGE - dist) / (0.2 * FLORA_RANGE))), twig = dist > 20 ? 0.03 : 0;
+    seedOf = t.seed;
+    for (let q = 0; q + 1 < t.plants.length; q++) {
+      for (const leafy of [false, true]) {                      // its stems, flowers and cones, then its leaves
+        const first = nc;
+        for (let i = t.plants[q]; i < t.plants[q + 1] && nc < ncF; i++) {
+          const o = i * F, isLeaf = t.S[o + 9] === 1;
+          if (isLeaf !== leafy || (!isLeaf && t.S[o + 8] < twig)) continue;
+          emit(t.S, o, fade);
+        }
+        group(first, leafy);
+      }
+    }
+  }
+  tgpu.floraN = fl.length;
   for (const { t, dist } of groups) {
     if (ng >= MAXTG || nc >= MAXTC - 8) break;
     const fade = Math.min(1, Math.max(0, (RANGE - dist) / (0.15 * RANGE)));   // far ones shrink away, never pop

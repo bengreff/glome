@@ -1,7 +1,7 @@
 // Screen tiles: the view in squares of 32 pixels, each with the lists of things whose circle on the screen meets it
 // (the trees' groups of pieces, and the props), so a pixel's ray is tested only against what can be there.
 // Built each frame on the CPU; the shader reads, per tile, (first, how many) of each list in an index list.
-export const TILE = 32, MAXIDX = 131072;
+export const TILE = 32, MAXIDX = 262144;
 export const tiles = { tab: null, idx: new Float32Array(MAXIDX), tx: 0, ty: 0, nidx: 0 };   // tab: two texels per tile, (first, count) of up to four lists
 // lists: [{ data, stride, n }] (up to four): each circle at data[stride·i] as (x, y, radius) in pixels (radius 0: none).
 export function buildTiles(W, H, lists) {

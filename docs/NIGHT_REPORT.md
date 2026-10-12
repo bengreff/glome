@@ -1,10 +1,10 @@
 # Night report
 
-The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, and run four the same day, which shows the way (v1.1); their sections are at the end.
+The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), and run five on 12 October, which fills the world where you are (v1.2); their sections are at the end.
 
 **Play:** https://bengreff.github.io/glome/ · **Hub:** https://bengreff.github.io/ · **Source:** https://github.com/bengreff/glome
 
-Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
+Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
 
 ## What to try first
 
@@ -221,3 +221,28 @@ You played v1.0 and said: the column of light should be clearer; you found nothi
 
 1. **itch.io:** upload `dist/glome-v1.1.zip` (built with `tools/package.sh`) in place of v1.0, with the settings in [ITCH.md](ITCH.md).
 2. **Play the first five minutes again** and tell me where the cues still leave you guessing. The cave, the carry to the launcher and the mirror's cues are checked on screen; the knot's and the bowl's cues are checked in code and by their playthroughs, not by eye.
+
+## Run five (12 October): a full world where you are (v1.2)
+
+You played v1.1: the goal was clear, but you saw zero creatures and few trees or plants, and "landmarks" was a vague name. I measured before changing anything: at 300 random spots on dry land, facing random ways, your slice cut a median of 8 trees and 2 shrubs within 100 m, and 98% of views had no creature within 60 m. The reason is the 4D slice: the ground is three-dimensional and your slice shows a sheet of it only as thick as the things in it, so a world stocked like a 3D one looks empty, and the smaller the thing, the emptier.
+
+### What changed
+
+1. **Plants, grown where you are.** Bushes, flowering shrubs and heath, cushions of flowers, tufts of grass and young conifers, within 36 m of you (the smallest within 22 m), grown afresh as you walk and the same every time you come back; spread evenly over the whole 3-sphere, thicker in meadows, sparse up on the rock. They are made of what a slice can cut (balls of leaves, cones of grass, flowers sitting on leaves), so they come and go as you turn, like everything else. You walk through them.
+2. **More trees:** 31,000 (was 21,000), more of them conifers.
+3. **Creatures: some 3,000 walkers in 250 herds and 500 rollers** (were 220 and 50). Curious walkers notice you from 100 m (was 30) and trot into your slice; rollers circle you from 80 m. Standing still at eight random spots for 25 seconds, creatures came into view within 45 m at seven of them (2 to 17 each).
+4. **Herds no longer die out.** The old rules let herds merge, stop breeding and die off in waves (to a fifth within a day of play): likely why a long session showed you none. Now lifespans vary, and a young walker born into a crowded herd wanders off to found a new one; the population holds steady over twelve days of the test.
+5. **Rollers have eyes** and a duller two-colour glaze, so they read as animals rather than glass.
+6. **The radar's layers say what they hold:** "things to carry" and "places: cave, ruins, launcher, artifacts". By default it shows those two, the goal and your trail.
+
+### Gates
+
+- **Unit tests** all pass; the creatures' test now runs 2,500 walkers and 400 rollers for ten days (they hold at their caps, 3,000 and 500). **Smoke:** no errors, boot 4.3 s.
+- **Performance** (60 fps at 50% resolution or more): start 58.7%, in a wood 53.6%, at a herd 55.2%, looking down 58.8%, at an outcrop 54.2%, each at 58–60 fps. The plants cost 0.2 ms of GPU time once grouped a plant at a time (3 ms grouped by place, the first try).
+- **Persistence:** save and reload, export and import, and the found things all pass; a save is now 207 KB (was 28 KB), nearly all of it creatures.
+- **Playthroughs:** the cave by its cues, the mirror, the knot and the antipode solve; the orbit goes round (low point 365 m); tier IV lands on B (71 s, predicted 69).
+
+### For you
+
+1. **itch.io:** upload `dist/glome-v1.2.zip` in place of v1.1.
+2. **Play somewhere away from the start and stand still for half a minute.** Tell me whether it now feels inhabited, and whether the plants are too many, too few, or wrong in kind.

@@ -133,6 +133,7 @@ export function drawGoal(cam) {
     let X = (sx * 0.5 + 0.5) * W, Y = (0.5 - sy * 0.5) * H;
     const r = 9 * k, pulse = 1 + 0.12 * Math.sin(performance.now() / 260), rr = radar.rect;
     if (rr && X > rr.x - 40 * k && Y > rr.y - 40 * k) X = rr.x - 40 * k;   // (never under the radar)
+    Y = Math.min(Y, H - 80 * k);                              // (nor on the hint along the bottom)
     octx.lineWidth = 2.2 * k; octx.strokeStyle = 'rgba(5, 10, 16, 0.6)';
     const dia = R => { octx.beginPath(); octx.moveTo(X, Y - R); octx.lineTo(X + R, Y); octx.lineTo(X, Y + R); octx.lineTo(X - R, Y); octx.closePath(); };
     dia(r * pulse + 1.5 * k); octx.stroke();

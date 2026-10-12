@@ -11,6 +11,7 @@ import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulde
 import { keys, mouse, SENS, readInput, actions, pad, pollPad } from './input.js';
 import { gazePoint, drawFaced, drawGazeDot, drawBMarks, drawGoal, updateHUD } from './hud.js';
 import { guide, updateGuide, updateBeam } from './guide.js';
+import { flora, initFlora, updateFlora } from './flora.js';
 import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
 import { LAWS } from './laws.js';
 import { accelBodyA } from './cosmos.js';
@@ -301,6 +302,7 @@ function frameBody(now) {
   }
   updateGuide(); updateBeam(cam);
   uploadProps(cam, sun, scene.w, scene.h, FOV);
+  updateFlora(cam.eye);
   treeFrame(cam, sun, scene.w, scene.h, FOV);
   const q = gpuBegin();
   drawSlice(cam, sun, 0, 0, scene.w, scene.h);
@@ -472,6 +474,9 @@ function frameBody(now) {
       G.treesMade = makeForests(hf, home, (n, r) => keepOut(n, r) || inStone(n, r + 0.5), player.R);
       // ruins, cairns and caches, and lines of cairns toward the artifacts and the launcher
       G.findsMade = makeFinds(hf, home, [...(G.artifacts || []).map(a => a.n), launcher.n], keepOut);
+      // the flora: grown near you as you go; none on the pad, in the cave's mouth or the bowl, or on an artifact's place
+      const clearOf = [[launcher.n, 6], ...(G.artifacts || []).map(a => [a.n, 3]), ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
+      initFlora(hf, n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2);
       G.genCount = finds.gen;
     }
     buildB();
@@ -523,7 +528,7 @@ function frameBody(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer, guide } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer, guide, flora } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

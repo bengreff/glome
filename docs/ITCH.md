@@ -27,6 +27,7 @@ Nothing is explained. Everything is shown by the world behaving exactly as a 4D 
 - a ring of pillars stands on a sphere, so your slice shows you a different circle of them as you turn;
 - walkers on eight legs (two alternating tetrapods) turn square to your slice to look at you, so you see four legs of eight; the shy ones trot off, some through ana;
 - one goal at a time: a column of light in your slice and a key that says which way to step through ana, and how far;
+- the ground is thick with plants grown afresh as you walk, and herds of walkers trot over from 100 m to look at you;
 - your own planet hangs in the sky one hoop-length away, because the fourth direction closes back on itself;
 - the sun is a row of suns, and sunlight is their sum;
 - a thrown tesseract tumbles in two planes at once, its slice changing shape as it turns;
@@ -38,7 +39,7 @@ Nothing is explained. Everything is shown by the world behaving exactly as a 4D 
 
 Every pixel is a 4D ray traced through the world. Gravity is the exact sum over every image of every mass round the hoop. Thrown things, ropes, floating rafts and flights are integrated in that field, and the numbers are written down in the game's physics notes.
 
-It is a sandbox first: woods, rocks, ruins, cairns and caches to find, herds to meet. Running quietly through it is a trail of wordless artifacts, shown one goal at a time, that leads off the planet, to a second world, and to the console of the simulation itself.
+It is a sandbox first: woods and meadows, rocks, ruins, cairns and caches to find, herds to meet. Running quietly through it is a trail of wordless artifacts, shown one goal at a time, that leads off the planet, to a second world, and to the console of the simulation itself.
 
 **Controls:** WASD and Q/E to walk (Q/E step through the fourth direction), mouse to look, right-drag or Z/C to turn through ana, Space to jump, Shift to run, F to pick up and set down, hold the mouse to throw, G for an impulse stone, Tab for the big radar, 1–9 for its layers, L for its legend, H for help and settings.
 

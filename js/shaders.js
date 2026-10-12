@@ -515,8 +515,9 @@ float propShadow(vec4 ro, vec4 rd) {
 // Trees (trees.js): pieces from a float texture, three texels each (a, b, (radius, kind, 0, 0)), 512 to a row: capsules
 // for bark and leaves (a ball is a capsule of zero length), 4D cones for conifers' needles (a: the base's centre, b:
 // the apex). Grouped per tree, with the circle each tree's cut covers on the screen. Kinds: 0 bark, 1 leaves, 2 rope,
-// 3 a walker's leg, 4 needles, 5 pale bark, 6 dead wood.
-const int MAXTG = 320;
+// 3 a walker's leg, 4 needles, 5 pale bark, 6 dead wood; the flora's 7 a green stem, 8 a flower head, 9 a tuft of grass
+// (a cone, like needles).
+const int MAXTG = 640;
 uniform sampler2D uTreeTex;
 uniform sampler2D uTGTex;    // groups of a few pieces: (circle x, y, radius in pixels, bounding radius), bounding centre, (first, count)
 uniform int uTGN;
@@ -622,7 +623,7 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf, out i
         if (h <= 0.0) continue;
         float t = -bb - sqrt(h);
         if (t <= 0.0 || t >= best) continue;
-        if ((uDebug & 32768) == 0) t = leafEntry3(ro, rd, rd3, s3.xyz, s3.w, t);
+        if ((uDebug & 32768) == 0 && s3.w > 0.6) t = leafEntry3(ro, rd, rd3, s3.xyz, s3.w, t);   // (a small clump: solid, its leaves in its shading)
         if (t > 0.0 && t < best) { best = t; leaf = 1.0; cap = j; }
       }
       continue;
@@ -631,8 +632,9 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf, out i
       if (i >= cnt) break;
       int j = s0 + i;
       vec4 pa = treeT(j, 0), pb = treeT(j, 1), q = treeT(j, 2);
-      float t = q.y > 3.5 && q.y < 4.5 ? coneIntersect(ro, rd, pa, pb, q.x) : capIntersect(ro, rd, pa, pb, q.x);
-      if (t > 0.0 && t < best && q.y > 3.5 && q.y < 4.5 && (uDebug & 32768) == 0) t = needleEntry(ro, rd, pa, pb, q.x, t);
+      bool cone = (q.y > 3.5 && q.y < 4.5) || q.y > 8.5;
+      float t = cone ? coneIntersect(ro, rd, pa, pb, q.x) : capIntersect(ro, rd, pa, pb, q.x);
+      if (t > 0.0 && t < best && cone && q.y < 8.5 && (uDebug & 32768) == 0) t = needleEntry(ro, rd, pa, pb, q.x, t);   // (a tuft of grass: solid)
       if (t > 0.0 && t < best) { best = t; leaf = q.y; cap = j; }
     }
   }
@@ -1045,7 +1047,7 @@ vec3 shadeProp(vec4 p, vec4 n, int i, vec4 rd, float t) {
   else if (mat == 6) {                                     // a roller: glazed in two colours, checked by its two angles,
     float a1 = atan(q.y, q.x), a2 = atan(q.w, q.z);        // so its turning in two planes at once shows
     alb = mix(vec3(0.78, 0.36, 0.20), vec3(0.90, 0.84, 0.70), step(0.0, sin(3.0 * a1) * sin(3.0 * a2)));
-    alb *= 0.92 + 0.06 * d1; spec = 0.45; bumpK = 0.0;
+    alb *= 0.92 + 0.06 * d1; spec = 0.2; bumpK = 0.0;
   } else if (mat == 7) {                                   // a walker's hide: tawny, a dark saddle with bars, a pale belly
     float back = smoothstep(-0.1, 0.55, q.w), bar = smoothstep(0.25, 0.4, abs(fract(x.x * 3.2 + 0.2 * d1) - 0.5)) * smoothstep(0.35, 0.7, q.w);
     alb = mix(vec3(0.60, 0.42, 0.22), vec3(0.50, 0.27, 0.11), back);
@@ -1154,13 +1156,19 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
   return true;
 }
 
+// One sort of flower to a cluster (by its seed): yellow, white, violet, red, pink or blue.
+vec3 flowerColour(float s) {
+  int k = int(floor(fract(s * 7.13) * 6.0));
+  return k == 0 ? vec3(0.95, 0.76, 0.10) : k == 1 ? vec3(0.92, 0.91, 0.85) : k == 2 ? vec3(0.55, 0.30, 0.85)
+       : k == 3 ? vec3(0.86, 0.18, 0.13) : k == 4 ? vec3(0.96, 0.52, 0.70) : vec3(0.30, 0.45, 0.95);
+}
 vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t, float seed) {
   vec4 up = normalize(p), g, g2 = vec4(0.0);
   footprint(p, n, 1.0);
   int kind = int(leaf + 0.5);
-  bool foliage = kind == 1 || kind == 4;
-  float d1 = detail(p, foliage ? (kind == 4 ? 2.6 : 1.4) : 3.2, n, g), d2 = 0.0;
-  if (foliage && t < 40.0) d2 = detail(p, kind == 4 ? 8.0 : 4.6, n, g2) * (1.0 - smoothstep(15.0, 40.0, t));   // clumps of leaves, tufts of needles
+  bool foliage = kind == 1 || kind == 4 || kind == 9;
+  float d1 = detail(p, foliage ? (kind == 1 ? 1.4 : 2.6) : 3.2, n, g), d2 = 0.0;
+  if (foliage && t < 40.0) d2 = detail(p, kind == 1 ? 4.6 : 8.0, n, g2) * (1.0 - smoothstep(15.0, 40.0, t));   // clumps of leaves, tufts of needles
   // each tree its own green: deeper, fresher or more olive
   vec3 lo = mix(vec3(0.06, 0.15, 0.04), vec3(0.09, 0.15, 0.03), seed), hi = mix(vec3(0.22, 0.36, 0.10), vec3(0.32, 0.36, 0.11), seed * seed);
   vec3 alb = kind == 3 ? vec3(0.30, 0.19, 0.11) * (0.9 + 0.1 * d1)                                     // a walker's legs
@@ -1169,6 +1177,9 @@ vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t, float seed) {
            : kind == 4 ? mix(vec3(0.03, 0.10, 0.06), vec3(0.10, 0.22, 0.12), clamp(0.5 + 0.4 * d1 + 0.6 * d2, 0.0, 1.0))
            : kind == 5 ? mix(vec3(0.80, 0.78, 0.72), vec3(0.14, 0.12, 0.11), smoothstep(0.42, 0.52, d1) * 0.8)   // birch: pale, a few dark marks
            : kind == 6 ? vec3(0.42, 0.40, 0.37) * (0.86 + 0.12 * d1)                                   // dead wood: weathered grey
+           : kind == 7 ? vec3(0.13, 0.25, 0.06) * (0.9 + 0.1 * d1)                                     // a stem
+           : kind == 8 ? flowerColour(seed) * (0.9 + 0.1 * d1)                                         // a flower head
+           : kind == 9 ? mix(vec3(0.14, 0.22, 0.05), vec3(0.46, 0.50, 0.17), clamp(0.5 + 0.4 * d1 + 0.6 * d2, 0.0, 1.0))   // a tuft of grass
            : vec3(0.22, 0.17, 0.12) * (0.9 + 0.1 * d1);                                                // bark: dark, quiet
   vec4 bg = foliage ? 0.09 * g + 0.05 * g2 : (kind == 2 || kind == 3 ? 0.35 : 0.06) * g;
   vec4 nb = normalize(n - bg + n * dot(bg, n));
@@ -1339,7 +1350,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
         col *= mix(0.45, 1.0, smoothstep(0.55, 0.98, length(p - pb) / q.x));   // deep in a clump it is darker
       } else {
         vec4 ba = pb - pa; float L2 = dot(ba, ba), hh = L2 > 0.0 ? clamp(dot(p - pa, ba) / L2, 0.0, 1.0) : 0.0;
-        col = shadeTree(p, q.y > 3.5 && q.y < 4.5 ? coneNormal(p, pa, pb, q.x) : normalize(p - pa - ba * hh), q.y, rd, t, q.z);
+        col = shadeTree(p, (q.y > 3.5 && q.y < 4.5) || q.y > 8.5 ? coneNormal(p, pa, pb, q.x) : normalize(p - pa - ba * hh), q.y, rd, t, q.z);
       }
     }
     else if (kind == 6) col = shadeProp(p, propNormal(ro, rd, idx), idx, rd, t);

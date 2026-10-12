@@ -14,8 +14,8 @@ export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   
 // What the ball can show, each a layer you switch with the keys 1–9 or by clicking the legend beside it (with the
 // mouse free). The disc, the ground your slice shows, is always there.
 export const RADAR_LAYERS = [
-  { key: 'things', name: 'things', on: true },               // what you can carry: balls, blocks, stones, lanterns, parts, raft, sail
-  { key: 'landmarks', name: 'landmarks', on: true },         // the cave's mouth, ruins, the launcher, artifacts
+  { key: 'things', name: 'things to carry', on: true },     // balls, blocks, stones, lanterns, parts, raft, sail; a cache as one mark
+  { key: 'landmarks', name: 'places: cave, ruins, launcher, artifacts', on: true },
   { key: 'creatures', name: 'creatures', on: false },
   { key: 'water', name: 'water and coast', on: false },
   { key: 'mountains', name: 'solid mountains', on: false },  // ground above 24 m, and its shadow on the disc toward ana or kata
@@ -616,7 +616,7 @@ const legendSwatch = (key, x, y, k, on) => {
   const z = 3.2 * k;
   switch (key) {
     case 'things': octx.fillStyle = ACCENT; octx.fillRect(x - z, y - z, 2 * z, 2 * z); break;
-    case 'landmarks': drawLandmark('tree', [x, y + 0.5 * k], k * 0.9); break;
+    case 'landmarks': drawLandmark('ruin', [x, y + 0.5 * k], k * 0.85); break;
     case 'creatures': octx.fillStyle = 'rgba(240, 200, 150, 0.95)'; octx.beginPath(); octx.moveTo(x, y - z); octx.lineTo(x + z, y); octx.lineTo(x, y + z); octx.lineTo(x - z, y); octx.closePath(); octx.fill(); break;
     case 'water': octx.fillStyle = 'rgba(70, 140, 220, 0.95)'; octx.beginPath(); octx.arc(x, y, z, 0, 7); octx.fill(); break;
     case 'mountains': octx.fillStyle = 'rgba(235, 185, 135, 0.95)'; octx.beginPath(); octx.moveTo(x - 1.3 * z, y + z); octx.lineTo(x - 0.2 * z, y - z); octx.lineTo(x + 0.4 * z, y); octx.lineTo(x + 1.3 * z, y + z); octx.closePath(); octx.fill(); break;
@@ -640,7 +640,8 @@ function drawLegend(rect, k, whole, pinned, u, mono) {
   const foot = ['disc: your slice · above ana · below kata', 'L legend · K hide · Tab big · M · P pin', 'wheel zoom · Esc, then drag / click'];
   const H = pad * 2 + (head.length + RADAR_LAYERS.length + foot.length) * row + 8 * k;
   octx.font = mono(500, 10.5); let W = Math.max(...head.map(t => octx.measureText(t).width));
-  octx.font = mono(400, 9.5); W = Math.max(W, 190 * k, ...foot.map(t => octx.measureText(t).width)) + 2 * pad;
+  octx.font = mono(400, 9.5); W = Math.max(W, 190 * k, ...foot.map(t => octx.measureText(t).width));
+  octx.font = mono(500, 11); W = Math.max(W, 40 * k + Math.max(...RADAR_LAYERS.map(L => octx.measureText(L.name).width))) + 2 * pad;
   const x0 = Math.max(4 * k, rect.x - W - 10 * k), y0 = Math.max(4 * k, rect.y + rect.s - H);
   legend.rect = { x: x0, y: y0, w: W, h: H };
   octx.fillStyle = 'rgba(11, 14, 20, 0.72)'; octx.strokeStyle = 'rgba(58, 72, 102, 0.9)'; octx.lineWidth = 1 * k;
