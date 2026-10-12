@@ -8,7 +8,7 @@ import { skyUniforms } from './cosmos.js';
 import { bUniforms, NORMAL_DATA } from './planetB.js';
 import { carveUniforms } from './landforms.js';
 import { props, MAXP } from './props.js';
-import { beacons } from './artifacts.js';
+import { beam } from './guide.js';
 import { tgpu, MAXTC, MAXTG } from './trees.js';
 import { tiles, buildTiles, MAXIDX } from './tiles.js';
 
@@ -357,7 +357,7 @@ export function setWorld(p, cam, sun) {
   gl.uniform1f(p.u('uScreenOn'), G.screenOn ? 1 : 0);
   if (p.slice) {
     gl.uniform1i(p.u('uSunTex'), 11); gl.uniform1i(p.u('uHits'), 5);   // (every sampler its own unit, used or not)
-    gl.uniform4fv(p.u('uBeacon'), beacons.B); gl.uniform4fv(p.u('uBeaconC'), beacons.C); gl.uniform1i(p.u('uBeaconN'), G.player && G.player.onB == null ? beacons.n : 0);
+    gl.uniform4fv(p.u('uBeam'), beam.B); gl.uniform4fv(p.u('uBeamC'), beam.C); gl.uniform4fv(p.u('uBeamS'), beam.S);
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, propTex);
     gl.uniform1i(p.u('uPropTex'), 3); gl.activeTexture(gl.TEXTURE0);
     gl.uniform4fv(p.u('uPS'), props.circles); gl.uniform4fv(p.u('uPC'), props.centres);

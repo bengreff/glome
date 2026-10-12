@@ -68,7 +68,7 @@ function cache(n, hf, size = 2 + Math.floor(rnd() * 3), lift = 0) {
   for (let i = 0; i < size; i++) {
     const q = i ? off(n, vec4.norm(vec4.add(vec4.add(vec4.scale(T[0], rnd() - 0.5), vec4.scale(T[1], rnd() - 0.5)), vec4.scale(T[2], rnd() - 0.5))), 0.7 + 1.2 * rnd()) : n;
     const b = spawn(KINDS[Math.floor(rnd() * KINDS.length)], q, { lift, extra: { gen: nextGen() } });
-    b.spawnPos = b.pos.slice(); b.sleeping = true;
+    b.spawnPos = b.pos.slice(); b.sleeping = true; b.find = 'cache'; b.cache = finds.caches.length;
   }
   finds.caches.push({ n });
 }
@@ -78,7 +78,7 @@ function cairn(n, hf, h = 3) {
   for (let i = 0; i < h; i++) {
     const kind = i === h - 1 && rnd() < 0.4 ? 'glomeS' : 'tessS';
     const b = spawn(kind, n, { lift, rot: kind === 'tessS' ? fr.rot : null, extra: { gen: nextGen() } });
-    b.spawnPos = b.pos.slice(); b.sleeping = true;
+    b.spawnPos = b.pos.slice(); b.sleeping = true; b.find = 'cairn';
     lift += kind === 'tessS' ? 0.3 : 0.36;
   }
   finds.cairns.push({ n });

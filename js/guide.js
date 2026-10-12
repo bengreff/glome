@@ -1,0 +1,93 @@
+// The way: one goal at a time, shown without words. Its column of light stands in your slice, wherever the goal
+// really lies (straight above its place, moved into your slice along ana: a guide for a 3D mind, not a thing of the
+// world); a mark in the view gives its distance; and when the goal lies off your slice, a cue beside the mark says
+// which way to step to reach it (E toward ana, Q toward kata, in the radar's colours) and how far. Near the goal a
+// cue says what to do there: take (F), set down (F), turn through ana (Z C), let go, jump (Space).
+// The goals follow the artifacts' chain: the cave's mouth and then its chamber; a part set free, then the
+// launcher's pad to lay it on; the next artifact and what it asks for; with all four parts, the pad itself.
+import { G } from './game.js';
+import { vec4 } from './player.js';
+import { PLANET_R } from './world.js';
+import { rot as R4 } from './so4.js';
+import { objects } from './objects.js';
+import { launcher } from './launcher.js';
+import { artifacts } from './artifacts.js';
+import { flight } from './flight.js';
+import { carves } from './landforms.js';
+
+export const guide = { goal: null };
+const TIER = { room: 1, mirror: 2, knot: 3, antipode: 4 };
+const solved = a => !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1));
+const onPad = b => launcher.site && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring;
+const segDist = (p, a, b) => { const ab = vec4.sub(b, a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(p, a), ab) / Math.max(1e-9, vec4.dot(ab, ab)))); return vec4.len(vec4.sub(p, vec4.add(a, vec4.scale(ab, t)))); };
+
+// goal: { pos (4D), kind, cue: null | 'F' | 'turn' | 'E' | 'Space', thing (a ball inside the mark: bring something) }
+export function updateGuide() {
+  const p = G.player;
+  guide.goal = null;
+  if (!p || p.onB != null || flight.active || !G.artifacts || !launcher.site) return;
+  const set = (pos, kind, o = {}) => { guide.goal = { pos, kind, cue: null, ...o }; };
+  const near = (q, r) => vec4.len(vec4.sub(p.pos, q)) < r;
+  const held = objects.held, bodies = objects.world.bodies;
+  // carrying a part: to the pad, and set it down in its ring
+  if (held && held.kind === 'part') return set(launcher.site, 'pad', { cue: near(launcher.site, launcher.ring) ? 'F' : null });
+  // a part set free and not yet on the pad: go and take it
+  let free = null, fd = Infinity;
+  for (const b of bodies) {
+    if (b.kind !== 'part' || b.held || onPad(b)) continue;
+    const a = artifacts.find(x => TIER[x.id] === b.tier);
+    if (a && !solved(a)) continue;
+    const d = vec4.len(vec4.sub(b.pos, p.pos)); if (d < fd) { fd = d; free = b; }
+  }
+  if (free) return set(free.pos, 'part', { cue: G.canTake && fd < 4 ? 'F' : null });
+  const next = artifacts.find(a => !solved(a));
+  if (!next) return set(launcher.site, 'launch', { cue: launcher.onPad ? 'Space' : null });
+  if (next.id === 'room' && G.cave) {
+    // the cave: down into its mouth first (a hollow in the hillside, round in any slice); once you stand in the
+    // tunnel, the chamber and the part on its floor
+    const part = bodies.find(b => b.kind === 'part' && b.tier === 1), up = vec4.norm(G.cave.mouth);
+    const t = carves.find(c => c.name === 'tunnel'), inside = (t && segDist(p.pos, t.a, t.b) < t.r + 0.3) || near(G.cave.chamber, 6.8);
+    return inside ? set(part ? part.pos : G.cave.chamber, 'cave') : set(vec4.sub(G.cave.mouth, vec4.scale(up, 1.9)), 'mouth');
+  }
+  if (next.id === 'mirror') {
+    const key = bodies.find(b => b.tag === 'key2');
+    if (!key) return set(next.n && vec4.scale(next.n, PLANET_R), 'artifact');
+    if (!key.held) return set(key.pos, 'key', { cue: G.canTake && near(key.pos, 4) ? 'F' : null });
+    // holding the key: to its socket; there, turn it through ana until it matches the model, and set it down
+    const M = R4.toRows(key.rot), kx = [0, 1, 2, 3].map(i => M[i][0]), ky = [0, 1, 2, 3].map(i => M[i][1]);
+    const fits = vec4.dot(kx, next.target[0]) > 0.8 && vec4.dot(ky, next.target[1]) > 0.8;
+    return set(next.sock, 'socket', { cue: near(next.sock, 4) ? (fits ? 'F' : 'turn') : null });
+  }
+  if (next.id === 'knot' && G.rope) {
+    const R = G.rope, post = G.knotPost;
+    if (G.ropeHeld == null) return set(R.x[17], 'rope', { cue: near(R.x[17], 3.5) ? 'F' : null });
+    // holding the loop: step through ana until it is clear of the post, then let go
+    const clear = R.x.every(q => segDist(q, post.a, post.b) > 1.0);
+    return set(R.x[G.ropeHeld], 'loop', { cue: clear ? 'F' : 'E' });
+  }
+  if (next.id === 'antipode') {
+    // the bowl on the summit wants something left in it (anything you can carry)
+    return set(next.bowl, 'bowl', { thing: !held, cue: held && near(next.bowl, 2.5) ? 'F' : null });
+  }
+  set(vec4.scale(next.n, PLANET_R + p.hf.heightAt(next.n)), 'artifact');
+}
+
+// ---------- the column of light ----------
+// The goal's column, set into your slice: straight up from the ground at the goal's place, moved along ana into your
+// slice, so that it shows wherever you face it (the hills in front still hide its foot). While the goal itself lies
+// off your slice the column is dashed, its dashes rising; standing at it, it fades, and the mark takes over.
+export const beam = { B: new Float32Array(4), C: new Float32Array(4), S: new Float32Array(4) };
+const ACC = [0.32 * 1.5, 0.86 * 1.5, 0.78 * 1.5], WARM = [1.25, 1.2, 1.05];
+export function updateBeam(cam) {
+  const g = guide.goal;
+  beam.S[2] = 0;
+  if (!g) return;
+  const hf = G.player.hf, A = cam.A, eye = cam.eye;
+  const a = vec4.dot(vec4.sub(g.pos, eye), A);
+  const nP = vec4.norm(vec4.sub(g.pos, vec4.scale(A, a)));          // its place, moved into your slice
+  const base = vec4.scale(nP, PLANET_R + Math.max(hf.heightAt(nP), 0));
+  const up = vec4.norm(eye), d = vec4.sub(base, eye), dh = vec4.len(vec4.sub(d, vec4.scale(up, vec4.dot(d, up))));
+  beam.B.set(base);
+  beam.C.set([...(g.kind === 'pad' || g.kind === 'launch' ? WARM : ACC), 150]);
+  beam.S.set([Math.min(1, Math.max(0, (Math.abs(a) - 1.0) / 1.5)), Math.min(1, Math.max(0, (dh - 3) / 9)), 1, Math.abs(a)]);
+}

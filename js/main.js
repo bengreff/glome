@@ -9,7 +9,8 @@ import { radar, radarRect, drawRadar, blitRadar, drawRadarOverlay, makeRadarVolu
          compassAt, logMap } from './radar.js';
 import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulders.js';
 import { keys, mouse, SENS, readInput, actions, pad, pollPad } from './input.js';
-import { gazePoint, drawFaced, drawGazeDot, drawBMarks, updateHUD } from './hud.js';
+import { gazePoint, drawFaced, drawGazeDot, drawBMarks, drawGoal, updateHUD } from './hud.js';
+import { guide, updateGuide, updateBeam } from './guide.js';
 import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
 import { LAWS } from './laws.js';
 import { accelBodyA } from './cosmos.js';
@@ -28,8 +29,8 @@ import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
 import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
 import { Rope } from './rope.js';
-import { creatures, initCreatures, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
-import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts, updateBeacons } from './artifacts.js';
+import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
+import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad } from './cosmos.js';
 import { stepBoats, windAt } from './boats.js';
@@ -282,7 +283,7 @@ function frameBody(now) {
   if (player.onB == null) {
     updateArtifacts();
     stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
-    const cd = creatureDraw(cam.eye, cam.A, player.hf);
+    const cd = creatureDraw(cam.eye, cam.A, player.hf, dt);
     setExtraProps(cd.items); legSlot.caps = cd.caps;          // the creatures' bodies are props; their legs go with the trees
   } else { setExtraProps([]); legSlot.caps = []; }
   G.creatureItems = bItems(cam, tR, alpha);                  // B's pillars and console, when near
@@ -298,7 +299,7 @@ function frameBody(now) {
       }
     }
   }
-  if (player.onB == null) updateBeacons(cam.eye);
+  updateGuide(); updateBeam(cam);
   uploadProps(cam, sun, scene.w, scene.h, FOV);
   treeFrame(cam, sun, scene.w, scene.h, FOV);
   const q = gpuBegin();
@@ -319,7 +320,7 @@ function frameBody(now) {
   G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
-  if (!state.bare) { drawFaced(cam); drawBMarks(); drawGazeDot(); }
+  if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); }
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
   if (spaceMode && !state.radar.hidden && !state.bare) {
     const u = player.up(), pc = player.camera(), dir = vec4.dot(pc.F, u) > 0.05 ? pc.F : u;
@@ -405,6 +406,8 @@ function frameBody(now) {
       // part I lies on the cave's floor, in the chamber you reach only through the tunnel toward ana
       const part1 = objects.world.bodies.find(b => b.kind === 'part' && b.tier === 1);
       if (part1 && G.cave) { part1.pos = vec4.add(G.cave.floor, vec4.scale(vec4.norm(G.cave.floor), 0.6)); part1.sleeping = false; }
+      // and a lantern beside it, lighting the chamber
+      if (G.cave) { const u = vec4.norm(G.cave.floor), t = tangents(u)[0], l = spawnObj('lantern', u); l.pos = vec4.add(vec4.add(G.cave.floor, vec4.scale(u, 0.5)), vec4.scale(t, 1.6)); l.sleeping = false; }
       G.partSpots = [p1, p2, p3, p4];
     }
     hooks.objects = objectsSave;
@@ -412,6 +415,9 @@ function frameBody(now) {
       // herds where you will go first: near where you arrive, on the way up to the summit, and by each artifact's place
       const home = player.up(), way = f => vec4.norm(vec4.add(vec4.scale(home, 1 - f), vec4.scale(launcher.n, f)));
       initCreatures(player.hf, [[home, 45, 8], [home, 75, 7], [way(0.3), 25, 7], [way(0.6), 25, 6], ...(G.partSpots || []).map(n => [vec4.norm(n), 35, 6])]);
+      // and a few in your first view, grazing ahead of you in your slice; most of them will come and look
+      const at = (deg, m) => { const a = deg * Math.PI / 180; return vec4.norm(vec4.add(vec4.scale(home, Math.cos(m / 250)), vec4.scale(vec4.norm(vec4.add(vec4.scale(player.F, Math.cos(a)), vec4.scale(player.R, Math.sin(a)))), Math.sin(m / 250)))); };
+      [[-20, 19, true], [-7, 23, true], [-30, 25, true], [6, 18, false], [-14, 28, true]].forEach(([d, m, cur]) => { const n = at(d, m); if (player.hf.heightAt(n) > 1 && player.hf.waterAt(n) < 0.01) addWalker(n, cur); });
     }
     hooks.creatures = creaturesSave;
     G.creatures = creatures;
@@ -517,7 +523,7 @@ function frameBody(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer, guide } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

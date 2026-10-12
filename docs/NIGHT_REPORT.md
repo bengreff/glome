@@ -1,10 +1,10 @@
 # Night report
 
-The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, and run three on 11 October, which takes Glome to v1.0 (its section is at the end).
+The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, and run four the same day, which shows the way (v1.1); their sections are at the end.
 
 **Play:** https://bengreff.github.io/glome/ · **Hub:** https://bengreff.github.io/ · **Source:** https://github.com/bengreff/glome
 
-Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
+Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
 
 ## What to try first
 
@@ -185,3 +185,39 @@ Every choice made in this run, with its reason, is under "Run three decisions" i
 1. **itch.io:** upload `dist/glome-v1.0.zip` (built with `tools/package.sh`; it is gitignored) as an HTML game, with the settings and text in [ITCH.md](ITCH.md) (updated for the new things).
 2. **The hub:** approve or edit the copy on https://bengreff.github.io/ (unchanged since day two).
 3. **Play it with sound on.** The new things make few sounds of their own (rock underfoot, a chime when a socket lights); listening is the one check I could not make.
+
+## Run four (11 October): the way (v1.1)
+
+You played v1.0 and said: the column of light should be clearer; you found nothing and no creatures; at the column there were only rocks you could not use; the radar was still cluttered and unclear; it must be possible to figure out what to do. I played it as a new player in the headless browser first, and you were right on every count:
+
+- **The column you walked to led onto a hilltop above the cave.** It stood over part I, which lies in the chamber 7.5 m under the hill; the only way in is a tunnel whose mouth lies 16 m toward ana. Walking to the column put you on solid ground over the chamber with nothing to do, and the column, by then all around you, turned into a fog.
+- **The creatures were there and did not look like creatures.** Four walkers stood within 11 m of the start, behind you: grey metal boxes on thin dark legs, which a slice mostly misses.
+- **The "rocks you could not interact with"** were the cave's arch: blocks of the same pale stone as the cubes you can carry, but fixed.
+- **The radar held some forty marks** at the start: every block of every cairn, every ball of every cache, every wood as a green patch, trees, and labels.
+
+### What changed
+
+1. **One goal at a time, and a guide that says how to reach it.** A diamond marks the goal in your view (on the screen's edge, with an arrow, when it is behind you), with its distance. When the goal lies off your slice, a key and a caret beside it say which way to step and how far: **E ▲ 16 m** (toward ana, orange) or **Q ▼** (toward kata, blue), the radar's colours. At the goal's place the same cue grows under the dot, and when there is something to do there the key under the dot says it: F to take or set down, Z C and a half-turn to turn the mirror key through ana, E to slip the knot's loop off its post, Space on a charged pad. A small F also appears whenever the dot rests on something you can carry. The goals run in the artifacts' order: the cave's mouth, its chamber, part I, the launcher's pad, the mirror key and its socket, the knot's rope, the bowl, and each freed part back to the pad.
+2. **The column of light is the goal's, and it stands in your slice.** Straight up from the goal's place, moved along ana into your slice, so you see it whichever way you face; a bright core with a soft halo; dashed (the dashes rising) while the goal lies off your slice, solid once it is in; faded as you reach it, so it never fogs the view. Warm white over the launcher's pad, the accent colour elsewhere.
+3. **The cave is enterable by following the cues.** The first goal is the floor of the mouth's hollow; in the tunnel the goal becomes part I, 15 m toward kata, and the cue says Q. Eight posts of dark stone ring the mouth, and a lantern lights the chamber. A new playthrough (tools/playthrough/pt_room.js) follows the cues with real keys from where you arrive: it steps through ana, walks to the mouth, steps down the tunnel into the chamber, takes part I, and the guide turns to the pad.
+4. **Walkers are animals.** A tawny body with a dark barred saddle, a head with two eyes, legs under it. Near you a walker turns square to your slice, so that its eyes and four of its eight legs are in it and it stands like a four-legged animal (the other four legs stand off your slice). Most are curious now (60%) and notice you from 30 m; shy ones trot away in your slice, and only a third of those leave through ana. Five graze in your first view. Rollers are glazed in two colours, checked by their two angles, so you see them turn in two planes at once.
+5. **Fixed things look fixed:** the builder's dark stone with faintly lit edges. What you can carry stays pale.
+6. **The radar keeps to what matters.** The goal is its brightest mark, on a stalk, with a dashed line from you along the disc. Every mark stands on a stalk to the disc, orange up toward ana, blue down toward kata, so its length is how far it lies off your slice. An untouched cairn is no longer a "thing"; an untouched cache is one mark. Woods and trees are gone from it; the compass letters, the sun's height, the scale and the gaze distance show on the big radar (Tab) or with the legend up.
+
+### What to try first
+
+1. Look at the diamond ahead and the cue beside it (**E ▲ 16 m**). Hold E: the dashed column turns solid as the cave's mouth comes into your slice. Walk to it, down into the hollow, and hold Q as the cue says.
+2. Look a little left from where you arrive: a small herd grazes there, and most of it comes over to look at you. Rush one and it bolts.
+3. Take part I in the chamber (F) and follow the warm column to the launcher; set it down in the ring (F) and its socket lights.
+
+### Gates
+
+- **Unit tests** all pass (so4, bodies, rope, audio, creatures). **Smoke:** no errors, boot 4.4 s (with another session's jobs keeping the Mac's load at 7–12).
+- **Performance** (M2 Pro, 60 fps at 50% resolution or more): start 56.9%, in a wood 55.8%, at a herd 58.7%, looking down 60.9%, at an outcrop 56.9%, each at 57–60 fps.
+- **Persistence:** save and reload, export and import, and the found things' saves (27 KB) all pass.
+- **Playthroughs:** the cave by its cues (new), the mirror, the knot and the antipode all solve, and the guide turns to the freed part after each; tier IV lands on B (61 s, predicted 60). The orbit's first run picked a path whose low point was 349 m and came down before a full turn; run again, it went round (low point 395 m). Orbits remain as marginal as the Known issues of run three say.
+
+### For you
+
+1. **itch.io:** upload `dist/glome-v1.1.zip` (built with `tools/package.sh`) in place of v1.0, with the settings in [ITCH.md](ITCH.md).
+2. **Play the first five minutes again** and tell me where the cues still leave you guessing. The cave, the carry to the launcher and the mirror's cues are checked on screen; the knot's and the bowl's cues are checked in code and by their playthroughs, not by eye.

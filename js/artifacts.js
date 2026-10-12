@@ -16,6 +16,7 @@ import { makeBody } from './bodies.js';
 import { objects, spawn, KINDS } from './objects.js';
 import { launcher } from './launcher.js';
 import { carves } from './landforms.js';
+import { makeProp, addRock, SHAPE, MAT } from './props.js';
 
 export const artifacts = [];        // { id, name, n (unit position), solved(), vault, part, ... }
 const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
@@ -37,8 +38,9 @@ function frameAt(n, f0) {
   a = proj(a, n);
   return { f, s, a, up: n };
 }
-// A fixed block of stone or metal (a tesseract of the given side), resting with its centre at height h above the ground.
-function block(n, side, { lift = 0, mat = 0, glow = 0, rot = null, tag = null } = {}) {
+// A fixed block of the builder's dark stone (or metal), a tesseract of the given side, resting on the ground: unlike
+// the pale things you can carry, its edges are faintly lit.
+function block(n, side, { lift = 0, mat = 3, glow = 0, rot = null, tag = null } = {}) {
   const h = G.player.hf.heightAt(n), fr = frameAt(n);
   const b = makeBody({ shape: 'tesseract', size: side, mass: 1e9, pos: vec4.scale(n, PLANET_R + h + side / 2 + lift - 0.04), rot: rot || rotFromCols([fr.f, fr.s, fr.a, n]), kind: 'block' });
   b.kinematic = true; b.fixed = true; b.mat = mat; b.glow = glow; b.tag = tag;
@@ -51,11 +53,17 @@ function freeze(b) { if (b) { b.kinematic = true; b.sleeping = true; b.vel = [0,
 export function buildArtifacts() {
   artifacts.length = 0;
   const hf = G.player.hf;
-  // I. the closed room: a built arch frames the tunnel's mouth (the cave itself is in landforms.js)
+  // I. the closed room: eight posts of dark stone, faintly lit, ring the tunnel's mouth across the tunnel's way (so a
+  // slice through the mouth that the tunnel leaves, toward kata, shows them all round it); the cave itself is in
+  // landforms.js
   if (G.cave) {
-    const m = vec4.norm(G.cave.mouth), toward = proj(vec4.sub(vec4.norm(G.cave.chamber), m), m), side = frameAt(m, toward).s;
-    const legs = [-1, 1].map(sg => off(m, side, sg * 3.0));
-    for (const n of legs) { block(n, 0.6); block(n, 0.6, { lift: 0.6 }); block(n, 0.6, { lift: 1.2, glow: 0.1 }); }
+    const m = vec4.norm(G.cave.mouth), toward = proj(vec4.sub(vec4.norm(G.cave.chamber), m), m), fr = frameAt(m, toward);
+    for (let i = 0; i < 8; i++) {
+      const ang = i * Math.PI / 4, dir = vec4.norm(vec4.add(vec4.scale(fr.s, Math.cos(ang)), vec4.scale(fr.a, Math.sin(ang))));
+      const q = off(m, dir, 3.6), f2 = frameAt(q, toward);
+      const p = makeProp({ c: vec4.scale(q, PLANET_R + hf.heightAt(q) + 0.55), rot: rotFromCols([f2.f, f2.s, f2.a, q]), e: [1.6, 0.18, 0.18, 0.75], shape: SHAPE.box, mat: MAT.basalt, glow: 0.14 });   // (long along the tunnel's way: seen within 1.6 m of its slice)
+      p.kind = 'ruin'; addRock(p);
+    }
     artifacts.push({ id: 'room', name: 'the closed room', n: m, solved: () => !!G.flags.part1 });
   }
   // II. the mirror key, beside part II
@@ -156,29 +164,4 @@ export function syncArtifacts() {
     if (G.flags['solved_' + a.id]) open(a, true);
     else freeze(a.part);
   }
-}
-
-// ---------- beacons ----------
-// Columns of soft light (shaders.js): over each artifact not yet solved, over each part lying loose (out of its vault and
-// not yet on the launcher's ring), and over the launcher while you carry a part. The nearest six.
-export const beacons = { B: new Float32Array(24), C: new Float32Array(24), n: 0 };
-const ACC = [0.32 * 1.4, 0.86 * 1.4, 0.78 * 1.4];
-export function updateBeacons(eye) {
-  const hf = G.player.hf, list = [];
-  const ground = n => vec4.scale(n, PLANET_R + Math.max(hf.heightAt(n), 0));
-  for (const a of artifacts) {
-    const solved = G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1);
-    if (!solved) list.push({ base: ground(a.n), c: ACC, h: 150 });          // (tall: on a 250 m planet a column of height H shows over the horizon out to about √(500·H) m)
-  }
-  const held = objects.held;
-  for (const b of objects.world.bodies) {
-    if (b.kind !== 'part' || b.kinematic || b.held) continue;
-    if (launcher.site && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring) continue;
-    list.push({ base: ground(vec4.norm(b.pos)), c: ACC.map(v => v * 0.8), h: 90 });
-  }
-  if (held && held.kind === "part" && launcher.n) list.push({ base: ground(launcher.n), c: [1.1, 1.1, 1.0], h: 150 });
-  list.forEach(x => { x.d = vec4.len(vec4.sub(x.base, eye)); });
-  list.sort((x, y) => x.d - y.d);
-  beacons.n = Math.min(6, list.length);
-  for (let i = 0; i < beacons.n; i++) { beacons.B.set(list[i].base, 4 * i); beacons.C.set([...list[i].c, list[i].h], 4 * i); }
 }

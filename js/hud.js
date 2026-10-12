@@ -7,6 +7,7 @@ import { radar, headingTo } from './radar.js';
 import { boulders } from './boulders.js';
 import { floorOf, NORMALS, B_IN } from './planetB.js';
 import { bworld } from './console.js';
+import { guide } from './guide.js';
 
 const $ = id => document.getElementById(id);
 
@@ -90,6 +91,93 @@ export function drawBMarks() {
   octx.restore();
 }
 
+// A key, drawn as the help panel draws one: a small dark cap with its letter. Returns its width.
+function keyCap(x, y, label, col, k, s = 1) {
+  octx.font = `600 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`;
+  const w = Math.max(18 * k * s, octx.measureText(label).width + 10 * k * s), h = 18 * k * s;
+  octx.fillStyle = 'rgba(11, 14, 20, 0.78)'; octx.strokeStyle = col; octx.lineWidth = 1.3 * k;
+  octx.beginPath(); if (octx.roundRect) octx.roundRect(x, y - h / 2, w, h, 4 * k * s); else octx.rect(x, y - h / 2, w, h); octx.fill(); octx.stroke();
+  octx.fillStyle = col; octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillText(label, x + w / 2, y + 0.5 * k);
+  octx.textBaseline = 'alphabetic';
+  return w;
+}
+const ANA = 'rgba(255, 175, 100, 0.98)', KATA = 'rgba(125, 180, 255, 0.98)', GOAL = 'rgba(82, 220, 200, 0.98)';
+// The way across ana: a key (E or Q), a caret up (ana) or down (kata), and how far. Returns its width.
+function anaCue(x, y, a, k, s = 1) {
+  const col = a > 0 ? ANA : KATA;
+  let w = keyCap(x, y, a > 0 ? 'E' : 'Q', col, k, s) + 5 * k * s;
+  const c = 5 * k * s, up = a > 0 ? -1 : 1;
+  octx.fillStyle = col; octx.beginPath(); octx.moveTo(x + w, y - up * c * 0.6); octx.lineTo(x + w + 2 * c, y - up * c * 0.6); octx.lineTo(x + w + c, y + up * c); octx.closePath(); octx.fill();
+  w += 2 * c + 5 * k * s;
+  octx.font = `600 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'left'; octx.textBaseline = 'middle';
+  const t = `${Math.abs(a) < 10 ? Math.abs(a).toFixed(0) : Math.round(Math.abs(a))} m`;
+  octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const tw = octx.measureText(t).width; octx.fillRect(x + w - 3 * k, y - 8 * k * s, tw + 6 * k, 16 * k * s);
+  octx.fillStyle = col; octx.fillText(t, x + w, y + 0.5 * k); octx.textBaseline = 'alphabetic';
+  return w + tw;
+}
+// The way's mark (guide.js): a diamond where the goal lies in your view, moved into your slice (on the screen's edge,
+// toward it, when it is off the screen), with its distance; filled when the goal is in your slice, hollow with the
+// way across ana beside it when it is not. Near it, or with something to do there, a cue sits under the gaze dot.
+export function drawGoal(cam) {
+  const g = guide.goal;
+  if (!g) return;
+  const W = overlay.width, H = overlay.height, k = W / innerWidth, fx = FOV * W / H;
+  const d = vec4.sub(g.pos, cam.eye), dist = vec4.len(d);
+  const z = vec4.dot(d, cam.F), x = vec4.dot(d, cam.R), y = vec4.dot(d, cam.U), a = vec4.dot(d, cam.A);
+  const inSlice = Math.abs(a) < 1.5, here = Math.hypot(z, x, y) < 6;
+  octx.save();
+  if (dist > 2.5) {
+    let sx = x / Math.max(z, 1e-3) / fx, sy = y / Math.max(z, 1e-3) / FOV;
+    const inside = z > 0.5 && Math.abs(sx) < 0.92 && Math.abs(sy) < 0.86;
+    if (!inside) { const l = Math.hypot(x, y) || 1; const e = Math.min(0.92 / Math.abs(x / l || 1e-9), 0.84 / Math.abs(y / l || 1e-9)); sx = x / l * e; sy = y / l * e; }
+    let X = (sx * 0.5 + 0.5) * W, Y = (0.5 - sy * 0.5) * H;
+    const r = 9 * k, pulse = 1 + 0.12 * Math.sin(performance.now() / 260), rr = radar.rect;
+    if (rr && X > rr.x - 40 * k && Y > rr.y - 40 * k) X = rr.x - 40 * k;   // (never under the radar)
+    octx.lineWidth = 2.2 * k; octx.strokeStyle = 'rgba(5, 10, 16, 0.6)';
+    const dia = R => { octx.beginPath(); octx.moveTo(X, Y - R); octx.lineTo(X + R, Y); octx.lineTo(X, Y + R); octx.lineTo(X - R, Y); octx.closePath(); };
+    dia(r * pulse + 1.5 * k); octx.stroke();
+    dia(r * pulse); octx.strokeStyle = GOAL; octx.lineWidth = 2 * k; octx.stroke();
+    if (inSlice) { octx.fillStyle = 'rgba(82, 220, 200, 0.55)'; octx.fill(); }
+    if (g.thing) { octx.fillStyle = 'rgba(236, 240, 246, 0.95)'; octx.beginPath(); octx.arc(X, Y, 3 * k, 0, 7); octx.fill(); }   // bring something
+    if (!inside) {                                            // off the screen: an arrow on the edge, outward
+      const ang = Math.atan2(-(Y - H / 2), X - W / 2), ax = X + Math.cos(ang) * (r + 7 * k), ay = Y - Math.sin(ang) * (r + 7 * k);
+      octx.fillStyle = GOAL; octx.beginPath();
+      octx.moveTo(ax + Math.cos(ang) * 6 * k, ay - Math.sin(ang) * 6 * k);
+      octx.lineTo(ax + Math.cos(ang + 2.4) * 5 * k, ay - Math.sin(ang + 2.4) * 5 * k); octx.lineTo(ax + Math.cos(ang - 2.4) * 5 * k, ay - Math.sin(ang - 2.4) * 5 * k);
+      octx.closePath(); octx.fill();
+    }
+    octx.font = `500 ${11 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'right';   // its distance, to its left
+    const t = `${Math.round(dist)} m`, tw = octx.measureText(t).width + 8 * k;
+    octx.fillStyle = 'rgba(11, 14, 20, 0.55)'; octx.fillRect(X - r - 8 * k - tw, Y - 8 * k, tw, 16 * k);
+    octx.fillStyle = GOAL; octx.fillText(t, X - r - 12 * k, Y + 4 * k);
+    if (!inSlice && !here) {                                 // beside it, on whichever side has room
+      octx.globalAlpha = 0; const cw = anaCue(0, -100, a, k); octx.globalAlpha = 1;
+      anaCue(X + r + 8 * k + cw < W - 8 * k ? X + r + 8 * k : X - r - 16 * k - tw - cw, Y, a, k);
+    }
+  }
+  // under the dot: the way across ana once you stand at the goal's place in your slice, else what to do there
+  const cx = W / 2, cy = H / 2 + 34 * k;
+  const centred = w => cx - w / 2;
+  if (!inSlice && Math.hypot(z, x) < 7) {
+    octx.globalAlpha = 0; const w = anaCue(0, -100, a, k, 1.3); octx.globalAlpha = 1;
+    anaCue(centred(w), cy, a, k, 1.3);
+  } else if (g.cue === 'F' || g.cue === 'Space') {
+    octx.globalAlpha = 0; const w = keyCap(0, -100, g.cue, GOAL, k, 1.3); octx.globalAlpha = 1;
+    keyCap(centred(w), cy, g.cue, GOAL, k, 1.3);
+  } else if (g.cue === 'E') {                               // step toward ana (as far as it takes)
+    const c = 6.5 * k, x0 = centred(18 * 1.3 * k + 6 * k + 2 * c), x1 = x0 + keyCap(x0, cy, 'E', ANA, k, 1.3) + 6 * k;
+    octx.fillStyle = ANA; octx.beginPath(); octx.moveTo(x1, cy + c * 0.6); octx.lineTo(x1 + 2 * c, cy + c * 0.6); octx.lineTo(x1 + c, cy - c); octx.closePath(); octx.fill();
+  } else if (g.cue === 'turn') {
+    // turn through ana, half a turn: Z or C, and an arc of 180°
+    let x0 = cx - 46 * k;
+    x0 += keyCap(x0, cy, 'Z', ANA, k, 1.3) + 4 * k; x0 += keyCap(x0, cy, 'C', ANA, k, 1.3) + 12 * k;
+    octx.strokeStyle = ANA; octx.lineWidth = 2.2 * k; octx.beginPath(); octx.arc(x0 + 8 * k, cy + 2 * k, 8 * k, Math.PI, 0); octx.stroke();
+    octx.fillStyle = ANA; octx.beginPath(); octx.moveTo(x0 + 12 * k, cy + 1 * k); octx.lineTo(x0 + 20 * k, cy + 1 * k); octx.lineTo(x0 + 16 * k, cy + 7 * k); octx.closePath(); octx.fill();
+    octx.font = `600 ${12 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'left'; octx.fillText('180°', x0 + 24 * k, cy + 5 * k);
+  }
+  octx.restore();
+}
+
 // A small dot at the centre of the slice view: the point the radar's ring shows.
 // It opens out in the accent colour when it rests on something you could take (F); holding something heavy, a faint
 // arc round it shows how hard you are straining.
@@ -104,6 +192,7 @@ export function drawGazeDot() {
   octx.strokeStyle = gz.open > 0.05 ? `rgba(${Math.round(255 - 173 * gz.open)}, ${Math.round(255 - 35 * gz.open)}, ${Math.round(255 - 55 * gz.open)}, 0.9)` : 'rgba(255, 255, 255, 0.85)';
   octx.lineWidth = 1.4 * k;
   octx.beginPath(); octx.arc(W / 2, H / 2, r, 0, 7); octx.stroke();
+  if (gz.open > 0.6 && !(guide.goal && guide.goal.cue)) { octx.globalAlpha = gz.open; keyCap(W / 2 - 9 * k, H / 2 + 22 * k, 'F', 'rgba(82, 220, 200, 0.9)', k); octx.globalAlpha = 1; }
   if ((G.strain || 0) > 0.35) {
     octx.strokeStyle = `rgba(255, 255, 255, ${(0.5 * (G.strain - 0.35) / 0.65).toFixed(3)})`; octx.lineWidth = 1.2 * k;
     octx.beginPath(); octx.arc(W / 2, H / 2, 13 * k, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * G.strain); octx.stroke();

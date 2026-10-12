@@ -6,16 +6,16 @@ import { vec4 } from './player.js';
 import { G } from './game.js';
 import { gl, canvas, overlay, octx, dyn, setWorld, progRadar, progBake, progBlit } from './render.js';
 import { boulders } from './boulders.js';
-import { trees, groves } from './trees.js';
 import { launcher } from './launcher.js';
 import { finds } from './finds.js';
+import { guide } from './guide.js';
 
 export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   // all the way out, the ball holds the whole planet
 // What the ball can show, each a layer you switch with the keys 1–9 or by clicking the legend beside it (with the
 // mouse free). The disc, the ground your slice shows, is always there.
 export const RADAR_LAYERS = [
   { key: 'things', name: 'things', on: true },               // what you can carry: balls, blocks, stones, lanterns, parts, raft, sail
-  { key: 'landmarks', name: 'landmarks', on: true },         // trees, the cave's mouth, the launcher, artifacts
+  { key: 'landmarks', name: 'landmarks', on: true },         // the cave's mouth, ruins, the launcher, artifacts
   { key: 'creatures', name: 'creatures', on: false },
   { key: 'water', name: 'water and coast', on: false },
   { key: 'mountains', name: 'solid mountains', on: false },  // ground above 24 m, and its shadow on the disc toward ana or kata
@@ -328,10 +328,21 @@ export function drawRadarOverlay(r, sun) {
   octx.save();
   octx.lineCap = 'round'; octx.lineJoin = 'round';
 
+  // the small ball keeps to what matters (the way, things, landmarks, ana and kata); big, or with the legend up, it
+  // adds its scale, the compass and the sun's height
+  const full = G.state.radar.grow > 0.5 || G.state.help || legend.open || G.simT < legend.flashUntil;
+  // a stalk from a mark down (or up) to your slice's ground, the disc: above it lies toward ana (orange), below
+  // toward kata (blue); in your slice, no stalk
+  const stalk = (m, P, alpha = 0.55) => {
+    const Q = proj(foot(m)), a = dot3(m, discN);
+    if (pinned || Math.hypot(Q[0] - P[0], Q[1] - P[1]) < 3 * k) return;
+    octx.strokeStyle = a > 0 ? `rgba(255, 180, 110, ${alpha})` : `rgba(130, 185, 255, ${alpha})`; octx.lineWidth = 1.1 * k;
+    octx.beginPath(); octx.moveTo(...Q); octx.lineTo(...P); octx.stroke();
+  };
   // distance rings on the disc
   octx.font = mono(500, 9.5); octx.fillStyle = 'rgba(210, 225, 245, 0.8)'; octx.textAlign = 'center';
   const rgt = inB(G.player.R);
-  if (!pinned) for (const f of [1 / 3, 2 / 3]) { const P = proj(rgt.map(v => v * RB * f)); octx.fillText(`${Math.round(RB * f)} m`, P[0], P[1] + 12 * k); }
+  if (!pinned && full) for (const f of [1 / 3, 2 / 3]) { const P = proj(rgt.map(v => v * RB * f)); octx.fillText(`${Math.round(RB * f)} m`, P[0], P[1] + 12 * k); }
 
   const sh = radarShows();
   // your trail: where you have walked in the last two minutes, in all three ground directions, fading with age
@@ -354,14 +365,27 @@ export function drawRadarOverlay(r, sun) {
 
   // objects (glomes, tesseracts, stones, lanterns): small accent squares; filled where your slice cuts them
   if (sh.things && RB <= 330 && G.objects) {
+    const caches = new Set();
     for (const b of G.objects.world.bodies) {
       if (b.held || b.fixed) continue;
+      const still = b.find && b.spawnPos && vec4.len(vec4.sub(b.pos, b.spawnPos)) < 0.5;
+      if (still && b.find === 'cairn') continue;              // a cairn untouched is not a thing to carry
+      if (still && b.find === 'cache') { caches.add(b.cache); continue; }
       const m = logMap(vec4.norm(b.pos), B, u);
       if (Math.hypot(...m) > RB * 0.97) continue;
       const P = proj(m), sz = Math.max(2.2 * k, 3.4 * k * Math.min(1.6, b.bound / 0.3));
       const cut = Math.abs(vec4.dot(vec4.sub(b.pos, G.player.camera().eye), G.player.A)) < b.bound;
+      stalk(m, P, 0.45);
       octx.strokeStyle = 'rgba(82, 220, 200, 0.95)'; octx.lineWidth = 1.3 * k; octx.fillStyle = 'rgba(82, 220, 200, 0.85)';
       if (cut) octx.fillRect(P[0] - sz / 2, P[1] - sz / 2, sz, sz); else octx.strokeRect(P[0] - sz / 2, P[1] - sz / 2, sz, sz);
+    }
+    for (const i of caches) {                                // a cache: three small squares, one mark
+      const m = logMap(finds.caches[i].n, B, u);
+      if (Math.hypot(...m) > RB * 0.97) continue;
+      const P = proj(m), z = 2.6 * k;
+      stalk(m, P, 0.45);
+      octx.fillStyle = 'rgba(82, 220, 200, 0.85)';
+      for (const [dx, dy] of [[-1.3, 0.8], [1.3, 0.8], [0, -1.2]]) octx.fillRect(P[0] + dx * z - z / 2, P[1] + dy * z - z / 2, z, z);
     }
   }
   // creatures: walkers as small warm diamonds, rollers as accent rings
@@ -370,6 +394,7 @@ export function drawRadarOverlay(r, sun) {
       const m = logMap(c.n, B, u);
       if (Math.hypot(...m) > RB * 0.97) continue;
       const P = proj(m), z = 3 * k;
+      stalk(m, P, 0.4);
       if (c.kind === 'walker') {
         octx.fillStyle = 'rgba(240, 200, 150, 0.9)';
         octx.beginPath(); octx.moveTo(P[0], P[1] - z); octx.lineTo(P[0] + z, P[1]); octx.lineTo(P[0], P[1] + z); octx.lineTo(P[0] - z, P[1]); octx.closePath(); octx.fill();
@@ -379,22 +404,29 @@ export function drawRadarOverlay(r, sun) {
       }
     }
   }
-  // landmarks: trees, the cave's mouth, the launcher, and the artifacts you have found (faint) or solved (bright),
-  // the last two kept on the rim, toward where they lie, when they are out of range
+  // landmarks: the cave's mouth, ruins, the launcher, and the artifacts you have found (faint) or solved (bright), the
+  // last two kept on the rim, toward where they lie, when they are out of range
   if (sh.landmarks) {
     const at = (n, keep) => { const m = logMap(n, B, u), r = Math.hypot(...m); return r < RB * 0.95 ? proj(m) : keep ? proj(m.map(v => v / r * RB * 0.95)) : null; };
     for (const L of landmarkList()) {
-      if (L.kind === 'grove') {                               // a wood: a soft green patch, as wide as it is
-        const m = logMap(L.n, B, u); if (Math.hypot(...m) > RB * 0.97) continue;
-        const P = proj(m), Q = proj(m.map((v, i) => v + cv.R[i] * L.r)), rr = Math.max(3 * k, Math.hypot(Q[0] - P[0], Q[1] - P[1]));
-        octx.fillStyle = 'rgba(90, 170, 80, 0.16)';
-        octx.beginPath(); octx.arc(P[0], P[1], rr, 0, 7); octx.fill();
-        if (rr > 8 * k) drawLandmark('tree', P, k * 0.7);
-        continue;
-      }
       const P = at(L.n, L.keep); if (!P) continue;
+      const m = logMap(L.n, B, u); if (Math.hypot(...m) < RB * 0.95) stalk(m, P, 0.5);
       drawLandmark(L.kind, P, k, L.bright);
     }
+  }
+  // the way (guide.js): a dashed line along the disc from you to below (or above) the goal, its stalk, and the goal:
+  // the brightest mark in the ball, on the rim toward it when it is out of range
+  const goal = guide.goal;
+  if (goal) {
+    let m = logMap(vec4.norm(goal.pos), B, u); const r = Math.hypot(...m), out = r > RB * 0.93;
+    if (out) m = m.map(v => v / r * RB * 0.93);
+    const P = proj(m), Q = proj(foot(m)), C0 = proj(pinned ? logMap(me, B, u) : [0, 0, 0]);
+    octx.setLineDash([4 * k, 3 * k]); octx.strokeStyle = 'rgba(82, 220, 200, 0.8)'; octx.lineWidth = 1.5 * k;
+    octx.beginPath(); octx.moveTo(...C0); octx.lineTo(...Q); octx.stroke(); octx.setLineDash([]);
+    stalk(m, P, 0.95);
+    const z = 6.5 * k * (1 + 0.15 * Math.sin(performance.now() / 260));
+    octx.fillStyle = 'rgba(82, 220, 200, 0.95)'; octx.strokeStyle = 'rgba(5, 10, 16, 0.9)'; octx.lineWidth = 1.5 * k;
+    octx.beginPath(); octx.moveTo(P[0], P[1] - z); octx.lineTo(P[0] + z, P[1]); octx.lineTo(P[0], P[1] + z); octx.lineTo(P[0] - z, P[1]); octx.closePath(); octx.fill(); octx.stroke();
   }
   // the pouch: one dot per impulse stone, under the ball
   if (G.objects && G.objects.pouch > 0) {
@@ -457,7 +489,7 @@ export function drawRadarOverlay(r, sun) {
     rimLabel(discN.map(v => -v), 'kata', 'rgba(130, 185, 255, 0.95)', 11, 1.13);
   }
   const C = compassAt(u);
-  [['i', '#ff8a7a'], ['j', '#9be88f'], ['k', '#8fb8ff']].forEach(([n, col], i) => rimLabel(inB(C[i]), n, col, 10.5, 1.05));
+  if (full) [['i', '#ff8a7a'], ['j', '#9be88f'], ['k', '#8fb8ff']].forEach(([n, col], i) => rimLabel(inB(C[i]), n, col, 10.5, 1.05));
   const su = vec4.dot(sun, u), sHz = vec4.sub(sun, vec4.scale(u, su));
   if (vec4.len(sHz) > 1e-3) {
     const d = inB(sHz), l = Math.hypot(...d), P = proj(d.map(v => v / l * RB * 1.2));
@@ -465,7 +497,7 @@ export function drawRadarOverlay(r, sun) {
     octx.fillStyle = el > 0 ? 'rgba(255, 220, 120, 0.95)' : 'rgba(150, 160, 190, 0.6)';
     octx.beginPath(); octx.arc(P[0], P[1], (el > 0 ? 5 : 3.5) * k, 0, 7); octx.fill();
     octx.font = mono(500, 10); octx.textAlign = 'center';
-    octx.fillText(`sun ${Math.round(el)}°`, P[0], P[1] - 8 * k);
+    if (full) octx.fillText(`sun ${Math.round(el)}°`, P[0], P[1] - 8 * k);
   }
 
   // your line of sight: where the centre of the slice view lands, on the disc
@@ -478,7 +510,7 @@ export function drawRadarOverlay(r, sun) {
       octx.lineWidth = 2 * k; octx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
       octx.beginPath(); octx.ellipse(P[0], P[1], 6 * k * pulse, 3.5 * k * pulse, 0, 0, 7); octx.stroke();
       octx.font = mono(500, 10); octx.textAlign = 'left'; octx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-      octx.fillText(`${Math.round(radar.gaze.t)} m`, P[0] + 9 * k, P[1] - 4 * k);
+      if (full) octx.fillText(`${Math.round(radar.gaze.t)} m`, P[0] + 9 * k, P[1] - 4 * k);
     }
   }
 
@@ -528,20 +560,13 @@ export function drawRadarOverlay(r, sun) {
 // What the Landmarks layer marks: { n (unit position), kind, keep (stay on the rim when out of range), bright }.
 export function landmarkList() {
   const out = [];
-  for (const g of groves) out.push({ n: g.n, kind: 'grove', r: g.r });   // woods as soft patches
-  if (!landmarkList.trees || landmarkList.count !== trees.length) { landmarkList.trees = trees.filter(t => t.landmark); landmarkList.count = trees.length; }
-  for (const t of landmarkList.trees) out.push({ n: t.n, kind: 'tree' });   // (the few landmark trees, found once)
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
   for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin' });
   if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: launcher.tier > 0 });
-  let next = null, nd = Infinity;
-  const me = G.player && G.player.onB == null ? G.player.up() : null;
   for (const a of G.artifacts || []) {
     const solved = !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1));
-    if (G.flags['seen_' + a.id]) out.push({ n: a.n, kind: 'artifact', keep: true, bright: solved });
-    if (!solved && me) { const d = vec4.dot(a.n, me); if (-d < nd) { nd = -d; next = a; } }
+    if (G.flags['seen_' + a.id] && a.id !== 'room') out.push({ n: a.n, kind: 'artifact', keep: true, bright: solved });
   }
-  if (next) out.push({ n: next.n, kind: 'next', keep: true });   // the nearest not yet solved: a slow pulse, on the rim if far
   return out;
 }
 const ACCENT = 'rgba(82, 220, 200, 0.95)';

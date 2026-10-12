@@ -19,7 +19,7 @@ import { nearScan } from './trees.js';
 
 export const SHAPE = { ball: 0, box: 1, cross: 2, c24: 3, duo: 4 };
 // materials: rock kinds first, then the creatures'
-export const MAT = { granite: 0, sandstone: 1, crystal: 2, basalt: 3, worked: 4, metal: 5, roller: 6 };
+export const MAT = { granite: 0, sandstone: 1, crystal: 2, basalt: 3, worked: 4, metal: 5, roller: 6, hide: 7, eye: 8, pupil: 9 };
 export const MAXP = 96;                 // props sent to the GPU per frame
 const TEXELS = 8;                       // per prop: centre, four axis columns, half-extents, (shape, mat, glow, R), spare
 export const props = { rocks: [], extra: [], grid: new Map(), data: new Float32Array(MAXP * TEXELS * 4), circles: new Float32Array(MAXP * 4), centres: new Float32Array(MAXP * 4), shCircles: new Float32Array(MAXP * 4), n: 0, cut: 0, shade0: 0, list: [] };

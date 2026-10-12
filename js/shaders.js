@@ -954,6 +954,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   if (mat < 0.5) { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); nb = normalize(n - 0.04 * (g1 - n * dot(g1, n))); }
   else if (mat < 1.5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; }
   else if (mat < 2.5) { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
+  else if (mat < 3.5) { alb = vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1 + 0.04 * d2); spec = 0.25; }   // the builder's stone: dark, fixed
   else if (mat > 6.5) { alb = vec3(0.9, 0.78, 0.6) * (0.95 + 0.05 * d2); spec = 0.8; }   // a lantern: warm glass
   else if (mat > 5.5) {                                   // wood: planks along the body's first axis
     float grain = 0.5 + 0.5 * sin(q.y * 26.0 + 3.0 * d1) * sin(q.w * 7.0);
@@ -981,6 +982,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
     vec4 a = step(vec4(h * 0.93), abs(q));
     float ed = a.x + a.y + a.z + a.w;
     alb *= ed >= 2.0 ? 0.62 : 1.0;
+    if (mat > 2.5 && mat < 3.5 && ed >= 2.0) glow = max(glow, 0.3);   // (the builder's stone: its edges faintly lit)
   }
   float sunEl = dot(uSun, up);
   float dif = rowLight(p, nb, up);
@@ -1003,7 +1005,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
 
 // Rocks and creatures' bodies. The pattern lives in the prop's own frame (it turns with the prop): granite speckled,
 // sandstone in strata along its own vertical axis, crystal pale and glossy, basalt dark and smooth, worked stone in
-// blocks; walkers brushed metal, rollers smooth stone. Edges of the slice's polyhedron are darkened.
+// blocks; walkers' hide and eyes, rollers glazed. Edges of the slice's polyhedron are darkened.
 vec3 shadeProp(vec4 p, vec4 n, int i, vec4 rd, float t) {
   vec4 up = normalize(p), c = uPC[i], c0 = propT(i, 1), c1 = propT(i, 2), c2 = propT(i, 3), c3 = propT(i, 4), e = max(propT(i, 5), vec4(1e-3)), P = propT(i, 6);
   int shape = int(P.x + 0.5), mat = int(P.y + 0.5);
@@ -1039,8 +1041,18 @@ vec3 shadeProp(vec4 p, vec4 n, int i, vec4 rd, float t) {
     vec4 j = abs(fract(x * vec4(0.9, 0.9, 0.9, 1.6) + 0.5) - 0.5);
     alb *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.025, min(min(j.x, j.y), min(j.z, j.w)))) * (1.0 - smoothstep(10.0, 30.0, t));
     bumpK = 0.06;
-  } else if (mat == 5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; bumpK = 0.0; }   // a walker: brushed metal
-  else { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); bumpK = 0.03; }                   // a roller: smooth stone
+  } else if (mat == 5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; bumpK = 0.0; }   // metal (the launcher's sockets)
+  else if (mat == 6) {                                     // a roller: glazed in two colours, checked by its two angles,
+    float a1 = atan(q.y, q.x), a2 = atan(q.w, q.z);        // so its turning in two planes at once shows
+    alb = mix(vec3(0.78, 0.36, 0.20), vec3(0.90, 0.84, 0.70), step(0.0, sin(3.0 * a1) * sin(3.0 * a2)));
+    alb *= 0.92 + 0.06 * d1; spec = 0.45; bumpK = 0.0;
+  } else if (mat == 7) {                                   // a walker's hide: tawny, a dark saddle with bars, a pale belly
+    float back = smoothstep(-0.1, 0.55, q.w), bar = smoothstep(0.25, 0.4, abs(fract(x.x * 3.2 + 0.2 * d1) - 0.5)) * smoothstep(0.35, 0.7, q.w);
+    alb = mix(vec3(0.60, 0.42, 0.22), vec3(0.50, 0.27, 0.11), back);
+    alb = mix(alb, vec3(0.26, 0.15, 0.08), bar * 0.8);
+    alb *= 0.9 + 0.1 * d2 + 0.06 * d3 * f3; spec = 0.08; bumpK = 0.05;
+  } else if (mat == 8) { alb = vec3(0.92, 0.91, 0.86); spec = 1.2; bumpK = 0.0; }                       // an eye
+  else { alb = vec3(0.03, 0.03, 0.035); spec = 1.4; bumpK = 0.0; }                                       // its pupil
   if (mat <= 1 || mat == 4) alb *= 0.9 + 0.2 * h41(floor(nl * 2.5 + 0.5) + seed);    // each facet weathered a little differently
   if (mat <= 1 || mat == 3) alb = mix(alb, vec3(0.22, 0.31, 0.12), smoothstep(0.62, 0.92, dot(n, up) + 0.25 * d2) * 0.55);   // moss on top
   if (mat <= 1) alb = mix(alb, vec3(0.62, 0.64, 0.42), smoothstep(0.32, 0.4, d2) * smoothstep(0.1, 0.5, dot(n, up)) * 0.45);   // lichen
@@ -1151,7 +1163,7 @@ vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t, float seed) {
   if (foliage && t < 40.0) d2 = detail(p, kind == 4 ? 8.0 : 4.6, n, g2) * (1.0 - smoothstep(15.0, 40.0, t));   // clumps of leaves, tufts of needles
   // each tree its own green: deeper, fresher or more olive
   vec3 lo = mix(vec3(0.06, 0.15, 0.04), vec3(0.09, 0.15, 0.03), seed), hi = mix(vec3(0.22, 0.36, 0.10), vec3(0.32, 0.36, 0.11), seed * seed);
-  vec3 alb = kind == 3 ? vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1)                                     // a walker's legs
+  vec3 alb = kind == 3 ? vec3(0.30, 0.19, 0.11) * (0.9 + 0.1 * d1)                                     // a walker's legs
            : kind == 2 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                     // rope: hemp
            : kind == 1 ? mix(lo, hi, clamp(0.5 + 0.3 * d1 + 0.45 * d2, 0.0, 1.0))
            : kind == 4 ? mix(vec3(0.03, 0.10, 0.06), vec3(0.10, 0.22, 0.12), clamp(0.5 + 0.4 * d1 + 0.6 * d2, 0.0, 1.0))
@@ -1264,30 +1276,27 @@ vec4 hitAll(vec4 ro, vec4 rd) {
   if (under) return vec4(tW, 8.0, 0.0, -1.0);
   return vec4(-1.0, 0.0, 0.0, -1.0);
 }
-// Beacons: columns of soft light over the places that matter (an unsolved artifact, a part lying loose), seen when your
-// slice passes within a few metres of their axis, whatever the distance: so they show from afar once you face them
-// (the radar can turn you to). Each is a segment straight up from base; the glow falls off with the ray's least 4D
-// distance from it.
-const int MAXBEACON = 6;
-uniform vec4 uBeacon[MAXBEACON];      // base (on the ground)
-uniform vec4 uBeaconC[MAXBEACON];     // colour × strength, and height
-uniform int uBeaconN;
+// The way's column of light (guide.js): a segment straight up from its base on the ground, in your slice. A bright
+// core and a soft halo round it, by the ray's least distance from its axis; dashed, the dashes rising, while the goal
+// itself lies off your slice; faded as you reach it.
+uniform vec4 uBeam;       // base, on the ground
+uniform vec4 uBeamC;      // colour × strength, and height
+uniform vec4 uBeamS;      // x: off your slice (0..1), y: fade near it, z: on
 vec3 beaconGlow(vec4 ro, vec4 rd, float tEnd) {
-  vec3 g = vec3(0.0);
-  for (int i = 0; i < MAXBEACON; i++) {
-    if (i >= uBeaconN) break;
-    vec4 a = uBeacon[i], up = normalize(a);
-    float H = uBeaconC[i].w;
-    // closest points between the ray (ro + rd·s, 0 <= s <= tEnd) and the axis (a + up·h, 0 <= h <= H)
-    vec4 w = ro - a; float b = dot(rd, up), dw = dot(rd, w), ew = dot(up, w), den = 1.0 - b * b;
-    float s = den > 1e-6 ? clamp((b * ew - dw) / den, 0.0, tEnd) : 0.0;
-    float h = clamp(ew + b * s, 0.0, H);
-    s = clamp(b * h - dw, 0.0, tEnd);
-    vec4 d = w + rd * s - up * h;
-    float dist = length(d), far = length(w), wd = 1.6 + 0.012 * far;
-    g += uBeaconC[i].rgb * exp(-dist * dist / (wd * wd)) * (1.0 - smoothstep(0.55 * H, H, h)) * (0.35 + 0.65 * smoothstep(0.0, 4.0, h));
-  }
-  return g;
+  if (uBeamS.z < 0.5) return vec3(0.0);
+  vec4 a = uBeam, up = normalize(a);
+  float H = uBeamC.w;
+  // closest points between the ray (ro + rd·s, 0 <= s <= tEnd) and the axis (a + up·h, 0 <= h <= H)
+  vec4 w = ro - a; float b = dot(rd, up), dw = dot(rd, w), ew = dot(up, w), den = 1.0 - b * b;
+  float s = den > 1e-6 ? clamp((b * ew - dw) / den, 0.0, tEnd) : 0.0;
+  float h = clamp(ew + b * s, 0.0, H);
+  s = clamp(b * h - dw, 0.0, tEnd);
+  vec4 d = w + rd * s - up * h;
+  float dist = length(d), far = length(w), wc = 0.22 + 0.0024 * far, wh = 1.4 + 0.012 * far;
+  float prof = 1.3 * exp(-dist * dist / (wc * wc)) + 0.3 * exp(-dist * dist / (wh * wh));
+  float dash = mix(1.0, 0.18 + 0.82 * smoothstep(0.35, 0.5, abs(fract(h / 7.0 - uTime * 0.35) - 0.5) * 2.0), uBeamS.x);
+  float along = (1.0 - smoothstep(0.55 * H, H, h)) * (0.4 + 0.6 * smoothstep(0.0, 3.0, h));
+  return uBeamC.rgb * prof * dash * along * uBeamS.y * (1.0 - 0.3 * uBeamS.x);
 }
 // The normal of the prop i where the ray meets it.
 vec4 propNormal(vec4 ro, vec4 rd, int i) {
