@@ -1,171 +1,174 @@
-# Glome: handoff for the next run (to v1.0)
+# Glome: handoff (written 12 October 2026, after v1.3)
 
-You are continuing **Glome**, alone and unattended, until everything below is done and verified. Then write the report and stop. Nobody will answer questions during the run: make decisions from the docs and from the owner's answers below, and log them.
+## 0. How the next session starts: an interview
 
-(The previous handoff, for the overnight build of 7–8 October, is in git history at f903971.)
+Before writing any code, interview the owner. Many questions need answers (section 4). Ask them in batches of at most four, each with concrete options and a recommendation, and follow up where an answer opens new questions. Then write the plan into section 3 of this file, confirm it with the owner, and only then build. The owner also decides in the interview how the session runs (autonomous to a release, as runs three to six were, or in steps with check-ins).
 
-## 1. Read first, in this order
+## 1. Where things stand
 
-1. **Your memory index** (loaded automatically), especially `project_4d_physics_sandbox.md`, and the feedback memories (visual self-check, Mac memory safety, no unverified numbers, no AI-isms in prose).
-2. **`docs/NIGHT_REPORT.md`:** what exists, what was fixed, performance, known issues.
-3. **`docs/DECISIONS.md`:** every decision so far ("Night decisions" and "Day two decisions" at the end). It overrides DESIGN.md where they differ.
-4. **`docs/PHYSICS.md`** (laws, numbers, approximations; never contradict it without re-deriving and updating it) and **`docs/DESIGN.md`** (vision and pillars).
-5. **The code** in `~/glome/js` (about 30 modules). The ones this run touches most:
-   - `laws.js`: every constant;
-   - `radar.js`: the glass-ball radar, its layers and trail;
-   - `trees.js`, `shaders.js` (`hitTrees`, `shadeTree`): trees as capsules in a float texture, at most `MAXT = 6` cut by the slice;
-   - `boulders.js`: about 1700 spherical boulders, the nearest 32 to the GPU;
-   - `creatures.js`: walkers, rollers and the ecosystem;
-   - `objects.js` and `bodies.js`: things, holding, 4D rigid bodies;
-   - `launcher.js`, `artifacts.js`, `landforms.js`, `main.js` (boot and the frame loop).
+- **Live:** v1.3 at https://bengreff.github.io/glome/ (repo `~/glome`, tags v0.0 to v1.3). The itch.io zip is `dist/glome-v1.3.zip`, built by `tools/package.sh`; uploading it is the owner's job.
+- **Reports:** `docs/NIGHT_REPORT.md` has a section per run (three to six); every choice and its reason is in `docs/DECISIONS.md`.
+- **Since v1.0:**
+  - **v1.1, the way:** one goal at a time. A column of light in your slice, a diamond mark, and key-cap cues: E/Q with a distance to step through ana, and F, Z C or Space for what to do. Walkers look like animals, the radar is decluttered with stalks, and fixed stone is dark.
+  - **v1.2:** plants grown near you (`flora.js`), 31,000 trees, and the radar's layers renamed for what they hold.
+  - **v1.3:** shaders compile in the background (Windows), creatures are found where they live (`creatures.js`: procedural herds on leashes, none follows you), and the cave can be left again.
+- **Windows is untested.** v1.3 fixed the two known causes of a freeze while loading: synchronous shader checks at page load, and texture reads with automatic mip levels inside loops, which Direct3D unrolls. The owner should report whether it loads, and the loading text or error if not.
 
-## 2. What the owner said
+## 2. The owner's playtest of v1.3, in their words
 
-After playing the current build (v0.7, live at https://bengreff.github.io/glome/):
+> I solved the cave puzzle and got the first key, but the second puzzle I had no idea on, I managed to find one stone and stack it on top of another immovable stone that was on top of another stone, but past that I don't know. Was that stone a key? Make sure something indicates keys, and also momentum stones should be a renewable resource, you get them maybe from creatures or monuments. A key should indicate when you pick it up that it is a key, and a momentum stone should indicate that you can press a button to stow it in your pouch. The launcher should have clear spots to put each of the keys. The creatures should have some better graphics built at some point. Many questions need to be asked.
 
-> "Looks pretty good. Open items: gravity seems too weak, the nav compass is a bit cluttered and I cannot see any objects of interest on there (should be layers, by default boulders and peaks and mountains are off, and your paths should disappear after a while). Also no animals, trees, or 4d rocks etc."
+**What happened, as far as I can tell:**
+- **The owner calls the launcher's parts "keys".** The cave gave part I, their "first key". The second puzzle, the mirror key, has its own key, so there are two kinds of "key" and nothing tells them apart.
+- **Yes, that stone was a key: the mirror key.** It's the only carryable tesseract at the second artifact, with one teal cell and one dark cell. The owner set it on the model, the small block on top of the pillar. The model only shows how the key must sit.
+- **The intended solution:** hold the key and turn half a turn through ana (Z or C, or right-drag). That makes it its own mirror image. Then set it down in the metal socket sunk in the ground beside the pillar.
+- **The cue didn't explain it.** Near the socket the guide shows "Z C ↻ 180°", which said nothing about why or where.
 
-Asked what "no animals, trees or 4D rocks" meant:
+## 3. To do (the owner's list, to be shaped by the interview)
 
-> "There are not any anywhere. Only spherical boulders, one single rock, a single platform atop a mountain that I could not do anything with, and a river. Nothing else."
+1. **Keys must be recognisable.** Something indicates which objects are keys. Picking one up shows that it is a key.
+2. **Momentum (impulse) stones are renewable.** Perhaps you get them from creatures or from monuments.
+3. **Stowing a momentum stone is indicated.** When you look at or pick up one, a cue shows the button that stows it in your pouch.
+4. **The launcher has clear spots for each key.**
+5. **Better creature graphics** (later).
+6. **The second puzzle must be something a player can work out.** It is implied by the playtest; the interview should confirm how explicit to be.
 
-That is the central problem of this run. The world has three trees in all, about 45 walkers and 10 rollers on the whole planet, a cairn of seven things at the start, and four artifacts. On a ground that is a 3-sphere, seen through a slice, that is effectively empty. Walkers also flee through ana within 14 m, so you never see them. The launcher pad (the "platform") gives no clue that it wants parts.
+## 3a. Run seven plan (from the interview, 12 October)
 
-The owner's answers to the follow-up questions, which are decisions:
+**How it runs:** the owner is here for a few hours. Work in segments of 20–40 minutes. Each segment ends with a check-in and is pushed live once the smoke test passes. Every push must leave the game playable from start to launch, with no half-built puzzle on the live site. Tag v1.4 when the four puzzles are done and the gates pass.
 
-| Topic | Decision |
-|---|---|
-| Gravity | **Stronger planet, Earth on the summit:** planet A's gravity is raised so the summit (46.3 m) measures 9.8 m/s² (about 16 m/s² at sea level). Physics stays exact; everything that depends on it is re-derived and re-tested. |
-| Fill the world | **All of:** groves and forests; creatures you meet; 4D rock shapes (not just balls); more things to find. The owner added: **"For performance, render/simulate creatures only when they are visible."** |
-| Guidance | **Wordless cues:** the launcher pad shows four empty sockets that glow as parts arrive; parts and artifacts are visible from afar; the radar marks the nearest unsolved artifact. |
-| Radar layers | **A legend panel** beside the radar with on/off toggles (click with the mouse free, or keys), remembered with the settings. **On by default: Things and Landmarks.** Off by default: boulders, summit peaks, solid mountains (and creatures, water and coast, shells). |
-| Trail | **Fades over 2 minutes.** |
-| Performance | **60 fps at 50% resolution or more** at the default view on the M2 Pro (this replaces the old 60% gate). New content is culled to fit: only what your slice can see is drawn. |
-| Mode | **Autonomous, same rules** as the overnight run. |
-| v1.0 | **Tag v1.0 at the end of this run** if all gates pass, and build the itch.io zip for the owner to upload. |
+**Decisions:**
+- **Keys:** anything that fits a socket is a key. All keys share one material that nothing else uses. When you pick one up, the socket it fits lights and hums, and the column of light moves to that socket.
+- **No tutorials:** at puzzles the guide shows where (column, mark, distance), never what to do. The "Z C ↻ 180°" cue and the knot's "E" cue go; the F under the dot on carryable things stays.
+- **Every puzzle is a real built structure** on open, dry ground (check every site: none in water), with its mechanism in plain sight and nothing but geometry for cause and effect. Fixed chain I → IV, as now.
+  - **I. The closed room** (replaces the cave): a small stone house you can see into through a grille, with key I on a plinth inside. In your slice it is walled on every side, roof included. Its walls stop short toward ana, which is the only way in and out.
+  - **II. The mirror house:** the key is a handed 4D block (a chiral tetracube thickened into 4D). The door has a hole cut in its mirror image. As found, the key jams; turned half a turn through ana, it slides in and the door opens.
+  - **III. The knot gate:** a heavy gate leaf on a hinge, hung so its weight swings it open, held shut by a rope looped over a post with a cap. Lift the loop through ana: it falls slack and the gate swings open.
+  - **IV. The fold** (replaces the antipode, which is not a 4D idea: a 2-sphere has antipodes too): a 3D cross of eight hinged metal cubes, like Dalí's *Corpus Hypercubus*. Lift each arm on its hinge; the arms toward ana need a turn to see. When all are up they close into a tesseract and the vault opens.
+- **Launcher:**
+  - **Rings:** keys I–IV are thick 4D rings with holes of four sizes. A stepped pillar stands beside the pad, and each ring drops to its own step, in any order. A ring surrounds the pillar in all three ground directions, so every slice through the pillar shows every ring. The tier is the number of rings seated, counted from the bottom.
+  - **Aim:** a launch barrel on a 4D gimbal, aimed by three sliders you grab. It can point in any direction above the horizon, ana and kata included, and stays where it is set.
+- **Impulse stones:**
+  - **Sources:** ruins and cairns regrow them, one at a time per monument, as a glow that grows over a few minutes.
+  - **Stowing:** F takes a stone into your hand. G stows it (cue: G and a pouch glyph), or draws one when your hand is empty.
+  - **Pouch:** holds 9, shown as a pouch glyph with dots.
+  - **Flight:** facing is free; stones only change velocity.
+- **Creatures** (after the puzzles, if time): one smooth skin each, a continuous blended 4D surface, animal and visibly 4D, polished. Render 2–3 concepts as turntables for the owner to choose from before building.
+- **Investigate and report with numbers:**
+  - **The star:** the owner sees one sun fading in and out, sometimes a row that fades. Is that correct?
+  - **Jumping:** is the drift through ana during a jump Coriolis, or an error? Physics realism comes first.
+  - **Seeing yourself round the hoop:** where, when and for how long? It is real: with the hoop direction level where you stand, a level ray along it grazes the copy's edge at your own image after one hoop-length. Bring a proposal.
+- **Windows:** untested; the owner will report.
 
-## 3. Ground rules (unchanged)
+**Segments, in order:**
+1. Investigations (star, jump drift, hoop sight). Impulse stones (hold, stow and draw; the cap and glyph; regrowing monuments). The "what to do" cues removed.
+2. Compound bodies: unions of blocks, including ones with holes, needed by the ring keys, the handed key and the gate. The key material. Ring keys and the stepped pillar; the socket answering on pickup.
+3. II, the mirror house.
+4. Hinges (4D joints that turn in one plane), then III, the knot gate.
+5. IV, the fold.
+6. I, the closed room.
+7. The launcher's barrel, gimbal and sliders.
+8. Creature concepts.
+
+That is about four hours of segments. At a check-in, ask whether to continue autonomously after the owner leaves.
+
+(Section 3 above is the owner's original list; 3a supersedes it where they differ.)
+
+## 4. Interview questions (a draft: add, cut, reorder)
+
+**A. Words and things**
+1. The launcher's four parts: should they become "keys" in look and in the help text? Should the mirror puzzle's key then become something else (a piece, a token, a seal) so there is one kind of key?
+2. A small icon language on screen, without words: a key glyph while you hold a key, the pouch with its count, the launcher's four spots? Or keep everything in the world itself?
+
+**B. The second puzzle (the mirror key)**
+3. How to show what to do? For example:
+   - a ghost of the key in the socket, in the shape it must take;
+   - a socket shaped so only the mirrored key fits;
+   - a demonstration nearby (something turning through ana and coming out mirrored);
+   - an animated cue of the key turning.
+4. Should the guide spell out every step (no "aha" left), or point the way and leave the idea to the player?
+
+**C. Keys on the launcher**
+5. The pad: four marked spots, one per key? Shape-coded to each key, outlined or lit until filled? Must each key go in its own spot, or in any?
+6. What should happen as each key is set? Today a socket lights and chimes.
+
+**D. Momentum stones**
+7. Where they come from:
+   - creatures: which ones, and when (a roller that knocks a ball leaves one; a herd you meet?);
+   - monuments: ruins or cairns that grow a new one over time, and how fast;
+   - a spring by the launcher;
+   - a cap on the pouch?
+8. Stowing: keep it automatic on F (as now) with a cue, or a separate key? What should the cue look like (a key cap and a pouch glyph)?
+9. What are they for, in your mind: steering in flight, launching, puzzles, something else?
+
+**E. Creatures**
+10. "Better graphics": more animal (markings, ears, tails, a moving head), more alien, or more visibly 4D? How soon, against the puzzles?
+
+**F. Windows**
+11. Does v1.3 load on Windows? Which browser and GPU? If not, what does the loading screen say?
+
+**G. Everything else**
+12. Have you reached the third and fourth puzzles (the knot gate, the antipode) and the flight to planet B? Anything confusing there?
+13. Anything else unclear or missing: the radar, the guide, the controls, the help?
+14. How should the next session run (autonomous to a release, or in steps), and what version should it end at?
+
+## 5. Facts the next session needs
+
+**Code map:**
+- `guide.js`: the goal chain, cues and the column of light.
+- `hud.js`: the marks and key caps.
+- `artifacts.js`: the puzzles, vaults and sockets.
+- `launcher.js`: the pad, its sockets and the tiers.
+- `objects.js`: object kinds (`stone`, `part`, `key`, ...) and picking up.
+- `finds.js`: ruins, caches and cairns.
+- `creatures.js`, `flora.js`, `trees.js`, `props.js` (rocks), `radar.js`.
+- `render.js` and `shaders.js`; see `programsReady` for the background compile.
+
+**Impulse stones today:**
+- Some lie in caches, and two appear beside each vault when it opens.
+- F on one stows it in the pouch at once. The only cue is the general F under the dot.
+- G throws one from the pouch (80 m/s, with recoil). The pouch shows as dots under the radar.
+- None are ever made again.
+
+**The launcher today:**
+- A pad on the summit with four metal sockets flush in its top, at the corners of a tetrahedron in the ground's three directions. Your slice shows some of them at a time.
+- A socket lights, with a chime, when a part lies within 3.6 m of the pad's centre. Parts aren't tied to particular sockets.
+- The tier is the highest k such that parts I to k are all present.
+
+**The mirror puzzle (`artifacts.js`, II):**
+- A vault: a dark 1 m block sunk in the ground, with part II inside.
+- A metal socket 3.2 m away, sunk in the ground.
+- A pillar 1.4 m from the socket, with the model on top: the key as it must sit.
+- The key, 2.4 m from the socket on the other side, lying as the model's mirror image.
+- Solved when the key lies within 1 m of the socket with its first two axes within about 37° of the model's.
+
+**Budgets:** the settle gate is 60 fps at 50% resolution or more on the M2 Pro. v1.3 settles at 55–60%, and the main thread's frame work is about 3.8 ms.
+
+**Tests:**
+- Unit tests: `node tools/test-*.mjs`.
+- Playthroughs in `tools/playthrough/` (README there): room, caveout, mirror, knot, anti, orbit, landB.
+- The dev kit in `tools/dev/` (README there): `run.sh` for one headless run, `gates.sh` for all gates (about 25 minutes, in the background), and density and creature counts.
+- Serve the repo with `tools/serve.sh` (port 8650).
+
+## 6. Ground rules (unchanged, except that the session starts with the interview)
 
 **Pillars:** exact physics (integrate the true laws, never swap one in), wordless, minimal, self-contained (a static site, no server, no build step), ships.
 
-- **No spiralling.** Build what this file and DECISIONS.md describe. Prefer a thin, complete version of a feature, then deepen it.
-- **Decide and log.** Any non-trivial choice goes in `docs/DECISIONS.md` under a new heading **"Run three decisions"**, with one line of reason. Never stop to ask.
+- **After the interview, decide and log.** Non-trivial choices go in `docs/DECISIONS.md` under "Run seven decisions", each with one line of reason.
 - **Git:**
-  - Commit as `git -c user.name=Ben -c user.email=ben@thegreffs.com commit ...`, every message ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+  - Commit as `git -c user.name=Ben -c user.email=ben@thegreffs.com commit ...`, with every message ending in `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
   - Run `tools/stamp.sh` before any commit that touches `js/` or `index.html`.
-  - Push to `main` (the live site) only after the smoke test passes.
-  - Tag each finished milestone `v0.8`, `v0.9`, …, and the final release `v1.0`; push the tags.
+  - Push to `main` (the live site) only after the smoke test passes. Tag each release and push the tags.
   - Never force-push, never rewrite history, never delete branches.
-- **Leave other projects alone:** anything outside `~/glome` and `~/bengreff.github.io`. Other sessions may be running heavy jobs on this Mac (Python pools, node scripts): never touch their processes. They can slow the boot to about 11 s and skew performance numbers; check `sysctl -n vm.loadavg` before trusting a measurement.
-- **Mac memory safety:** 16 GB. Before launching headless Chrome check `memory_pressure | tail -1` and keep at least 3 GB free. One headless Chrome at a time; never leave one running (`pgrep -f glome-chrome`).
-- **Waiting:** no foreground `sleep` longer than a few seconds; long runs go in the background or a watchdog loop.
-- **No accounts, no logins.** itch.io upload is the owner's job.
+- **Leave other projects alone:** anything outside `~/glome` and `~/bengreff.github.io`. Other sessions may be running heavy jobs on this Mac; never touch their processes, and check `sysctl -n vm.loadavg` before trusting a measurement.
+- **Mac memory safety:** 16 GB. Before launching headless Chrome, check `memory_pressure | tail -1` and keep at least 3 GB free. Run one headless Chrome at a time and never leave one running (`pgrep -f glome-chrome`).
+- **Waiting:** no foreground `sleep` longer than a few seconds; long runs go in the background.
+- **No accounts, no logins.** Uploading to itch.io is the owner's job.
 - **Licences:** CC0 or public-domain assets only, credited in `docs/CREDITS.md`.
-- **Subagents:** at most 2 at once, `model: sonnet`, told not to spawn their own. Good uses: read-only code review of a finished milestone (three reviews last time each found real bugs); self-contained new modules with tests in their own files. Never two agents on one file.
-
-## 4. Tools
-
-- **`tools/serve.sh`** serves the repo at http://127.0.0.1:8650/ (start it in the background if it is not running).
-- **`tools/cdp.mjs`** drives headless Chrome: `CDP_PORT=9341 node tools/cdp.mjs <url> <outPrefix> '<steps json>' [--gpu]`.
-  - Steps are `[{"eval": "<js>", "wait": ms, "snap": "name"}]`; screenshots land at `<outPrefix>-<name>.png`. Look at them.
-  - `--gpu` is the real M2 Pro over Metal at 1512×982, dpr 2. Use it for everything visual and for performance.
-  - The game's handle is `window.__glome` (`.dbg` exposes internals; `.G.debug` sets the shader's `uDebug` bits, listed at the top of `shaders.js`, for one-run A/B timing).
-  - Wrap runs in a watchdog. After "New world" wait at least 20 s before evaluating.
-- **Tests:** `node tools/test-so4.mjs`, `test-bodies.mjs`, `test-rope.mjs`, `test-audio.mjs`, `test-creatures.mjs`.
-- **Playthroughs:** `tools/playthrough/` (README there): mirror key, knot gate, antipode, orbit. All four solved on day two; they must solve again after your changes.
-- **Measuring performance:** fix the resolution (`__glome.dyn.auto = false; __glome.dyn.scale = 0.55`), then toggle features with debug bits in the same run and compare `1000 / __glome.prof.interval`. Separate runs drift with the machine's load. The settle test is auto resolution at the default view after about 25 s.
-
-## 5. Gates: every milestone
-
-1. **Smoke:** loads with no shader or JS errors; `__glome.G.errors` stays 0.
-2. **Visual:** screenshot every new feature and look at it critically, against the reference of a natural, believable world. A correct formula is not a legible picture.
-3. **Performance (`--gpu`):** auto resolution at the default view settles at **60 fps at 50% or more**. Also check the costliest views: looking down at near ground, inside a forest, and among a herd.
-4. **Physics:** numbers match PHYSICS.md; unit tests pass.
-5. **Persistence:** save and reload, export and import round-trip (new state included).
-6. **Playthroughs:** all four solve.
-
-## 6. Milestones, in order
-
-Each ends with the gates, a docs update (README, the help panel, PHYSICS.md for any number, DECISIONS.md), a commit, a push and a tag.
-
-### N1. Gravity: Earth on the summit
-
-- **The target:** raise `G_SURF` in `laws.js` until the summit's **measured** gravity is 9.8 m/s². Measure it with the game's own exact field, including the hoop images and the spin; it should come out at about 16 m/s² at sea level.
-- **Re-derive and re-test everything that depends on it.** Log each new number with its derivation.
-  - **Launcher tiers** (now 24/35/43/52 m/s). Escape speeds scale roughly as √g, but re-derive by integration as before: a hop, a 200 m arc, an orbit flat across the hoop that stays bounded (tier III), and a trip that lands on B (tier IV). Update PHYSICS.md's launcher table.
-  - **The jump** (5.2 m/s): keep a natural apex, about 1.2–1.4 m where you mostly walk.
-  - **Holding strength** (2600 N): a 163 kg block must still come up at sea level, and the 171 kg raft must still be carriable.
-  - **Throw caps:** throws still feel right.
-  - **The raft:** it still floats square and sails.
-  - **The rope:** still behaves.
-  - **The space map:** still predicts correctly (it uses the same integrator).
-  - **The playthroughs,** especially the orbit.
-  - Planet B's gravity is separate (6 m/s² at its surface): leave it unless it now feels wrong by comparison, and log the choice.
-- **README and PHYSICS.md** state gravity's numbers (they say 6 m/s² on the massif against 9.8 at sea level today): update them.
-
-### N2. The radar: layers, a legend panel, a fading trail
-
-- **Layers,** each a toggle:
-
-  | Layer | Default |
-  |---|---|
-  | Things (carryable objects, parts, raft, sail) | **on** |
-  | Landmarks (trees, the cave mouth, the launcher, artifacts found, and the nearest unsolved artifact) | **on** |
-  | Creatures | off |
-  | Water and coast | off |
-  | Solid mountains | off |
-  | Height shells | off |
-  | Summit peaks | off |
-  | Boulders and rocks | off |
-  | Trail | on, fading |
-
-  The disc (the ground your slice shows) is always there.
-- **The legend panel:** a small list beside the radar with on/off toggles. Click a toggle with the mouse free (after Esc), or press keys 1–9; check those keys are free first. Remember the toggles with the settings. It replaces L's cycling of presets.
-- **Declutter:** the caption and the long legend text only while the panel is open or help is up. The radar should read at a glance: where things are, where you have been, what is ahead.
-- **The trail** fades out over 2 minutes (by age, not count).
-
-### N3. A full world (the main work)
-
-The goal: walking in any direction for a minute turns up several things worth stopping for, and the slice is rarely empty. The ground is a 3-sphere, and your slice shows a 2D sheet of it, so density must be far higher than on a 3D planet. Work out the numbers (how much ground a minute's walk sweeps in the slice and on the radar) and log the targets.
-
-- **Groves and forests:** dozens of trees near the start, hundreds over the planet, grouped in groves and woods on suitable ground (grassland, river banks), with variety in size and form. The current tree path draws at most 6 trees cut by the slice from one capsule texture; it must scale:
-  - cull on the CPU to trees the slice cuts within range;
-  - give far trees a simpler form;
-  - add trunk collisions for the walker and for bodies;
-  - add trees to the radar's Landmarks layer.
-- **4D rock shapes:** rocks that are not balls:
-  - tesseract slabs and blocks, 16-cell and 24-cell crystals, duocylinder stones, scree fields, outcrops;
-  - each traced analytically (as objects and planet B's 120-cell already are), shaded and shadowed, solid to the walker and to bodies, climbable where big;
-  - their slices change shape as you turn, which is the point;
-  - spherical boulders stay, as one kind among several.
-- **Creatures you meet:**
-  - more walkers and rollers, living near the start and along likely paths;
-  - herds that do not all vanish the moment you approach: some walkers curious enough to stay in or near your slice, while others stay shy;
-  - the owner's instruction: **render and simulate creatures only when they are visible.** Step and draw near ones in or near the slice every frame; others only coarsely, through the 2 Hz think and the ecosystem.
-- **Things to find:** cairns, ruins and caches (balls, blocks, lanterns, impulse stones) along the way, at a density that keeps a walk rewarding; a few that tie into the artifacts.
-- **Performance:** everything new is culled on the CPU before it reaches the GPU, by slice and by range. Hold the 50% gate in the costliest views (inside a forest, among rocks, in a herd), not only at the start.
-
-### N4. Wordless guidance
-
-- **The launcher pad** shows four empty sockets round it, each glowing as its part arrives in the ring; a full set lights the pad.
-- **Parts and artifacts are visible from afar.** Something that reads as a beacon in a slice view: remember a thin beam is seen only when your slice cuts it. Glowing forms above the site, light on the ground, or the radar's Landmarks layer may serve better. Choose by screenshot.
-- **The radar marks the nearest unsolved artifact** (Landmarks), in the wordless style of the existing marks.
-
-### N5. Polish, final gates, v1.0
-
-- **A polish pass:** the new content's look and sound, the help text (the radar panel, the new things), the credits.
-- **A read-only review subagent** on the run's diff, then fix what it finds.
-- **All gates,** then tag **v1.0**, push it, and build the itch.io zip (`tools/package.sh` → `dist/glome-v1.0.zip`). Update `docs/ITCH.md` if the page text needs it.
-
-## 7. At the end
-
-- **The report:** append a **"Run three"** section to `docs/NIGHT_REPORT.md`:
-  - what shipped per milestone;
-  - what was cut and why;
-  - known issues;
-  - the decisions (with a pointer to DECISIONS.md);
-  - performance numbers;
-  - how to try the new things;
-  - the owner's to-dos.
-- **A one-screen summary** in chat: the live links (https://bengreff.github.io/glome/, https://bengreff.github.io/), what to try first, the to-dos (the itch.io upload of `dist/glome-v1.0.zip`, approving the hub copy if still pending).
-- **Update the project memory file** with the new state.
+- **Subagents:** at most 2 at once, `model: sonnet`, told not to spawn their own. Never two agents on one file.
+- **Lessons from runs four to six:**
+  - Play as a new player first and measure before changing anything.
+  - Test leaving places, not only reaching them.
+  - Check any claim that something is "visible in any slice" (thin things vanish when the slice is half a metre off).
+  - The owner wants creatures spread naturally where they live, not drawn to the player.
+  - Look at every screenshot critically.

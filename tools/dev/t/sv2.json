@@ -1,0 +1,1 @@
+[{"eval":"1","wait":3000},{"file":"t/tour.js"},{"eval":"window.VIEWS = [\"start\", \"inwood\", \"herd\", \"down\", \"outcrop\"]; 1"},{"file":"t/settleview.js"},{"eval":"JSON.stringify({cpu: Object.fromEntries(Object.entries(__glome.prof.cpu).map(([k, v]) => [k, +v.toFixed(2)])), e: __glome.G.errors||0, last: __glome.G.lastError||null})"}]

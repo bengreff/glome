@@ -22,7 +22,7 @@ import { MASSIF } from './world.js';
 import { quality, updateSky, setFov, hits, sunbuf, programsReady } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
-         drawStone, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
+         drawStone, pouchKey, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
@@ -41,6 +41,7 @@ import { orbitOf, toBody, dirToBody, dirToInertial } from './cosmos.js';
 import { RIVERS, ISLANDS, ARCHI } from './world.js';
 import { props, makeRocks, uploadProps, rockContact, rocksAt, placeRock, setExtraProps } from './props.js';
 import { finds, makeFinds } from './finds.js';
+import { updateNooks } from './nooks.js';
 import { tiles } from './tiles.js';
 
 const $ = id => document.getElementById(id);
@@ -131,7 +132,7 @@ function handleActions(cam) {
   }
   if (hold.fT >= 0 && objects.held && now - hold.fT > 0.3 && now - hold.ghostT > 0.2) { computeGhost(camW); hold.ghostT = now; }
   G.charge = hold.mT >= 0 && objects.held ? (now - hold.mT) / 1.0 : -1;
-  if (actions.g) { actions.g = false; drawStone(camW); }
+  if (actions.g) { actions.g = false; pouchKey(camW); }
   if (actions.mDown) { actions.mDown = false; if (objects.held) hold.mT = now; }
   if (actions.mUp) {
     actions.mUp = false;
@@ -283,6 +284,7 @@ function frameBody(now) {
   let rad = null;
   if (player.onB == null) {
     updateArtifacts();
+    updateNooks();
     stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
     const cd = creatureDraw(cam.eye, cam.A, player.hf, dt);
     setExtraProps(cd.items); legSlot.caps = cd.caps;          // the creatures' bodies are props; their legs go with the trees

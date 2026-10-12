@@ -1,0 +1,1 @@
+[{"eval":"1","wait":4000},{"file":"t/tour.js"},{"eval":"TOUR.start(); 1","wait":2000},{"file":"t/tilecap.js"},{"eval":"TOUR.inwood(); 1","wait":2500},{"file":"t/tilecap.js"},{"eval":"TOUR.herd(); 1","wait":2500},{"file":"t/tilecap.js"},{"eval":"TOUR.grove(); 1","wait":2500},{"file":"t/tilecap.js"}]

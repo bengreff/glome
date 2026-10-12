@@ -1,0 +1,1 @@
+[{"eval":"1","wait":5000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/persist1.js","wait":3500},{"eval":"location.reload(); 1","wait":22000},{"file":"t/persist2.js"},{"file":"t/persist3.js","wait":22000},{"file":"t/persist2.js","snap":"after"}]

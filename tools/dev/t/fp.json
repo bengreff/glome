@@ -1,0 +1,1 @@
+[{"eval":"1","wait":3000},{"file":"t/fp1.js"},{"eval":"location.reload(); 1","wait":16000},{"file":"t/fp2.js"}]

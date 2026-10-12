@@ -13,7 +13,7 @@ import { rot as R4 } from './so4.js';
 import { makeProp, addRock, rocksAt, SHAPE, MAT } from './props.js';
 import { spawn } from './objects.js';
 
-export const finds = { ruins: [], caches: [], cairns: [], gen: 0 };
+export const finds = { ruins: [], caches: [], cairns: [], nooks: [], gen: 0 };
 let seed = 4711;
 const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
 const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
@@ -61,6 +61,12 @@ const RUINS = {
   // steps up to a platform
   steps(n, fr, hf) { for (let k = 0; k < 3; k++) stone(n, fr, [2.2 - 0.6 * k, 2.2 - 0.6 * k, 2.2 - 0.6 * k, 0.2], hf, { lift: 0.4 * k }); },
 };
+// A low pedestal of worked stone at ground point q, on which the monument grows an impulse stone (nooks.js); the
+// stone's centre rests on its top. (It draws no random numbers, so the rest of the world is made as before.)
+function pedestal(q, fr, hf, lift = 0) {
+  const p = stone(q, fr, [0.2, 0.2, 0.2, 0.2], hf, { lift });
+  finds.nooks.push({ p: vec4.scale(q, PLANET_R + hf.heightAt(q) - 0.15 + lift + 0.4 + 0.09 + 0.01), prop: p });
+}
 const nextGen = () => finds.gen++;
 const KINDS = ['glomeS', 'glomeS', 'glomeL', 'tessS', 'tessS', 'tessL', 'lantern', 'stone', 'stone'];
 function cache(n, hf, size = 2 + Math.floor(rnd() * 3), lift = 0) {
@@ -81,6 +87,7 @@ function cairn(n, hf, h = 3) {
     b.spawnPos = b.pos.slice(); b.sleeping = true; b.find = 'cairn';
     lift += kind === 'tessS' ? 0.3 : 0.36;
   }
+  pedestal(at(n, fr, 0.9, 0, 0), fr, hf);
   finds.cairns.push({ n });
 }
 const slope = (hf, n) => { const T = tangents(n), e = 2; let s = 0; for (const t of T) s += ((hf.heightAt(off(n, t, e)) - hf.heightAt(off(n, t, -e))) / (2 * e)) ** 2; return Math.sqrt(s); };
@@ -89,12 +96,14 @@ const clear = (n, r) => !rocksAt(vec4.scale(n, PLANET_R)).some(p => vec4.len(vec
 
 // home: where you arrive; trails: unit points that lines of cairns lead toward; keepOut(n, r) as for the rocks.
 export function makeFinds(hf, home, trails, keepOut) {
-  seed = 4711; finds.ruins.length = finds.caches.length = finds.cairns.length = 0;
+  seed = 4711; finds.ruins.length = finds.caches.length = finds.cairns.length = finds.nooks.length = 0;
   const gauss = () => rnd() + rnd() + rnd() + rnd() - 2, randomUnit = () => vec4.norm([gauss(), gauss(), gauss(), gauss()]);
   const T0 = tangents(home), randDir = n => { const T = tangents(n); return vec4.norm(vec4.add(vec4.add(vec4.scale(T[0], rnd() - 0.5), vec4.scale(T[1], rnd() - 0.5)), vec4.scale(T[2], rnd() - 0.5))); };
   const ruinAt = (n, kind) => {
     const fr = frameAt(n); RUINS[kind](n, fr, hf);
     finds.ruins.push({ n, kind });
+    // (on the steps: on the top platform, whose top is 1.05 m above the ground at the centre)
+    if (kind === 'steps') { const q = at(n, fr, 0, 0.55, 0); pedestal(q, fr, hf, 1.2 + hf.heightAt(n) - hf.heightAt(q)); } else pedestal(at(n, fr, 0, 2.6, 0), fr, hf);
     if (kind !== 'gate' && rnd() < 0.8) cache(n, hf, 2 + Math.floor(rnd() * 3), kind === 'steps' ? 1.07 : 0);   // (on the steps: on their top)
   };
   const kinds = Object.keys(RUINS);

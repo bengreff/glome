@@ -1,0 +1,1 @@
+[{"eval":"1","wait":4500},{"file":"t/meet4.js","snap":"last"},{"eval":"JSON.stringify({e: __glome.G.errors||0, last: __glome.G.lastError||null})"}]

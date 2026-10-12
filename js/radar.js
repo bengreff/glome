@@ -24,6 +24,18 @@ export const RADAR_LAYERS = [
   { key: 'rocks', name: 'boulders and rocks', on: false },
   { key: 'trail', name: 'trail', on: true },                 // where you have walked in the last two minutes
 ];
+// The pouch's glyph: a small sack tied at the neck, centred at (x, y), scale k.
+export function pouchGlyph(x, y, k, col) {
+  octx.save(); octx.fillStyle = col;
+  octx.beginPath(); octx.moveTo(x - 2 * k, y - 3 * k);
+  octx.quadraticCurveTo(x - 6 * k, y - 0.5 * k, x - 5 * k, y + 3 * k); octx.quadraticCurveTo(x - 4 * k, y + 5.8 * k, x, y + 5.8 * k);
+  octx.quadraticCurveTo(x + 4 * k, y + 5.8 * k, x + 5 * k, y + 3 * k); octx.quadraticCurveTo(x + 6 * k, y - 0.5 * k, x + 2 * k, y - 3 * k);
+  octx.closePath(); octx.fill();
+  octx.fillRect(x - 2.6 * k, y - 4.6 * k, 5.2 * k, 1.3 * k);                                    // the tie
+  octx.beginPath(); octx.moveTo(x - 1.6 * k, y - 4.6 * k); octx.lineTo(x - 3.6 * k, y - 7 * k); octx.lineTo(x, y - 5.4 * k);   // the neck's flare
+  octx.lineTo(x + 3.6 * k, y - 7 * k); octx.lineTo(x + 1.6 * k, y - 4.6 * k); octx.closePath(); octx.fill();
+  octx.restore();
+}
 export const radarShows = () => { const s = G.state.radar.show || (G.state.radar.show = {}); for (const L of RADAR_LAYERS) if (!(L.key in s)) s[L.key] = L.on; return s; };
 export const TRAIL_AGE = 120;                     // seconds a step of your trail stays on the radar, fading
 const VN_SMALL = 80, VN_BIG = 128, BIG_RANGE = 330;   // baked volume resolution: finer for the far ranges
@@ -428,10 +440,20 @@ export function drawRadarOverlay(r, sun) {
     octx.fillStyle = 'rgba(82, 220, 200, 0.95)'; octx.strokeStyle = 'rgba(5, 10, 16, 0.9)'; octx.lineWidth = 1.5 * k;
     octx.beginPath(); octx.moveTo(P[0], P[1] - z); octx.lineTo(P[0] + z, P[1]); octx.lineTo(P[0], P[1] + z); octx.lineTo(P[0] - z, P[1]); octx.closePath(); octx.fill(); octx.stroke();
   }
-  // the pouch: one dot per impulse stone, under the ball
-  if (G.objects && G.objects.pouch > 0) {
-    octx.fillStyle = 'rgba(82, 220, 200, 0.95)';
-    for (let i = 0; i < G.objects.pouch; i++) { octx.beginPath(); octx.arc(rect.x + rect.s / 2 + (i - (G.objects.pouch - 1) / 2) * 9 * k, rect.y + rect.s + 4 * k, 2.6 * k, 0, 7); octx.fill(); }
+  // the pouch, under the ball: its glyph and nine places, one filled for each impulse stone in it
+  if (G.objects) {
+    const n = G.objects.pouch, y = Math.min(rect.y + rect.s + 4 * k, overlay.height - 12 * k), x0 = rect.x + rect.s / 2 - 4 * 9 * k;
+    octx.fillStyle = 'rgba(11, 14, 20, 0.5)'; octx.beginPath();
+    if (octx.roundRect) octx.roundRect(x0 - 22 * k, y - 8.5 * k, 102 * k, 17 * k, 8 * k); else octx.rect(x0 - 22 * k, y - 8.5 * k, 102 * k, 17 * k);
+    octx.fill();
+    octx.globalAlpha = n > 0 ? 1 : 0.6;
+    pouchGlyph(x0 - 13 * k, y - 0.5 * k, k, 'rgba(82, 220, 200, 0.95)');
+    for (let i = 0; i < 9; i++) {
+      octx.beginPath(); octx.arc(x0 + i * 9 * k, y, (i < n ? 2.6 : 2.2) * k, 0, 7);
+      if (i < n) { octx.fillStyle = 'rgba(82, 220, 200, 0.95)'; octx.fill(); }
+      else { octx.strokeStyle = 'rgba(82, 220, 200, 0.4)'; octx.lineWidth = 1 * k; octx.stroke(); }
+    }
+    octx.globalAlpha = 1;
   }
 
   // boulders: dots sized by radius; outlined where your slice cuts them (those are the ones you can see)

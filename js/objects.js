@@ -8,7 +8,8 @@
 // stops at the ground, swings when you turn fast and sags if it is heavy, and you feel every impulse the drive
 // gives it (momentum is conserved). If it snags, a metre from your hands for a moment, you let go.
 // F: pick up / drop. Hold F: a ghost shows where the object will come to rest; release to set it down there.
-// Mouse: hold to charge a throw, release to throw. G: draw an impulse stone from the pouch.
+// Mouse: hold to charge a throw, release to throw. G: put the impulse stone you hold in the pouch (it holds nine), or
+// with empty hands, draw one out.
 // Throwing conserves momentum exactly: you recoil by m_object·v / (m_you + m_object).
 import { G } from './game.js';
 import { LAWS } from './laws.js';
@@ -39,6 +40,7 @@ export const KINDS = {
   key: { shape: 'tesseract', size: 0.32, density: DENSITY.metal / 4, mat: 4 },     // the mirror key: handed (two marked cells)
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
+export const POUCH_MAX = 9;        // the pouch holds nine
 const THROW_MAX = 260, THROW_VMAX = 14;   // a full charge is a 260 N·s impulse, at most 14 m/s
 
 export const objects = { world: null, worldB: null, toA: null, held: null, pouch: 0, charge: -1, fDown: -1, ghost: null, ghostT: 0, discovered: new Set() };
@@ -223,11 +225,6 @@ export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
   return best;
 }
 export function pickUp(b, cam) {
-  if (b.kind === 'stone') {                     // impulse stones go into the pouch
-    worldOf(b).remove(b); objects.pouch++;
-    G.audio?.emit('clack', b.pos, 0.6);
-    return;
-  }
   takeHold(b, cam);
   G.audio?.emit('clack', b.pos, 0.4);
 }
@@ -259,6 +256,15 @@ export function throwHeld(cam, charge, kickPlayer) {
   G.audio?.emit(b.kind === 'stone' ? 'launch' : 'throw', b.pos, b.kind === 'stone' ? 0.5 : 0.6);
   return { body: b, dv, u };
 }
+// G: the stone in your hand goes into the pouch (if it has room); with empty hands, one comes out.
+export function pouchKey(cam) {
+  const b = objects.held;
+  if (!b) return drawStone(cam);
+  if (b.kind !== 'stone' || objects.pouch >= POUCH_MAX) return false;
+  release(b, null); b.pouched = true; worldOf(b).remove(b); objects.pouch++;
+  G.audio?.emit('clack', b.pos, 0.6);
+  return true;
+}
 export function drawStone(cam) {
   if (objects.held || objects.pouch <= 0) return false;
   objects.pouch--;
@@ -267,7 +273,7 @@ export function drawStone(cam) {
   takeHold(b, cam);                               // into the hand (not the pouch)
   return true;
 }
-function spawnAt(kind, pos, inB = false) {
+export function spawnAt(kind, pos, inB = false) {
   const K = KINDS[kind];
   const body = makeBody({ shape: K.shape, size: K.size, density: K.density, mass: K.mass, pos, kind });
   body.mat = K.mat; body.glow = K.glow || 0; body.light = K.light || null; body.inB = inB;
@@ -391,8 +397,10 @@ export function uploadObjects(cam, alpha = 1) {
 // those you have moved (and which are gone), with everything else.
 export const objectsSave = {
   save() {
-    const r5 = v => Math.round(v * 1e5) / 1e5, all = objects.world.bodies.concat(objects.worldB ? objects.worldB.bodies : []);
+    const r5 = v => Math.round(v * 1e5) / 1e5;
+    let all = objects.world.bodies.concat(objects.worldB ? objects.worldB.bodies : []);
     const moved = b => b.gen == null || b.held || b.inB || !b.spawnPos || vec4.len(vec4.sub(b.pos, b.spawnPos)) > 0.02;
+    all = all.filter(b => b.nook == null);           // (a stone on a monument's pedestal belongs to the monument: nooks.js)
     const present = new Set(all.filter(b => b.gen != null).map(b => b.gen)), gone = [];
     for (let k = 0; k < (G.genCount || 0); k++) if (!present.has(k)) gone.push(k);
     return {
@@ -406,12 +414,12 @@ export const objectsSave = {
     const w = objects.world;
     // fixed things (the launcher) are rebuilt, not saved; the found things stay as the world made them unless saved
     const gens = new Map(w.bodies.filter(b => b.gen != null).map(b => [b.gen, b]));
-    w.bodies = w.bodies.filter(b => b.fixed || (b.gen != null && s.gens === G.genCount));
+    w.bodies = w.bodies.filter(b => b.nook == null && (b.fixed || (b.gen != null && s.gens === G.genCount)));
     if (objects.worldB) objects.worldB.bodies = objects.worldB.bodies.filter(b => b.fixed);
     if (s.gens === G.genCount) for (const k of s.gone || []) { const b = gens.get(k); if (b) w.remove(b); }
     else for (const b of gens.values()) w.add(b), b.sleeping = true;   // (a save from before they existed: keep them all)
     objects.held = null;
-    objects.pouch = s.pouch || 0;
+    objects.pouch = Math.min(POUCH_MAX, s.pouch || 0);
     for (const o of s.bodies) {
       if (!KINDS[o.kind]) continue;
       // a found thing from a world whose finds were made differently: theirs stand in its place (unless in your hand)

@@ -1,14 +1,14 @@
 // The way: one goal at a time, shown without words. Its column of light stands in your slice, wherever the goal
 // really lies (straight above its place, moved into your slice along ana: a guide for a 3D mind, not a thing of the
 // world); a mark in the view gives its distance; and when the goal lies off your slice, a cue beside the mark says
-// which way to step to reach it (E toward ana, Q toward kata, in the radar's colours) and how far. Near the goal a
-// cue says what to do there: take (F), set down (F), turn through ana (Z C), let go, jump (Space).
+// which way to step to reach it (E toward ana, Q toward kata, in the radar's colours) and how far. At a puzzle it
+// says only where, never what to do: the idea is the puzzle's. Elsewhere a cue says what the place is for: take a
+// part (F), set it down at the pad (F), jump from the charged pad (Space).
 // The goals follow the artifacts' chain: the cave's mouth and then its chamber; a part set free, then the
 // launcher's pad to lay it on; the next artifact and what it asks for; with all four parts, the pad itself.
 import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
-import { rot as R4 } from './so4.js';
 import { objects } from './objects.js';
 import { launcher } from './launcher.js';
 import { artifacts } from './artifacts.js';
@@ -66,17 +66,14 @@ function pickGoal() {
     const key = bodies.find(b => b.tag === 'key2');
     if (!key) return set(next.n && vec4.scale(next.n, PLANET_R), 'artifact');
     if (!key.held) return set(key.pos, 'key', { cue: G.canTake && near(key.pos, 4) ? 'F' : null });
-    // holding the key: to its socket; there, turn it through ana until it matches the model, and set it down
-    const M = R4.toRows(key.rot), kx = [0, 1, 2, 3].map(i => M[i][0]), ky = [0, 1, 2, 3].map(i => M[i][1]);
-    const fits = vec4.dot(kx, next.target[0]) > 0.8 && vec4.dot(ky, next.target[1]) > 0.8;
-    return set(next.sock, 'socket', { cue: near(next.sock, 4) ? (fits ? 'F' : 'turn') : null });
+    // holding the key: to its socket (how it must sit there is the puzzle)
+    return set(next.sock, 'socket');
   }
   if (next.id === 'knot' && G.rope) {
     const R = G.rope, post = G.knotPost;
     if (G.ropeHeld == null) return set(R.x[17], 'rope', { cue: near(R.x[17], 3.5) ? 'F' : null });
-    // holding the loop: step through ana until it is clear of the post, then let go
-    const clear = R.x.every(q => segDist(q, post.a, post.b) > 1.0);
-    return set(R.x[G.ropeHeld], 'loop', { cue: clear ? 'F' : 'E' });
+    // holding the loop (how to free it is the puzzle)
+    return set(R.x[G.ropeHeld], 'loop');
   }
   if (next.id === 'antipode') {
     // the bowl on the summit wants something left in it (anything you can carry)

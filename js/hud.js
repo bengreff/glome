@@ -3,7 +3,7 @@ import { PLANET_R, SEA } from './world.js';
 import { vec4 } from './player.js';
 import { G } from './game.js';
 import { canvas, overlay, octx, scene, prof, FOV } from './render.js';
-import { radar, headingTo } from './radar.js';
+import { radar, headingTo, pouchGlyph } from './radar.js';
 import { boulders } from './boulders.js';
 import { floorOf, NORMALS, B_IN } from './planetB.js';
 import { bworld } from './console.js';
@@ -165,16 +165,6 @@ export function drawGoal(cam) {
   } else if (g.cue === 'F' || g.cue === 'Space') {
     octx.globalAlpha = 0; const w = keyCap(0, -100, g.cue, GOAL, k, 1.3); octx.globalAlpha = 1;
     keyCap(centred(w), cy, g.cue, GOAL, k, 1.3);
-  } else if (g.cue === 'E') {                               // step toward ana (as far as it takes)
-    const c = 6.5 * k, x0 = centred(18 * 1.3 * k + 6 * k + 2 * c), x1 = x0 + keyCap(x0, cy, 'E', ANA, k, 1.3) + 6 * k;
-    octx.fillStyle = ANA; octx.beginPath(); octx.moveTo(x1, cy + c * 0.6); octx.lineTo(x1 + 2 * c, cy + c * 0.6); octx.lineTo(x1 + c, cy - c); octx.closePath(); octx.fill();
-  } else if (g.cue === 'turn') {
-    // turn through ana, half a turn: Z or C, and an arc of 180°
-    let x0 = cx - 46 * k;
-    x0 += keyCap(x0, cy, 'Z', ANA, k, 1.3) + 4 * k; x0 += keyCap(x0, cy, 'C', ANA, k, 1.3) + 12 * k;
-    octx.strokeStyle = ANA; octx.lineWidth = 2.2 * k; octx.beginPath(); octx.arc(x0 + 8 * k, cy + 2 * k, 8 * k, Math.PI, 0); octx.stroke();
-    octx.fillStyle = ANA; octx.beginPath(); octx.moveTo(x0 + 12 * k, cy + 1 * k); octx.lineTo(x0 + 20 * k, cy + 1 * k); octx.lineTo(x0 + 16 * k, cy + 7 * k); octx.closePath(); octx.fill();
-    octx.font = `600 ${12 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'left'; octx.fillText('180°', x0 + 24 * k, cy + 5 * k);
   }
   octx.restore();
 }
@@ -194,6 +184,12 @@ export function drawGazeDot() {
   octx.lineWidth = 1.4 * k;
   octx.beginPath(); octx.arc(W / 2, H / 2, r, 0, 7); octx.stroke();
   if (gz.open > 0.6 && !(guide.goal && guide.goal.cue)) { octx.globalAlpha = gz.open; keyCap(W / 2 - 9 * k, H / 2 + 22 * k, 'F', 'rgba(82, 220, 200, 0.9)', k); octx.globalAlpha = 1; }
+  // holding an impulse stone, with room in the pouch: G puts it there
+  const held = G.objects && G.objects.held;
+  if (held && held.kind === 'stone' && G.objects.pouch < 9) {
+    const x = W / 2 - 17 * k, w = keyCap(x, H / 2 + 22 * k, 'G', 'rgba(82, 220, 200, 0.9)', k);
+    pouchGlyph(x + w + 9 * k, H / 2 + 22 * k, k, 'rgba(82, 220, 200, 0.9)');
+  }
   if ((G.strain || 0) > 0.35) {
     octx.strokeStyle = `rgba(255, 255, 255, ${(0.5 * (G.strain - 0.35) / 0.65).toFixed(3)})`; octx.lineWidth = 1.2 * k;
     octx.beginPath(); octx.arc(W / 2, H / 2, 13 * k, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * G.strain); octx.stroke();
