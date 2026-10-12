@@ -1,10 +1,10 @@
 # Night report
 
-The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), and run five on 12 October, which fills the world where you are (v1.2); their sections are at the end.
+The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), run five on 12 October, which fills the world where you are (v1.2), and run six the same day: Windows, creatures where they live and a cave you can leave (v1.3); their sections are at the end.
 
 **Play:** https://bengreff.github.io/glome/ · **Hub:** https://bengreff.github.io/ · **Source:** https://github.com/bengreff/glome
 
-Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
+Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**; run six, **v1.3**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
 
 ## What to try first
 
@@ -246,3 +246,25 @@ You played v1.1: the goal was clear, but you saw zero creatures and few trees or
 
 1. **itch.io:** upload `dist/glome-v1.2.zip` in place of v1.1.
 2. **Play somewhere away from the start and stand still for half a minute.** Tell me whether it now feels inhabited, and whether the plants are too many, too few, or wrong in kind.
+
+## Run six (12 October): Windows, creatures where they live, a cave you can leave (v1.3)
+
+You played v1.2: it would not load on Windows and froze the browser; the creatures chased you instead of being spread evenly; and in the cave you were trapped.
+
+### What changed
+
+1. **Windows.** I have no Windows machine to test on, so I fixed the two known causes of exactly this freeze. Every shader was compiled and checked the moment the page loaded, before the loading bar could move; on Windows the browser translates them for Direct3D, whose compiler is far slower, and the check held the page frozen until it finished. Now the compiles start at once and are checked only after the world is built, in the background where the browser allows, with "Preparing the view (compiling the shaders, n s)…" on screen. And the terrain's ray march read its height texture with automatic mip levels inside a long loop, which Direct3D's compiler can only handle by unrolling the whole loop: a compile that can take minutes. Every lookup inside a loop now names its level; a scan of the shaders finds no other. Boot also yields between its long steps and says what it is doing.
+2. **Creatures live where they live.** v1.2 had curious walkers notice you from 100 m and come over, so a crowd gathered and followed you. Now herds are spread evenly over the planet, like the plants, each grazing about its own home; the same herds are there when you come back. Come close and the shy ones trot off, the curious ones stop and watch; none follows you from its home ground. There are many more of them (about one walker to 600 m³ of grassland), and walkers are 1.4 times larger, so you meet them wherever you go: at twelve random places, on arrival, creatures were in your slice within 60 m at all twelve and in your view at ten.
+3. **The cave.** You were trapped by its shape: the tunnel left the round chamber partway up its side, and the last metre before it was a concave wall steeper than 60° that stopped your knees. Now a level passage leaves the chamber at its floor and the tunnel climbs from it at no more than 30°; the mouth's hollow is a metre deep with gentle sides. While you are inside, the guide points the way out. A new playthrough goes in with real keys, takes part I and walks out, following the cues.
+
+### Gates
+
+- **Unit tests** pass; the creatures' test is new: herds near wherever you stand (458 creatures within 40 m at the median of 80 random places, none without), none strays from home (at most 0.6 m past its leash, fleeing) and none of a herd is within 30 m of you after you walk 120 m away. **Smoke:** no errors, boot 4.2 s on the Mac.
+- **Performance:** start 58.2%, in a wood 55.2%, at a herd 58.8%, looking down 60.2%, at an outcrop 56.4%, each at 58–60 fps. The main thread's frame work is 3.8 ms (was 2.3 before the plants and herds).
+- **Persistence:** all pass; a save is 7.8 KB (the creatures are no longer in it).
+- **Playthroughs:** into the cave and out of it by the cues (new); the mirror, the knot and the antipode solve; tier IV lands on B (206 s, as predicted). The orbit's first pick skimmed the hills (low point 346 m) and came down, as in run four; the playthrough now asks for a low point above 360 m, and went round (361 m).
+
+### For you
+
+1. **Try it on Windows** and tell me what the loading screen says if it still stops: it now shows each step, and how long the shaders take to compile. If a shader fails, it shows the error instead of freezing; a copy of that text would let me fix it.
+2. **itch.io:** upload `dist/glome-v1.3.zip` in place of v1.2.

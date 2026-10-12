@@ -21,9 +21,10 @@ for (; waited < 400 && !found; waited += 6) {
     const dir = nz(V.add(V.sc(h, Math.cos(e)), V.sc(up, Math.sin(e))));
     const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dir, d.TIERS[3]), t), t);
     // bounded, a turn and more, and with room to spare at its low point (the orbit is marginal by nature: a path
-    // that skims the hills is lost to the smallest difference between the map's steps and flight's)
+    // that skims the hills is lost to the smallest difference between the map's steps and flight's: paths whose low point
+    // cleared the hills by under 60 m were lost about half the time)
     const rs = r.pts.map(q => len(V.sub(q.x, C.orbitOf('A', q.t).c))), lo = Math.min(...rs.slice(rs.length >> 3));
-    if (!r.hit && Math.max(...rs) < 700 && lo > 250 + 48 + 40 && sweep(r.pts) > 2.2 * Math.PI) found = { dir, rmax: Math.max(...rs).toFixed(0), rmin: lo.toFixed(0) };
+    if (!r.hit && Math.max(...rs) < 700 && lo > 250 + 48 + 62 && sweep(r.pts) > 2.2 * Math.PI) found = { dir, rmax: Math.max(...rs).toFixed(0), rmin: lo.toFixed(0) };
   }
   if (!found) { g.state.time += 6; await gt(0.05); }
 }

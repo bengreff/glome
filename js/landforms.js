@@ -14,17 +14,25 @@ const proj = (v, u) => vec4.norm(vec4.sub(v, vec4.scale(u, vec4.dot(v, u))));
 // Built after the terrain and the start are known (the cave lies between where you arrive and the summit).
 export function buildLandforms(hf, home, homeA) {
   carves.length = 0;
-  // the cave: a chamber under the massif's flank, 40 m from the start toward the summit; its tunnel climbs out
-  // toward ana (your starting ana direction), 16 m long
+  // the cave: a chamber under the massif's flank, 40 m from the start toward the summit, and its one way in: a passage
+  // that leaves the chamber level with its floor toward ana (your starting ana direction), then a tunnel that climbs at
+  // no more than 30° to its mouth on the hillside, a hollow you step down into. (A passage leaving a round chamber
+  // partway up its side meets it in a concave wall steeper than 60°, which stops your knees: you were trapped.)
   const f = proj(vec4.sub(MASSIF, home), home);
   const c = off(home, f, 40), hc = hf.heightAt(c);
   const a = proj(homeA, c);
-  const chamber = vec4.scale(c, PLANET_R + hc - 7.5);
-  let mouthN = off(c, a, 15), mh = hf.heightAt(mouthN);
-  const mouth = vec4.scale(mouthN, PLANET_R + mh + 0.4);
-  carves.push({ a: chamber, b: chamber, r: 6.5, name: 'cave' });
-  carves.push({ a: vec4.add(chamber, vec4.scale(vec4.norm(chamber), -3.5)), b: mouth, r: 2.4, name: 'tunnel' });
-  G.cave = { chamber, mouth, floor: vec4.scale(vec4.norm(chamber), PLANET_R + hc - 7.5 - 6.5) };
+  const RC = 5, RT = 2.4, chamber = vec4.scale(c, PLANET_R + hc - 6.5), floorR = PLANET_R + hc - 6.5 - RC;
+  const p1 = vec4.scale(c, floorR + RT), p2 = vec4.scale(off(c, a, 7), floorR + RT);
+  // the mouth: the nearest place along ana where the climb from the passage's end is no steeper than 30°
+  let d = 14, mouthN = off(c, a, d);
+  for (; d < 60; d += 0.5) { mouthN = off(c, a, d); if (PLANET_R + hf.heightAt(mouthN) + 1.4 - (floorR + RT) <= Math.tan(Math.PI / 6) * (d - 7)) break; }
+  const mh = hf.heightAt(mouthN), mouth = vec4.scale(mouthN, PLANET_R + mh + 1.4);   // (its axis 1.4 m up: the hollow is 1 m deep, its sides gentle)
+  carves.push({ a: chamber, b: chamber, r: RC, name: 'cave' });
+  carves.push({ a: p1, b: p2, r: RT, name: 'passage' });
+  carves.push({ a: p2, b: mouth, r: RT, name: 'tunnel' });
+  const outN = off(mouthN, proj(vec4.sub(mouthN, c), mouthN), 4.5);
+  G.cave = { chamber, mouth, floor: vec4.scale(c, floorR), pit: vec4.scale(mouthN, PLANET_R + mh - 0.9),
+             out: vec4.scale(outN, PLANET_R + hf.heightAt(outN)), parts: ['cave', 'passage', 'tunnel'] };
   // the arch: a tunnel straight through island 5, at head height above the sea
   const I = ISLANDS[5].n, T = [[-I[1], I[0], I[3], -I[2]], [-I[2], -I[3], I[0], I[1]], [-I[3], I[2], -I[1], I[0]]];
   const span = ISLANDS[5].r * 1.6;

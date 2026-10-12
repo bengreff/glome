@@ -98,7 +98,7 @@ float chartHeight(vec4 n, int k) {
   vec3 u = (k == 0 ? n.yzw : k == 1 ? vec3(n.x, n.z, n.w) : k == 2 ? vec3(n.x, n.y, n.w) : n.xyz) / m;
   vec3 pos = clamp((u * 0.5 + 0.5) * (uN - 1.0), 0.0, uN - 1.0);
   float chart = float(2 * k) + (s > 0.0 ? 1.0 : 0.0);
-  return texture(uAtlas, vec3((pos.x + 0.5) / uN, (pos.y + 0.5) / uN, (chart * uN + pos.z + 0.5) / (8.0 * uN))).r;
+  return textureLod(uAtlas, vec3((pos.x + 0.5) / uN, (pos.y + 0.5) / uN, (chart * uN + pos.z + 0.5) / (8.0 * uN)), 0.0).r;
 }
 // The water's surface (the sea, or a river 0.5 m above its bed), on the same charts at half the resolution.
 uniform sampler3D uWaterL;
@@ -114,7 +114,7 @@ float waterAt(vec4 n) {
     vec3 u = (k == 0 ? n.yzw : k == 1 ? vec3(n.x, n.z, n.w) : k == 2 ? vec3(n.x, n.y, n.w) : n.xyz) / m;
     vec3 pos = clamp((u * 0.5 + 0.5) * (NW - 1.0), 0.0, NW - 1.0);
     float chart = float(2 * k) + (s > 0.0 ? 1.0 : 0.0);
-    sum += w * texture(uWaterL, vec3((pos.x + 0.5) / NW, (pos.y + 0.5) / NW, (chart * NW + pos.z + 0.5) / (8.0 * NW))).r;
+    sum += w * textureLod(uWaterL, vec3((pos.x + 0.5) / NW, (pos.y + 0.5) / NW, (chart * NW + pos.z + 0.5) / (8.0 * NW)), 0.0).r;
     wsum += w;
   }
   return max(uSea, sum / wsum);
@@ -560,7 +560,7 @@ vec4 coneNormal(vec4 p, vec4 pa, vec4 pb, float r) {
 }
 // A clump of leaves is not a solid ball: the ray goes on into it where the leaves are thin (a ragged edge, gaps you see
 // through) and stops where they are dense, denser toward the middle. (3D noise along a slant through 4D.)
-float leafDensity(vec4 p) { vec3 q = p.xyz + p.w * vec3(0.37, -0.21, 0.61); return 0.6 * texture(uNoise, q * 0.3).a + 0.4 * texture(uNoise, q * 0.09 + 0.5).a; }
+float leafDensity(vec4 p) { vec3 q = p.xyz + p.w * vec3(0.37, -0.21, 0.61); return 0.6 * textureLod(uNoise, q * 0.3, 0.0).a + 0.4 * textureLod(uNoise, q * 0.09 + 0.5, 0.0).a; }
 float leafEntry(vec4 ro, vec4 rd, vec4 c, float r, float t) {
   vec4 oc = ro - c; float b = dot(oc, rd), tOut = -b + sqrt(max(b * b - dot(oc, oc) + r * r, 0.0));
   for (int k = 0; k < 4; k++) {
@@ -582,7 +582,7 @@ float needleEntry(vec4 ro, vec4 rd, vec4 pa, vec4 pb, float r, float t) {
     if (rad < 0.05) return tt;
     float depth = 1.0 - length(w - y * k) / rad;
     if (depth < -0.05) break;                                // out through the far side
-    if (texture(uNoise, (p.xyz - p.w * vec3(0.41, 0.17, -0.53)) * 0.23).a + 2.2 * depth > 0.55) return tt;
+    if (textureLod(uNoise, (p.xyz - p.w * vec3(0.41, 0.17, -0.53)) * 0.23, 0.0).a + 2.2 * depth > 0.55) return tt;
   }
   return -1.0;
 }
@@ -1132,6 +1132,7 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
 bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
   tc = 1e9;
   float Rw = uPR + uSea;
+  vec4 oBest = vec4(0.0); bool sea = false;
   for (int k = -2; k <= 2; k++) {
     if (k == 0 || k < uCopyK.x || k > uCopyK.y) continue;    // only copies your slice cuts
     vec4 o = ro - float(k) * uL * uHoop;
@@ -1139,19 +1140,14 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
     if (b > 0.0 || b * b < c) continue;                      // misses the copy's terrain shell
     float t = marchTerrainFar(o, rd);
     float cw = dot(o, o) - Rw * Rw, dw = b * b - cw, tw = dw > 0.0 ? -b - sqrt(dw) : -1.0;
-    if (tw > 0.0 && (t < 0.0 || tw < t)) {                   // the copy's sea
-      if (tw < tc) {
-        tc = tw;
-        vec4 p = o + rd * tw, up = normalize(p);
-        vec3 sea = vec3(0.03, 0.12, 0.2) * (0.3 + 0.7 * dayFactor(up)) + vec3(0.9, 0.85, 0.7) * pow(max(dot(reflect(rd, up), uSun), 0.0), 60.0) * 0.6;
-        col = sea;
-      }
-    } else if (t > 0.0 && t < tc) {
-      tc = t;
-      col = shadeTerrain(o + rd * t, rd, t, false);
-    }
+    if (tw > 0.0 && (t < 0.0 || tw < t)) { if (tw < tc) { tc = tw; oBest = o; sea = true; } }   // the copy's sea
+    else if (t > 0.0 && t < tc) { tc = t; oBest = o; sea = false; }
   }
   if (tc > 1e8) return false;
+  // shaded once, after the loop (shading samples textures with their own mip levels, which a loop can't hold on D3D)
+  vec4 p = oBest + rd * tc;
+  if (sea) { vec4 up = normalize(p); col = vec3(0.03, 0.12, 0.2) * (0.3 + 0.7 * dayFactor(up)) + vec3(0.9, 0.85, 0.7) * pow(max(dot(reflect(rd, up), uSun), 0.0), 60.0) * 0.6; }
+  else col = shadeTerrain(p, rd, tc, false);
   col = mix(col, skyColor(rd, normalize(ro), uDayE), (1.0 - exp(-tc * 0.0004)) * uAtmos);   // a little haze
   return true;
 }
@@ -1522,7 +1518,7 @@ float hVol(vec3 m) {               // trilinear: bilinear in two neighbouring la
   vec3 c = clamp((m / (2.0 * uRB * VOL_PAD) + 0.5) * uVN, 0.5, uVN - 0.5);
   float z = c.z - 0.5, z0 = floor(z), z1 = min(z0 + 1.0, uVN - 1.0);
   vec2 o0 = vec2(mod(z0, uTX), floor(z0 / uTX)) * uVN, o1 = vec2(mod(z1, uTX), floor(z1 / uTX)) * uVN;
-  float v = mix(texture(uVol, (o0 + c.xy) / uVolSize).r, texture(uVol, (o1 + c.xy) / uVolSize).r, z - z0);
+  float v = mix(textureLod(uVol, (o0 + c.xy) / uVolSize, 0.0).r, textureLod(uVol, (o1 + c.xy) / uVolSize, 0.0).r, z - z0);
   return uEnc > 0.5 ? v * 100.0 - 40.0 : v;
 }
 vec3 gradVol(vec3 m) {

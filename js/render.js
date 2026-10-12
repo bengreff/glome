@@ -27,21 +27,31 @@ export const gl = canvas.getContext('webgl2', { antialias: false, powerPreferenc
 if (!gl) fail('This world needs WebGL 2, which this browser does not provide. Try a recent Chrome, Edge, Firefox or Safari on a desktop.');
 
 // ---------- GL helpers ----------
-function compile(type, src) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) fail('Shader failed to compile:\n' + gl.getShaderInfoLog(s));
-  return s;
-}
+// Programs are compiled in the background: each is started here and checked only once the world is built (where the
+// browser compiles shaders for Direct3D, as on Windows, the big ones take a while, and asking for their status at once
+// would hold the page frozen until they were done). KHR_parallel_shader_compile lets us wait without blocking.
+const parallel = gl.getExtension('KHR_parallel_shader_compile'), pending = [];
 export function program(fragSrc) {
-  const p = gl.createProgram();
-  gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT));
-  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc));
+  const p = gl.createProgram(), vs = gl.createShader(gl.VERTEX_SHADER), fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(vs, VERT); gl.compileShader(vs);
+  gl.shaderSource(fs, fragSrc); gl.compileShader(fs);
+  gl.attachShader(p, vs); gl.attachShader(p, fs);
   gl.linkProgram(p);
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) fail('Shader failed to link:\n' + gl.getProgramInfoLog(p));
+  p.shaders = [vs, fs]; pending.push(p);
   const locs = {};
   p.u = name => (name in locs) ? locs[name] : (locs[name] = gl.getUniformLocation(p, name));
   return p;
+}
+// Wait for every program started so far (show(ms) while waiting), then check that each compiled and linked.
+export async function programsReady(show) {
+  const t0 = performance.now();
+  if (parallel) while (pending.some(p => !gl.getProgramParameter(p, parallel.COMPLETION_STATUS_KHR))) { show?.(performance.now() - t0); await new Promise(r => setTimeout(r, 50)); }
+  for (const p of pending) if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    const logs = p.shaders.map(sh => gl.getShaderParameter(sh, gl.COMPILE_STATUS) ? '' : gl.getShaderInfoLog(sh)).join('\n').trim();
+    fail('Shader failed to compile or link:\n' + (logs || gl.getProgramInfoLog(p)));
+  }
+  pending.length = 0;
+  return performance.now() - t0;
 }
 export const progUp = program(UPSCALE_FRAG), progRadar = program(RADAR_FRAG), progBake = program(RADAR_BAKE_FRAG), progBlit = program(BLIT_FRAG);
 // The view in two passes where float targets can be drawn into (what each ray meets, then its colour: smaller programs

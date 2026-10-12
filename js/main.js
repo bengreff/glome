@@ -19,7 +19,7 @@ import * as saveMod from './save.js';
 import * as cosmos from './cosmos.js';
 import { capsuleTerrain, envSD, tangents } from './env.js';
 import { MASSIF } from './world.js';
-import { quality, updateSky, setFov, hits, sunbuf } from './render.js';
+import { quality, updateSky, setFov, hits, sunbuf, programsReady } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
          drawStone, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
@@ -339,9 +339,12 @@ function frameBody(now) {
 // ---------- boot ----------
 (async function boot() {
   const bootT0 = performance.now(), stamps = {};
+  // between its long steps, boot lets the page breathe (a slow computer would otherwise call the page unresponsive)
+  const step = async (msg, name) => { if (name) stamps[name] = Math.round(performance.now() - bootT0); const e = $('load-msg'); if (e) e.textContent = msg; await new Promise(r => setTimeout(r, 0)); };
   try {
     const built = await buildAtlas(), data = prefilter(built.data, N);
     stamps.terrain = performance.now() - bootT0;
+    await step('Setting down boulders, rocks and things…');
     tex.atlas = tex3D(N, N, 8 * N, gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, data);
     tex.water = tex3D(N >> 1, N >> 1, 8 * (N >> 1), gl.R16F, gl.RED, gl.FLOAT, gl.LINEAR, built.water);
     tex.noise = makeNoise();
@@ -390,6 +393,7 @@ function frameBody(now) {
       const t3 = highNear(rv, 14);
       if (t3) growTree(t3.n, t3.h, { height: 7.5, spread: 0.65 }).landmark = true;
     }
+    await step('Setting down boulders, rocks and things…', 'landforms');
     makeBoulders(rand);
     player.contact = (p, dt, input) => { boulderContact(p, dt, input); rockContact(p, dt, input); };
     initObjects(accel, envSD, { height: p => vec4.len(p) - 250 - player.hf.waterAt(vec4.norm(p)), up: p => vec4.norm(p), density: 1000 });
@@ -416,7 +420,7 @@ function frameBody(now) {
     {
       // herds where you will go first: near where you arrive, on the way up to the summit, and by each artifact's place
       const home = player.up(), way = f => vec4.norm(vec4.add(vec4.scale(home, 1 - f), vec4.scale(launcher.n, f)));
-      initCreatures(player.hf, [[home, 45, 8], [home, 75, 7], [way(0.3), 25, 7], [way(0.6), 25, 6], ...(G.partSpots || []).map(n => [vec4.norm(n), 35, 6])]);
+      initCreatures(player.hf);
       // and a few in your first view, grazing ahead of you in your slice; most of them will come and look
       const at = (deg, m) => { const a = deg * Math.PI / 180; return vec4.norm(vec4.add(vec4.scale(home, Math.cos(m / 250)), vec4.scale(vec4.norm(vec4.add(vec4.scale(player.F, Math.cos(a)), vec4.scale(player.R, Math.sin(a)))), Math.sin(m / 250)))); };
       [[-20, 19, true], [-7, 23, true], [-30, 25, true], [6, 18, false], [-14, 28, true]].forEach(([d, m, cur]) => { const n = at(d, m); if (player.hf.heightAt(n) > 1 && player.hf.waterAt(n) < 0.01) addWalker(n, cur); });
@@ -447,6 +451,7 @@ function frameBody(now) {
       if (G.knotPost) keep.push([vec4.norm(G.knotPost.a), 8]);
       const keepOut = (n, r) => keep.some(([q, m]) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 < m + r)
         || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < r + 2;
+      await step('Setting down rocks…', 'objects');
       G.rocksMade = makeRocks(hf, home, keepOut, [['outcrop', 16, 32], ['erratic', 10, 22], ['crystal', 24, 45], ['scree', 26, 50], ['stone', 12, 45],
         ['outcrop', 25, 45], ['outcrop', 30, 60], ['erratic', 15, 35], ['erratic', 20, 40], ['crystal', 35, 60], ['scree', 20, 45]]);
       // the woods: none in a rock or a boulder either
@@ -471,12 +476,15 @@ function frameBody(now) {
         placeRock('crystal', at(-58, 11), hf); placeRock('crystal', at(-55, 12.5), hf);
         placeRock('outcrop', at(14, 19), hf);
       }
+      await step('Growing the woods…', 'rocks');
       G.treesMade = makeForests(hf, home, (n, r) => keepOut(n, r) || inStone(n, r + 0.5), player.R);
       // ruins, cairns and caches, and lines of cairns toward the artifacts and the launcher
+      await step('Building the ruins…', 'woods');
       G.findsMade = makeFinds(hf, home, [...(G.artifacts || []).map(a => a.n), launcher.n], keepOut);
       // the flora: grown near you as you go; none on the pad, in the cave's mouth or the bowl, or on an artifact's place
       const clearOf = [[launcher.n, 6], ...(G.artifacts || []).map(a => [a.n, 3]), ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
-      initFlora(hf, n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2);
+      const clear = n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2;
+      initFlora(hf, clear); creatures.keep = clear;               // (and no herd's home there either)
       G.genCount = finds.gen;
     }
     buildB();
@@ -516,6 +524,8 @@ function frameBody(now) {
       if (e0 > 0.3 && e0 < 0.38 && e1 > e0) { state.time = t; break; }
     }
     stamps.world = performance.now() - bootT0;
+    await step('Preparing the view…');
+    stamps.shaders = Math.round(await programsReady(ms => { const e = $('load-msg'); if (e && ms > 1500) e.textContent = `Preparing the view (compiling the shaders, ${Math.round(ms / 1000)} s)…`; }));
     loadWorld();                       // a saved world, if there is one, replaces the fresh start
     syncArtifacts();
     startAutosave();

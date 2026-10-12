@@ -21,8 +21,22 @@ const solved = a => !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.
 const onPad = b => launcher.site && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring;
 const segDist = (p, a, b) => { const ab = vec4.sub(b, a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(p, a), ab) / Math.max(1e-9, vec4.dot(ab, ab)))); return vec4.len(vec4.sub(p, vec4.add(a, vec4.scale(ab, t)))); };
 
+// In the cave (its chamber, passage or tunnel, below the hillside's surface)?
+function inCave() {
+  const p = G.player;
+  if (!G.cave) return false;
+  const up = vec4.norm(p.pos);
+  if (vec4.len(p.pos) > PLANET_R + p.hf.heightAt(up) - 0.4) return false;
+  return carves.some(c => G.cave.parts.includes(c.name) && segDist(p.pos, c.a, c.b) < c.r + 0.3);
+}
 // goal: { pos (4D), kind, cue: null | 'F' | 'turn' | 'E' | 'Space', thing (a ball inside the mark: bring something) }
 export function updateGuide() {
+  pickGoal();
+  // in the cave with somewhere else to go: out the way you came, up the tunnel and out of its mouth's hollow
+  const g = guide.goal;
+  if (g && g.kind !== 'cave' && inCave() && vec4.len(vec4.sub(g.pos, G.cave.chamber)) > 12) guide.goal = { pos: G.cave.out, kind: 'exit', cue: null };
+}
+function pickGoal() {
   const p = G.player;
   guide.goal = null;
   if (!p || p.onB != null || flight.active || !G.artifacts || !launcher.site) return;
@@ -45,9 +59,8 @@ export function updateGuide() {
   if (next.id === 'room' && G.cave) {
     // the cave: down into its mouth first (a hollow in the hillside, round in any slice); once you stand in the
     // tunnel, the chamber and the part on its floor
-    const part = bodies.find(b => b.kind === 'part' && b.tier === 1), up = vec4.norm(G.cave.mouth);
-    const t = carves.find(c => c.name === 'tunnel'), inside = (t && segDist(p.pos, t.a, t.b) < t.r + 0.3) || near(G.cave.chamber, 6.8);
-    return inside ? set(part ? part.pos : G.cave.chamber, 'cave') : set(vec4.sub(G.cave.mouth, vec4.scale(up, 1.9)), 'mouth');
+    const part = bodies.find(b => b.kind === 'part' && b.tier === 1);
+    return inCave() ? set(part ? part.pos : G.cave.chamber, 'cave') : set(G.cave.pit, 'mouth');
   }
   if (next.id === 'mirror') {
     const key = bodies.find(b => b.tag === 'key2');

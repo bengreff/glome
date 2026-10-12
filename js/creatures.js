@@ -1,16 +1,18 @@
-// Creatures: geometric bodies with real 4D body plans, and an ecosystem running behind the scenes.
+// Creatures: geometric bodies with real 4D body plans, living all over the grassland.
 //
-// Walkers: a long tawny body and a head with two eyes, on eight legs, which hang from the corners of its bottom cell. Those eight
-// corners form two tetrahedra, and a tetrahedron of feet is the smallest stable stance on 3D ground, so a walker
-// walks on two alternating tetrapods, the way a six-legged insect alternates tripods. Most walkers are curious: they
-// keep a few metres off, come into your slice and turn to look at you, and only bolt if you rush at them. The rest are
-// shy: come close and they trot away, and some leave your slice, walking off through ana.
-// Only what you can see is simulated closely: creatures within 70 m move every frame; the rest move in coarse steps
-// when they think (twice a second within 140 m, every three seconds beyond), which is all the ecosystem needs.
-// Rollers: duocylinders, rolling by turning in two planes at once (a way of moving with no 3D counterpart). They are
-// curious: they come and circle you, and they play: a ball rolling nearby, they chase and knock on.
-// Behind the scenes: walkers graze where there is grass, keep together in herds, are born when well fed and die when
-// starved or old; rollers live on sunlight. You never see a number; you see herds, and empty valleys.
+// Walkers: a long tawny body and a head with two eyes, on eight legs, which hang from the corners of its bottom cell.
+// Those eight corners form two tetrahedra, and a tetrahedron of feet is the smallest stable stance on 3D ground, so a
+// walker walks on two alternating tetrapods, the way a six-legged insect alternates tripods.
+// Rollers: duocylinders, rolling by turning in two planes at once (a way of moving with no 3D counterpart). They roll
+// loops about their home, and they play: a ball rolling nearby, they chase and knock on.
+// Where: like the plants (flora.js), they are found where you are. Herds are spread evenly over the 3-sphere by a
+// hash of a 4D grid (16 m cells), each about its own home on the grass, and kept (and moved) only within 64 m of you;
+// the same herds are there when you come back. Your slice shows a thin sheet of the 3D ground, so a planet where you
+// meet animals as often as on a 3D meadow takes far more of them than could all be simulated: some 300,000. Which
+// places have herds drifts slowly with time, so the herds move about the planet over the days.
+// How they behave: they graze, wandering about their home; come near and the shy ones trot off (some through ana, out
+// of your slice), the curious ones stop and turn to watch you; rush one and it bolts. None leaves its home ground to
+// follow you: you meet them where they live.
 // (Gaits are kinematic: feet are placed by rule and the body is carried by them. PHYSICS.md says so.)
 import { G } from './game.js';
 import { vec4 } from './player.js';
@@ -18,166 +20,122 @@ import { PLANET_R } from './world.js';
 import { tangents } from './env.js';
 import { rot as R4 } from './so4.js';
 import { bodyProp, SHAPE, MAT } from './props.js';
+import { fbm4 } from './noise.js';
 
-export const creatures = { list: [], t: 0, nextId: 1, seed: 99 };
-const rnd = () => ((creatures.seed = (Math.imul(creatures.seed, 1103515245) + 12345) >>> 0) / 4294967296);
-const WALKER = { height: 0.8, stride: 0.5, legR: 0.07 };
+export const creatures = { list: [], cells: new Map(), at: null, hf: null, keep: () => false, fixed: [], clock: 0, nextId: 1 };
+const CELL = 16, RANGE = 64, LEASH = 14, NEAR = 45;
+const WALKER = { k: 1.4, height: 0.8 * 1.4, stride: 0.5 * 1.4, legR: 0.07 * 1.4 };   // (k: its size, against the first walkers')
 const ROLLER = { a: 0.48 };
 const proj = (v, n) => vec4.sub(v, vec4.scale(n, vec4.dot(v, n)));
 const along = (n, d, m) => vec4.norm(vec4.add(vec4.scale(n, Math.cos(m / PLANET_R)), vec4.scale(d, Math.sin(m / PLANET_R))));
-
-function make(kind, n) {
-  const T = tangents(n), a = rnd() * 6.283, b = rnd() * 6.283;
-  const h = vec4.norm(vec4.add(vec4.add(vec4.scale(T[0], Math.cos(a)), vec4.scale(T[1], Math.sin(a) * Math.cos(b))), vec4.scale(T[2], Math.sin(a) * Math.sin(b))));
-  return { id: creatures.nextId++, kind, n, v: vec4.scale(h, 0.3), heading: h, energy: 0.8 + 0.4 * rnd(), age: rnd() * (kind === 'walker' ? 3000 : 4000), phase: rnd(), th1: 0, th2: 0, alarm: 0, curious: kind === 'walker' && rnd() < 0.6, slip: rnd() < 0.35 };
+const arc = (a, b) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(a, b)))) * PLANET_R;
+const OFF = 20, cellKey = (i, j, k, l) => (((i + OFF) * 41 + (j + OFF)) * 41 + (k + OFF)) * 41 + (l + OFF);
+function rng(i, j, k, l) {                              // a small generator seeded by the cell
+  let a = (Math.imul(i, 0x2c1b3c6d) ^ Math.imul(j, 0x297a2d39) ^ Math.imul(k, 0x7feb352d) ^ Math.imul(l, 0x846ca68b) ^ 0x6a09e667) >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-// Herds of walkers on grassland, and rollers scattered: the same planet for everyone. Herds live near where you
-// arrive, along the way up to the summit, by the artifacts, and all over the grassland (some 250 herds, 2,500 walkers:
-// your slice shows a thin sheet of the 3D ground, so it takes that many for herds to be near you wherever you go);
-// rollers too, 400 of them.
-export function initCreatures(hf, places = []) {
-  creatures.list.length = 0; creatures.seed = 99;
-  const grass = n => { const h = hf.heightAt(n); return h > 2 && h < 22 && hf.waterAt(n) < 0.01; };
-  const randomUnit = () => vec4.norm([rnd() - 0.5, rnd() - 0.5, rnd() - 0.5, rnd() - 0.5]);
-  const randDir = c => { const T = tangents(c); return vec4.norm(vec4.add(vec4.add(vec4.scale(T[0], rnd() - 0.5), vec4.scale(T[1], rnd() - 0.5)), vec4.scale(T[2], rnd() - 0.5))); };
-  const herd = (c, size, spread = 10) => { let k = 0; for (let i = 0; i < size * 3 && k < size; i++) { const n = along(c, randDir(c), 2 + spread * rnd()); if (grass(n)) { creatures.list.push(make('walker', n)); k++; } } return k; };
-  // where you will go first: places = [[unit, radius around it to look for grass, herd size]]
-  for (const [c, R, size] of places) for (let i = 0; i < 60; i++) { const n = along(c, randDir(c), R * Math.sqrt(rnd())); if (grass(n)) { herd(n, size); break; } }
-  let herds = 0;
-  for (let k = 0; k < 30000 && herds < 250; k++) { const c = randomUnit(); if (grass(c)) { herds++; herd(c, 5 + Math.floor(rnd() * 8)); } }
-  const home = G.player.up();
-  for (let k = 0, made = 0; k < 600 && made < 8; k++) { const n = along(home, randDir(home), 15 + 45 * rnd()); if (grass(n)) { creatures.list.push(make('roller', n)); made++; } }
-  for (let k = 0, made = 0; k < 20000 && made < 400; k++) { const n = randomUnit(); if (grass(n)) { creatures.list.push(make('roller', n)); made++; } }
+const dirAt = (n, r) => { const T = tangents(n); let w; do { w = [r() - 0.5, r() - 0.5, r() - 0.5]; } while (Math.hypot(...w) < 0.05 || Math.hypot(...w) > 0.5); return vec4.norm([0, 1, 2, 3].map(q => w[0] * T[0][q] + w[1] * T[1][q] + w[2] * T[2][q])); };
+// where herds are, this while: a slow drift over the planet (a herd's cell is grown as it comes into range, so a
+// place that had none may have one the next time you pass, days later)
+const presence = n => { const t = ((G.state && G.state.time) || 0) / 2400; return 0.45 + 0.5 * Math.min(1, Math.max(0, (fbm4(n[0] * 2.1 + t, n[1] * 2.1 - 0.6 * t, n[2] * 2.1 + 3.7, n[3] * 2.1 - 1.9, 2) + 0.25) / 0.5)); };
+
+function make(kind, n, home, r) {
+  return { id: creatures.nextId++, kind, n: n.slice(), home, v: [0, 0, 0, 0], heading: dirAt(n, r), phase: r(), th1: 0, th2: 0, alarm: 0,
+           curious: kind === 'walker' && r() < 0.45, slip: r() < 0.35, ring: kind === 'roller' ? [dirAt(home, r), 3 + 4 * r(), r() * 6.283] : null };
 }
+// The herds of one cell: two points to a cell, each kept if within half a cell of the sphere (a herd's chance to every
+// 2,000 m³ of ground), on dry ground; on grass a herd of walkers (three to nine), elsewhere now and then a roller.
+function cellGroups(i, j, k, l, hf) {
+  const r = rng(i, j, k, l), out = [];
+  for (let q = 0; q < 2; q++) {
+    const p = [(i + r()) * CELL, (j + r()) * CELL, (k + r()) * CELL, (l + r()) * CELL], len = Math.hypot(...p);
+    if (Math.abs(len - PLANET_R) > CELL / 2) continue;
+    const home = vec4.scale(p, 1 / len), h = hf.heightAt(home), u = r();
+    if (h < 0.8 || h > 30 || hf.waterAt(home) > 0.01 || creatures.keep(home)) continue;
+    if (h > 2 && h < 22 && u < presence(home)) {
+      const size = 3 + Math.floor(r() * 7);
+      for (let m = 0; m < size; m++) { const n = m ? along(home, dirAt(home, r), 1 + 5 * r()) : home; if (hf.waterAt(n) < 0.01) out.push(make('walker', n, home, r)); }
+    } else if (u > 0.8) out.push(make('roller', home, home, r));
+  }
+  return out;
+}
+// Keep the herds within range of you: when you cross into another cell, grow the cells that came into range, and
+// let go of those that left it (they will be back, at home, when you return).
+function updateCells(eye) {
+  const hf = creatures.hf, ci = eye.map(v => Math.floor(v / CELL));
+  if (creatures.at && ci.every((v, q) => v === creatures.at[q])) return;
+  creatures.at = ci;
+  const m = Math.ceil((RANGE + CELL / 2) / CELL), seen = new Set(), lim = (RANGE + CELL) ** 2;
+  for (let a = -m; a <= m; a++) for (let b = -m; b <= m; b++) for (let c = -m; c <= m; c++) for (let d = -m; d <= m; d++) {
+    const i = ci[0] + a, j = ci[1] + b, k = ci[2] + c, l = ci[3] + d;
+    const x = (i + 0.5) * CELL, y = (j + 0.5) * CELL, z = (k + 0.5) * CELL, w = (l + 0.5) * CELL;
+    const dx = x - eye[0], dy = y - eye[1], dz = z - eye[2], dw = w - eye[3];
+    if (dx * dx + dy * dy + dz * dz + dw * dw > lim || Math.abs(Math.sqrt(x * x + y * y + z * z + w * w) - PLANET_R) > CELL) continue;
+    const kk = cellKey(i, j, k, l); seen.add(kk);
+    if (!creatures.cells.has(kk)) creatures.cells.set(kk, cellGroups(i, j, k, l, hf));
+  }
+  for (const kk of creatures.cells.keys()) if (!seen.has(kk)) creatures.cells.delete(kk);
+  creatures.list = [...creatures.fixed, ...[...creatures.cells.values()].flat()];
+}
+export function initCreatures(hf, keep) { creatures.hf = hf; creatures.keep = keep || (() => false); creatures.cells.clear(); creatures.at = null; creatures.fixed = []; creatures.list = []; }
+// A walker set down at unit n, at home there (the few in your first view).
+export function addWalker(n, curious) { let s = creatures.fixed.length * 7 + 1; const r = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296); const c = make('walker', n, n, r); c.curious = curious; creatures.fixed.push(c); creatures.list.unshift(c); return c; }
 
-// A walker set down at unit n (the few in your first view).
-export function addWalker(n, curious) { const c = make('walker', n); c.curious = curious; creatures.list.push(c); return c; }
-
-// ---------- the ecosystem and their minds (a few times a second) ----------
-function think(c, hf, p, dt, flyers, balls) {
-  const n = c.n, h = hf.heightAt(n);
-  const onGrass = h > 2 && h < 22 && hf.waterAt(n) < 0.01;
-  c.age += dt;
-  let want = [0, 0, 0, 0], speed;
-  const me = p && p.onB == null ? vec4.norm(p.pos) : null, dMe = me ? Math.acos(Math.max(-1, Math.min(1, vec4.dot(me, n)))) * PLANET_R : 1e9;
+// ---------- their minds (twice a second near you, less often farther off) ----------
+function think(c, p, dt, me, flyers, balls) {
+  const n = c.n, dMe = me ? arc(me, n) : 1e9, fromHome = arc(n, c.home), now = creatures.clock;
+  let want = null, speed = 0;
+  const toward = q => { const d = proj(vec4.sub(q, n), n); return vec4.len(d) > 1e-9 ? d : null; };
   if (c.kind === 'walker') {
-    c.energy = Math.min(2, c.energy + dt * ((onGrass ? 0.022 : 0) - 0.011));
-    // herd: keep near neighbours, move with them, don't crowd
-    let coh = [0, 0, 0, 0], ali = [0, 0, 0, 0], sep = [0, 0, 0, 0], k = 0;
-    for (const o of neighbours(c)) {
-      if (o === c || o.kind !== 'walker') continue;
-      const d = Math.acos(Math.max(-1, Math.min(1, vec4.dot(o.n, n)))) * PLANET_R;
-      if (d > 30) continue;
-      k++;
-      coh = vec4.add(coh, proj(vec4.sub(o.n, n), n));
-      ali = vec4.add(ali, o.v);
-      if (d < 2.5) sep = vec4.sub(sep, vec4.scale(proj(vec4.sub(o.n, n), n), 4 / Math.max(d, 0.3)));
-    }
-    if (k) want = vec4.add(want, vec4.add(vec4.add(vec4.scale(coh, 0.6 * PLANET_R / k / 15), vec4.scale(ali, 0.6 / k)), sep));
-    // graze toward grass: off it, climb or descend toward it
-    if (!onGrass) {
-      const T = tangents(n); let g = [0, 0, 0, 0];
-      for (const t of T) { const dh = hf.heightAt(along(n, t, 2)) - hf.heightAt(along(n, t, -2)); g = vec4.add(g, vec4.scale(t, dh)); }
-      want = vec4.add(want, vec4.scale(vec4.norm(vec4.add(g, [1e-9, 0, 0, 0])), h < 2 ? 1 : -1));
-    }
-    speed = 0.45;
+    // grazing: now and then to another spot about home, or standing a while
+    if (!c.goal || now > c.goalUntil) { c.goal = along(c.home, dirAt(c.home, Math.random), 6 * Math.random()); c.goalUntil = now + 4 + 8 * Math.random(); c.rest = Math.random() < 0.35; }
+    if (!c.rest && arc(n, c.goal) > 0.4) { want = toward(c.goal); speed = 0.4; }
     // startled by anything flying past fast: away from it
     const fly = flyers.find(o => vec4.dot(vec4.norm(o.pos), n) > Math.cos(8 / PLANET_R));
-    if (fly) { want = vec4.add(want, vec4.scale(vec4.norm(proj(vec4.sub(n, vec4.norm(fly.pos)), n)), 2)); speed = 1.8; c.alarm = 1; }
-    // rushed at (you coming at it faster than a walk, within 10 m): it bolts, curious or not
-    const toIt = me ? vec4.norm(proj(vec4.sub(n, me), me)) : null;
-    if (me && dMe < 10 && vec4.dot(p.vel, toIt) > 3.2) c.spooked = G.simT + 6;
-    // curious: from as far as 100 m it trots into your slice (its offset toward ana shrinks) and over, keeps 6–9 m
-    // off, and turns to face you
-    if (c.curious && dMe < 100 && !(G.simT < c.spooked)) {
-      const a = vec4.dot(vec4.sub(n, me), p.A);                  // how far it lies from your slice, toward ana
-      let w = vec4.scale(proj(p.A, n), -a * PLANET_R * 0.3);     // into your slice (a: its offset, on the unit sphere)
+    if (fly) { want = toward(vec4.sub(vec4.scale(n, 2), vec4.norm(fly.pos))); speed = 1.8; c.alarm = 1; c.spooked = G.simT + 4; }
+    if (me && dMe < 12) {
       const away = vec4.norm(proj(vec4.sub(n, me), n));
-      w = vec4.add(w, vec4.scale(away, dMe < 6 ? 1.2 : dMe > 9 ? -0.6 : 0));   // at a respectful distance
-      want = w; speed = Math.min(dMe > 15 ? 2.4 : 1.1, 0.25 + vec4.len(w) * 0.5); c.alarm = Math.max(c.alarm, 0.25);
-      c.heading = vec4.norm(vec4.add(c.heading, vec4.scale(away, -0.2)));       // looking at you
-    }
-    // shy: within 14 m of you they trot away; some slip out of your slice, through ana
-    else if (dMe < 14) {
-      const away = vec4.norm(proj(vec4.sub(n, me), n)), side = vec4.dot(vec4.sub(n, me), p.A) >= 0 ? 1 : -1;
-      want = c.slip ? vec4.add(vec4.scale(away, 0.6), vec4.scale(proj(p.A, n), 1.6 * side)) : away;
-      speed = c.slip ? 2.2 : 1.6; c.alarm = 1;
+      if (dMe < 10 && vec4.dot(p.vel, vec4.norm(proj(vec4.sub(n, me), me))) > 3.2) c.spooked = G.simT + 6;   // rushed at: it bolts
+      if (c.curious && !(G.simT < c.spooked)) {
+        // it stops and turns to watch you (and backs off if you come within 5 m)
+        want = dMe < 5 ? away : null; speed = 0.8; c.alarm = Math.max(c.alarm, 0.25);
+        c.heading = vec4.norm(vec4.add(c.heading, vec4.scale(away, -0.4)));
+      } else if (!fly) {
+        // shy (or rushed): it trots off, some of them out of your slice, through ana
+        const side = vec4.dot(vec4.sub(n, me), p.A) >= 0 ? 1 : -1;
+        want = c.slip ? vec4.add(vec4.scale(away, 0.6), vec4.scale(proj(p.A, n), 1.6 * side)) : away;
+        speed = c.slip ? 2.2 : 1.6; c.alarm = 1;
+      }
     }
   } else {
-    // rollers live on sunlight
-    const day = G.sun ? Math.max(0, Math.min(1, (vec4.dot(G.sun, n) + 0.1) / 0.4)) : 0.5;
-    c.energy += dt * (0.03 * day - 0.008);
-    want = c.heading;
-    speed = 0.7;
-    // playful: a ball that is rolling (or was, a few seconds ago) within 25 m, they chase and knock on (below)
-    let toy = null, td = 25;
-    for (const o of balls) {
-      const d = Math.acos(Math.max(-1, Math.min(1, vec4.dot(vec4.norm(o.pos), n)))) * PLANET_R;
-      if (d < td) { td = d; toy = o; }
-    }
-    if (toy && !c.toy && G.audio && dMe < 40) G.audio.emit('chirp', vec4.scale(n, PLANET_R + h + 0.5), 0.8);   // a roller takes an interest
+    // a roller rolls a loop about its home; a ball rolling nearby, it chases and knocks on
+    let toy = null, td = 20;
+    for (const o of balls) { const d = arc(vec4.norm(o.pos), n); if (d < td && arc(vec4.norm(o.pos), c.home) < 30) { td = d; toy = o; } }
+    if (toy && !c.toy && G.audio && dMe < 40) G.audio.emit('chirp', vec4.scale(n, PLANET_R + creatures.hf.heightAt(n) + 0.5), 0.8);   // it takes an interest
     c.toy = toy;
-    if (toy) { want = proj(vec4.sub(vec4.norm(toy.pos), n), n); speed = Math.min(3.4, 1 + td); c.alarm = 1; }
-    // curious: within 80 m they come and circle you, in your slice, where you can see them
-    else if (dMe < 80) {
-      c.orbit = (c.orbit || rnd() * 6.283) + dt * 0.35;
-      const tgt = vec4.norm(vec4.add(vec4.scale(me, Math.cos(5.5 / PLANET_R)), vec4.scale(vec4.norm(vec4.add(vec4.scale(p.F, Math.cos(c.orbit)), vec4.scale(p.R, Math.sin(c.orbit)))), Math.sin(5.5 / PLANET_R))));
-      want = proj(vec4.sub(tgt, n), n); speed = Math.min(3, 0.5 + vec4.len(want) * PLANET_R * 0.6); c.alarm = 1;
-    } else if (rnd() < 0.05 * dt) c.heading = vec4.norm(vec4.add(c.heading, [rnd() - 0.5, rnd() - 0.5, rnd() - 0.5, rnd() - 0.5]));
-    if (h < 1 || hf.waterAt(n) > 0.01) want = vec4.scale(want, -1);
+    if (toy) { want = toward(vec4.norm(toy.pos)); speed = Math.min(3.4, 1 + td); c.alarm = 1; }
+    else {
+      const [d0, rad, ph] = c.ring, T = tangents(c.home), d1 = vec4.norm(proj(proj(T[(Math.floor(ph * 10) % 3)], d0), c.home)), a = ph + now * 0.12;
+      want = toward(along(c.home, vec4.norm(vec4.add(vec4.scale(d0, Math.cos(a)), vec4.scale(d1, Math.sin(a)))), rad)); speed = 0.7;
+    }
   }
-  const wl = vec4.len(want);
-  c.target = wl > 1e-9 ? vec4.scale(proj(want, n), speed / Math.max(1e-9, vec4.len(proj(want, n)))) : [0, 0, 0, 0];
-}
-// Neighbours for herding: walkers in the same or adjacent 30 m cells (a grid on the unit 3-sphere, rebuilt twice a second).
-const CELLN = PLANET_R / 30, grid = new Map();
-const cellKey = (a, b, c, d) => ((a + 20) * 41 + (b + 20)) * 1681 + (c + 20) * 41 + (d + 20);
-function buildGrid(all) {
-  grid.clear();
-  for (const o of all) if (o.kind === 'walker') { const k = cellKey(Math.floor(o.n[0] * CELLN), Math.floor(o.n[1] * CELLN), Math.floor(o.n[2] * CELLN), Math.floor(o.n[3] * CELLN)); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(o); }
-}
-function neighbours(c) {
-  const k0 = Math.floor(c.n[0] * CELLN), k1 = Math.floor(c.n[1] * CELLN), k2 = Math.floor(c.n[2] * CELLN), k3 = Math.floor(c.n[3] * CELLN), out = [];
-  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let d = -1; d <= 1; d++) for (let e = -1; e <= 1; e++) {
-    const L = grid.get(cellKey(k0 + a, k1 + b, k2 + d, k3 + e)); if (L) for (const o of L) out.push(o);
-  }
-  return out;
+  // the leash: none strays more than 14 m from home (a roller after a ball, 30 m)
+  if (fromHome > (c.toy ? 30 : LEASH)) { want = toward(c.home); speed = Math.max(speed, 1.2); }
+  c.target = want && vec4.len(want) > 1e-9 ? vec4.scale(want, speed / vec4.len(want)) : [0, 0, 0, 0];
 }
 // The loose things in A's world that creatures notice (G.objects is set by main.js).
-function toys(test, first = false) {
+function toys(test) {
   const w = G.objects && G.objects.world, out = [];
   if (!w) return out;
-  for (const o of w.bodies) if (!o.fixed && !o.held && !o.inB && test(o)) { out.push(o); if (first) break; }
+  for (const o of w.bodies) if (!o.fixed && !o.held && !o.inB && test(o)) out.push(o);
   return out;
 }
-function lifeAndDeath(hf) {
-  const L = creatures.list, born = [];
-  let walkers = L.filter(c => c.kind === 'walker').length, rollers = L.length - walkers;
-  for (const c of L) {
-    if (c.energy > 1.6 && (c.kind === 'walker' ? walkers < 3000 : rollers < 500)) {
-      // a young one stays by its parent; but from a crowded herd (more than fourteen within 30 m) it wanders off, 40 to
-      // 100 m, to grass where it can found a herd of its own: so herds spread over the land instead of piling up
-      const T = tangents(c.n), d = vec4.norm(vec4.add(vec4.add(vec4.scale(T[0], rnd() - 0.5), vec4.scale(T[1], rnd() - 0.5)), vec4.scale(T[2], rnd() - 0.5)));
-      let at = along(c.n, d, 1.5);
-      if (c.kind === 'walker' && neighbours(c).filter(o => o !== c && vec4.dot(o.n, c.n) > Math.cos(30 / PLANET_R)).length > 14) {
-        at = along(c.n, d, 40 + 60 * rnd());
-        const h = hf.heightAt(at);
-        if (!(h > 2 && h < 22 && hf.waterAt(at) < 0.01)) continue;
-      }
-      if (c.kind === 'walker') walkers++; else rollers++;
-      c.energy /= 2;
-      const k = make(c.kind, at); k.energy = c.energy; k.age = 0; k.curious = c.curious; born.push(k);
-    }
-  }
-  // (each lives its own span, 3000–4500 s for a walker, so a herd doesn't die all at once)
-  creatures.list = L.filter(c => c.energy > 0 && c.age < (c.kind === 'walker' ? 3000 : 4000) + 1500 * ((c.id * 0.754877666) % 1)).concat(born);
-}
 
-// Each frame: move the creatures near you (on the 3-sphere), and let each think when its turn comes: twice a second
-// within 140 m of you, every three seconds beyond (where a coarse step carries it as far as it would have gone).
+// Each frame: keep the herds in range up to date, let each think when its turn comes, and move those near you.
 export function stepCreatures(dt, hf) {
-  const p = G.player;
-  const now = creatures.clock = (creatures.clock || 0) + dt;
+  const p = G.player, now = creatures.clock = creatures.clock + dt;
+  const me = p && p.onB == null && p.pos ? vec4.norm(p.pos) : null;
+  if (me) updateCells(p.pos);
   // what they notice, found once a frame: balls rolling (a toy a while), and things flying past fast
   const flyers = [], balls = [];
   for (const o of toys(o => o.shape === 'glome' || vec4.len(o.vel) > 3)) {
@@ -186,40 +144,39 @@ export function stepCreatures(dt, hf) {
     if (o.shape === 'glome' && !o.light && (o.toyUntil || 0) > G.simT) balls.push(o);
     if (v > 3) flyers.push(o);
   }
-  const me = p && p.onB == null && p.pos ? vec4.norm(p.pos) : null, nearCos = Math.cos(70 / PLANET_R), closeCos = Math.cos(140 / PLANET_R);
-  if (now - (creatures.gridAt ?? -1) > 0.5) { buildGrid(creatures.list); creatures.gridAt = now; }
+  const nearCos = Math.cos(NEAR / PLANET_R);
   for (const c of creatures.list) {
     if (now < (c.tNext ?? 0)) continue;
-    const tt = Math.min(6, now - (c.tLast ?? now - 0.5)); c.tLast = now;
-    const close = !!me && vec4.dot(me, c.n) > closeCos;
-    c.tNext = now + (close ? 0.5 : 3) * (0.85 + 0.3 * ((c.id * 0.6180339887) % 1));   // (spread out, so no frame thinks for all)
-    think(c, hf, p, tt, flyers, balls);
+    const tt = Math.min(3, now - (c.tLast ?? now - 0.5)); c.tLast = now;
     c.near = !!me && vec4.dot(me, c.n) > nearCos;
-    if (!c.near && c.target) {                               // out of sight: a coarse step, as far as it would go
-      const sp = vec4.len(c.target);
-      c.v = c.target;
-      if (sp > 1e-4) { c.n = along(c.n, vec4.scale(c.target, 1 / sp), sp * tt); c.heading = vec4.norm(proj(c.target, c.n)); c.v = proj(c.v, c.n); }
-    }
+    c.tNext = now + (c.near ? 0.5 : 1.5) * (0.85 + 0.3 * ((c.id * 0.6180339887) % 1));   // (spread out over the frames)
+    think(c, p, tt, me, flyers, balls);
+    c.g = creatures.hf.heightAt(c.n);                        // (the ground under it, kept for the next half second)
   }
-  creatures.tLife = (creatures.tLife || 0) + dt;
-  if ((creatures.tLife || 0) > 5) { lifeAndDeath(hf); creatures.tLife = 0; }
+  // every one in range moves every frame (in place: some thousands of them, so no new arrays)
+  const R = PLANET_R;
   for (const c of creatures.list) {
-    if (!c.target || !c.near) continue;
-    c.v = vec4.add(c.v, vec4.scale(vec4.sub(c.target, c.v), Math.min(1, dt * 2)));
-    c.v = proj(c.v, c.n);
-    const sp = vec4.len(c.v);
+    const T = c.target; if (!T) continue;
+    const v = c.v, n = c.n, h = c.heading, k = Math.min(1, dt * 2);
+    let vn = 0;
+    for (let q = 0; q < 4; q++) { v[q] += (T[q] - v[q]) * k; vn += v[q] * n[q]; }
+    for (let q = 0; q < 4; q++) v[q] -= vn * n[q];
+    const sp = Math.hypot(v[0], v[1], v[2], v[3]);
     if (sp > 1e-4) {
-      c.n = along(c.n, vec4.scale(c.v, 1 / sp), sp * dt);
-      c.v = proj(c.v, c.n);
-      c.heading = vec4.norm(vec4.add(vec4.scale(c.heading, 0.9), vec4.scale(c.v, 0.1 / sp)));
+      for (let q = 0; q < 4; q++) n[q] += v[q] * dt / R;
+      const l = Math.hypot(n[0], n[1], n[2], n[3]); let vn2 = 0;
+      for (let q = 0; q < 4; q++) { n[q] /= l; vn2 += v[q] * n[q]; }
+      for (let q = 0; q < 4; q++) { v[q] -= vn2 * n[q]; h[q] = h[q] * 0.9 + v[q] * 0.1 / sp; }
     }
-    c.heading = vec4.norm(proj(c.heading, c.n));
+    let hn = 0; for (let q = 0; q < 4; q++) hn += h[q] * n[q];
+    for (let q = 0; q < 4; q++) h[q] -= hn * n[q];
+    const hl = Math.hypot(h[0], h[1], h[2], h[3]) || 1; for (let q = 0; q < 4; q++) h[q] /= hl;
     const ph0 = c.phase;
     c.phase = (c.phase + dt * sp / (2 * WALKER.stride)) % 1;
     // a walker's tetrapod lands twice a stride: a tick, if you are near enough to hear it
-    if (c.kind === 'walker' && G.audio && p && p.onB == null && (Math.floor(ph0 * 2) !== Math.floor(c.phase * 2) || c.phase < ph0)) {
+    if (c.near && c.kind === 'walker' && G.audio && p && p.onB == null && (Math.floor(ph0 * 2) !== Math.floor(c.phase * 2) || c.phase < ph0)) {
       const pos = vec4.scale(c.n, PLANET_R + hf.heightAt(c.n)), dd = vec4.len(vec4.sub(pos, p.pos));
-      if (dd < 18) G.audio.emit('tick', pos, 0.5 + 0.3 * Math.random());   // (not the ecosystem's own random stream)
+      if (dd < 18) G.audio.emit('tick', pos, 0.5 + 0.3 * Math.random());
     }
     c.th1 += dt * sp / ROLLER.a; c.th2 += dt * sp / ROLLER.a * 0.81;
     c.alarm = Math.max(0, c.alarm - dt * 0.5);
@@ -257,7 +214,13 @@ function frameRot(cols) {
 // stands like a four-legged animal. Far off, they keep the roll they had.
 export function creatureDraw(eye, A, hf, dt = 0) {
   const items = [], caps = [];
-  const near = creatures.list.filter(c => c.near).map(c => ({ c, d: vec4.len(vec4.sub(vec4.scale(c.n, PLANET_R), eye)) })).filter(x => x.d < 90).sort((x, y) => x.d - y.d);
+  // the ones within range that your slice can cut (or nearly: a walker's body reaches 0.6 m from its centre), nearest first
+  const near = [];
+  for (const c of creatures.list) {
+    const r = PLANET_R + (c.g ?? 0) + 0.8, q0 = c.n[0] * r - eye[0], q1 = c.n[1] * r - eye[1], q2 = c.n[2] * r - eye[2], q3 = c.n[3] * r - eye[3];
+    const d = Math.hypot(q0, q1, q2, q3); if (d < RANGE && Math.abs(q0 * A[0] + q1 * A[1] + q2 * A[2] + q3 * A[3]) < 1.2) near.push({ c, d });
+  }
+  near.sort((x, y) => x.d - y.d);
   let detailed = 0;
   for (const { c, d } of near.slice(0, 32)) {
     const n = c.n, g = PLANET_R + hf.heightAt(n), up = n;
@@ -281,30 +244,31 @@ export function creatureDraw(eye, A, hf, dt = 0) {
     let an = proj(proj(proj(an0, f), up), s); an = vec4.norm(vec4.len(an) < 1e-6 ? an0 : an);
     if (c.kind === 'walker') {
       const ctr = vec4.scale(n, g + WALKER.height), wv = vec4.norm(vec4.add(s, an)), rot = frameRot([f, s, an, up]);
-      items.push(bodyProp(ctr, rot, [0.5, 0.3, 0.3, 0.27], SHAPE.ball, MAT.hide, 0.6 * c.alarm));
-      const head = vec4.add(ctr, vec4.add(vec4.scale(f, 0.52), vec4.scale(up, 0.2)));
-      items.push(bodyProp(head, rot, [0.2, 0.18, 0.18, 0.18], SHAPE.ball, MAT.hide, 0.6 * c.alarm));
+      const K = WALKER.k;
+      items.push(bodyProp(ctr, rot, [0.5 * K, 0.3 * K, 0.3 * K, 0.27 * K], SHAPE.ball, MAT.hide, 0.6 * c.alarm));
+      const head = vec4.add(ctr, vec4.add(vec4.scale(f, 0.52 * K), vec4.scale(up, 0.2 * K)));
+      items.push(bodyProp(head, rot, [0.2 * K, 0.18 * K, 0.18 * K, 0.18 * K], SHAPE.ball, MAT.hide, 0.6 * c.alarm));
       if (d < 35 && detailed < 10) {                          // eyes, for the nearer ones
         detailed++;
         for (const sg of [-1, 1]) {
-          const e = vec4.add(head, vec4.add(vec4.add(vec4.scale(f, 0.13), vec4.scale(up, 0.06)), vec4.scale(wv, 0.1 * sg)));
-          items.push(bodyProp(e, rot, [0.07, 0.07, 0.07, 0.07], SHAPE.ball, MAT.eye, 0));
-          items.push(bodyProp(vec4.add(e, vec4.scale(f, 0.05)), rot, [0.038, 0.038, 0.038, 0.038], SHAPE.ball, MAT.pupil, 0));
+          const e = vec4.add(head, vec4.add(vec4.add(vec4.scale(f, 0.13 * K), vec4.scale(up, 0.06 * K)), vec4.scale(wv, 0.1 * K * sg)));
+          items.push(bodyProp(e, rot, [0.07 * K, 0.07 * K, 0.07 * K, 0.07 * K], SHAPE.ball, MAT.eye, 0));
+          items.push(bodyProp(vec4.add(e, vec4.scale(f, 0.05 * K)), rot, [0.038 * K, 0.038 * K, 0.038 * K, 0.038 * K], SHAPE.ball, MAT.pupil, 0));
         }
       }
       // legs are thin: drawn only for the nearest few walkers (they share one bounding ball in the shader)
-      const lg = { caps: [], c: vec4.scale(n, g + 0.45), R: 1.8 };
+      const lg = { caps: [], c: vec4.scale(n, g + 0.45 * K), R: 1.8 * K };
       if (d < 45 && caps.length < 12) { caps.push(lg); for (let i = 0; i < 8; i++) {
         const cx = i & 1 ? 1 : -1, cy = i & 2 ? 1 : -1, cz = i & 4 ? 1 : -1, tetA = cx * cy * cz > 0;
-        const hip = vec4.add(ctr, vec4.add(vec4.scale(up, -0.12), vec4.add(vec4.add(vec4.scale(f, cx * 0.3), vec4.scale(s, cy * 0.15)), vec4.scale(an, cz * 0.15))));
-        const out = vec4.add(vec4.add(vec4.scale(f, cx * 0.5), vec4.scale(s, cy * 0.26)), vec4.scale(an, cz * 0.26));   // feet a little outside the hips
+        const hip = vec4.add(ctr, vec4.add(vec4.scale(up, -0.12 * K), vec4.add(vec4.add(vec4.scale(f, cx * 0.3 * K), vec4.scale(s, cy * 0.15 * K)), vec4.scale(an, cz * 0.15 * K))));
+        const out = vec4.add(vec4.add(vec4.scale(f, cx * 0.5 * K), vec4.scale(s, cy * 0.26 * K)), vec4.scale(an, cz * 0.26 * K));   // feet a little outside the hips
         // the gait: a tetrapod swings while the other stands; standing feet keep still on the ground
         const ph = (c.phase + (tetA ? 0 : 0.5)) % 1, swing = ph < 0.5;
         const off = swing ? -0.5 + 2 * ph : 0.5 - 2 * (ph - 0.5), sp = vec4.len(c.v) > 0.05 ? 1 : 0;
         let foot = vec4.add(vec4.add(vec4.scale(n, g), out), vec4.scale(f, off * WALKER.stride * sp));
         const fn = vec4.norm(foot);
-        foot = vec4.scale(fn, PLANET_R + hf.heightAt(fn) + (swing ? Math.sin(Math.PI * 2 * ph) * 0.14 * sp : 0) + 0.02);
-        const knee = vec4.add(vec4.scale(vec4.add(hip, foot), 0.5), vec4.add(vec4.scale(up, 0.04), vec4.scale(f, cx * 0.12)));
+        foot = vec4.scale(fn, PLANET_R + hf.heightAt(fn) + (swing ? Math.sin(Math.PI * 2 * ph) * 0.14 * K * sp : 0) + 0.02);
+        const knee = vec4.add(vec4.scale(vec4.add(hip, foot), 0.5), vec4.add(vec4.scale(up, 0.04 * K), vec4.scale(f, cx * 0.12 * K)));
         lg.caps.push([hip, knee, WALKER.legR, 3], [knee, foot, WALKER.legR * 0.8, 3]);
       } }
     } else {
@@ -328,11 +292,6 @@ export function creatureDraw(eye, A, hf, dt = 0) {
 }
 
 // ---------- saving ----------
-export const creaturesSave = {
-  save: () => ({ v: 2, seed: creatures.seed, next: creatures.nextId, list: creatures.list.map(c => ({ k: c.kind, n: c.n.map(x => Math.round(x * 1e5) / 1e5), e: Math.round(c.energy * 100) / 100, a: Math.round(c.age), c: c.curious ? 1 : 0 })) }),
-  load: s => {
-    if (!s || !s.list || !(s.v >= 2)) return;                 // (a save from before v1.2 held a tenth as many: the world's own stay)
-    creatures.seed = s.seed; creatures.nextId = s.next || 1;
-    creatures.list = s.list.map(o => { const c = make(o.k, vec4.norm(o.n)); c.energy = o.e; c.age = o.a; c.curious = o.k === 'walker' && (o.c === 1 || (o.c == null && c.curious)); return c; });
-  },
-};
+// Nothing to keep: the herds are found where they live, the same each time. (An older save's list of creatures is
+// ignored.)
+export const creaturesSave = { save: () => ({ v: 3 }), load: () => {} };
