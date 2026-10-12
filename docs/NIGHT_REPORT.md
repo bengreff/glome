@@ -1,10 +1,10 @@
 # Night report
 
-The overnight build of 7–8 October (milestones M0 to M7), and the day of refinements that followed on 8 October.
+The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, and run three on 11 October, which takes Glome to v1.0 (its section is at the end).
 
 **Play:** https://bengreff.github.io/glome/ · **Hub:** https://bengreff.github.io/ · **Source:** https://github.com/bengreff/glome
 
-Tagged v0.0 to v0.7. v1.0 is not tagged: the performance gate (60 fps at 60% resolution or more) is not met; see Performance.
+Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
 
 ## What to try first
 
@@ -109,3 +109,79 @@ Every non-trivial choice, with its reasoning, is in [DECISIONS.md](DECISIONS.md)
 1. **itch.io:** upload `dist/glome-v0.7.zip` (built; it is gitignored, so rebuild it with `tools/package.sh` on another machine) as an HTML game, using the settings and text in [ITCH.md](ITCH.md).
 2. **The hub:** approve or edit the copy on https://bengreff.github.io/ (repo `bengreff/bengreff.github.io`).
 3. **v1.0:** tag it when you are happy with performance. Lowering the shadows' cost is the most direct way to the 60% gate, or the gate could become 60 fps at 50%.
+
+## Run three (11 October): to v1.0
+
+You played v0.7 and said the world was empty, gravity too weak and the radar cluttered. This run raised gravity, gave the radar layers, filled the planet, added wordless guidance, and ends at v1.0. Tagged v0.8 (gravity), v0.9 (radar), v0.10 (a full world), v0.11 (guidance) and v1.0.
+
+### What to try first
+
+1. Look around where you arrive: whole trees, a conifer, a birch, two crystals and a slab stand in your first slice. Turn through ana (right-drag) a little and watch them come apart into floating crowns and rock sections, and others come in.
+2. Walk to the column of light over the hill ahead. It stands over the cave, the first artifact; there is one over each artifact you have not solved, and one over any launcher part left lying. Each one is seen when your slice passes near it.
+3. Press 1–9 to switch the radar's layers, or L for its legend (with the mouse free, click a row). Things, landmarks and your trail are on at first; the trail fades over two minutes. The pulsing mark is the nearest artifact still to solve.
+4. Find the ring of pillars about 30 m from the start. It stands on a sphere, so your slice shows a circle of pillars, a different one each time you turn.
+5. Meet a herd (they live near the start, on the way up to the summit and by the artifacts). Most walkers step out of your slice through ana as you come; the curious third step into it and stand a few metres off, looking at you. Rush at one and it bolts.
+6. Jump: you rise about 1.25 m where you mostly walk, and nearly 2 m on the summit, where gravity is Earth's.
+
+### What shipped
+
+- **N1, gravity: Earth on the summit (v0.8).** Planet A's surface gravity is 16 m/s² (was 9.8), chosen so that the summit, as you walk it (42.5 m), measures 9.8 m/s² averaged over the day with the game's own field: the hoop's images and the spin included, 8.7–10.2 as the light zones pass. Sea level averages 15.8. Re-derived by integration: the launcher's tiers (28, 43, 53, 72 m/s: a 60 m hop, a 200 m arc, the orbit across the hoop, B), the jump (6.0 m/s), the hold (4200 N, so the 163 kg block and the 171 kg raft still come up). Throws are unchanged (a throw is muscle). B keeps 6 m/s².
+- **N2, the radar (v0.9).** Nine layers on keys 1–9 (things, landmarks, creatures, water and coast, solid mountains, height shells, summit peaks, boulders and rocks, trail), with a legend beside the ball that shows when you open it (L), when help is up, when the free mouse is over the radar, or for a moment after a key; a click on a row switches it. The caption and the long legend text live in the legend now. The trail fades by age over two minutes.
+- **N3, a full world (v0.10).** The numbers come from the slice's geometry: your slice shows a 2D sheet of the 3D ground, so a thing is seen only when your slice passes within its own half-thickness of it, and the ground needs several times the density a 3D world would to look furnished. About 12,000 trees and shrubs in 95 groves and woods plus 3,000 single trees and 4,000 shrubs over the grassland; 5,800 rocks; 220 walkers and 50 rollers; 73 ruins, 133 caches and 122 cairns.
+  - **Trees:** broadleaf trees, conifers whose needles are 4D cones, birches, dead trees, shrubs. Leaves and needles are porous (ragged edges, gaps you see through); crowns shade the ground softly. Trunks stop you.
+  - **Rocks:** tesseract slabs and blocks, 16-cell and 24-cell crystals, duocylinder river stones, flattened balls, scree; granite, sandstone, pale crystal, basalt. Solid, climbable when big, sharp shadows. Their slices change shape as you turn. Boulders stay, as one kind among several.
+  - **Creatures:** walkers are larger (a metre high), a third of them curious; herds live where you will go. Only the creatures within 70 m are moved every frame; the rest step coarsely when they think, which is all the ecosystem needs.
+  - **Things to find:** ruins built for four dimensions (a ring of pillars on a sphere, a room whose walls are 3D cells, a gate, steps), caches of balls, blocks, lanterns and impulse stones, cairns you can knock down, and lines of cairns leading from the start toward each artifact and the launcher.
+- **N4, wordless guidance (v0.11).** Four sockets set into the launcher's pad light (with a chime) as their parts arrive; a full set lights the pad. Columns of light stand over unsolved artifacts and loose parts, 150 m tall so they clear the horizon out to about 300 m. The radar pulses over the nearest unsolved artifact.
+- **N5, polish (v1.0).** Rocks weather differently facet by facet, with lichen; bark and birch bark are quieter; the help text, README and the itch.io page describe the new things; a code review of the run's diff and its fixes.
+
+### How it stays at 60 fps
+
+The world now holds some 30,000 things, and the gate (60 fps at 50% resolution or more) held because the renderer was rebuilt underneath it:
+
+- **The view is drawn in two passes:** what each pixel's ray meets, then its colour. The one big program had grown so large that the GPU could keep few pixels in flight; split, the default view's slice pass went from 14.1 ms to 11.9 ms at 50% before any new content. The ground's soft shadow (and the crowns') is computed in a third pass at half resolution.
+- **Per screen tile, only what can be seen:** each frame the CPU keeps the trees and rocks your slice cuts, gives each a circle on the screen, and lists them per 32-pixel tile; a pixel tests only its tile's list, nearest first. Rock shadows have their own list. A cut clump of leaves goes up as a 3D ball in the slice's own coordinates.
+- **The resolution controller** no longer pins itself high (it undid steps down whose gain was lost in frame-to-frame noise).
+
+M2 Pro, 3024 × 1964 (dpr 2), the resolution the controller settled at, at 60 fps (the machine was shared with other work; load average 1.5–2):
+
+| View | Resolution |
+|---|---|
+| Where you arrive | 55–58% |
+| Inside a pine wood | 54–55% |
+| Among a herd | 59% |
+| Looking down at near ground | 61% |
+| Beside a rock outcrop | 56% |
+
+The gate was 60 fps at 50% or more in each: met. (v0.7's default view was 52–54%, with an empty world.) The slice pass alone at 50% now costs 12–15 ms depending on the view; the CPU's share of a frame is about 4 ms.
+
+### Bugs found and fixed on the way
+
+- **Flight round the hoop.** A launch straight up while "up" points along the hoop rises past halfway to A's copy 800 m along it and comes down on A's far side. Flight didn't wrap round the hoop, so it fell into the copy's point mass and was flung off at 3 km/s. Found while re-deriving tier II, which does this at about half the times of day (the old tier II too).
+- **The space map promised landings on B that missed:** it counted anything within 126 m of B's centre, but B's floors stand 115–124 m out. It now lands exactly where flight does.
+- **The hoop field overflowed** beyond about 40 km (sinh and cosh past 10³⁰⁸).
+- **From the code review of the run:** the screen tiles' index list could outgrow its texture on a very large screen; the tiles' scratch arrays were made anew each frame; the radar scanned all 21,000 trees each frame for the few landmark ones; a save from a world whose finds were made differently could duplicate a found thing.
+
+### Cut, and why
+
+- **Tree shadows are soft balls, not branch-exact.** Exact shadows of thousands of capsules would cost several milliseconds; the crowns' shade is soft and partial, which is how foliage shade reads anyway.
+- **Ruins and rocks are static.** Knocking a pillar over would need them to be bodies; cairns are bodies instead.
+- **No third creature species** (the design's first cut, unchanged).
+
+### Known issues
+
+- **A slice is sparse by nature.** Even with 30,000 things, a turn through ana of 20° empties a view of everything more than a few tens of metres away: that is the 4D world, not a bug, and the radar shows what your slice misses.
+- **Load time** is about 3.8 s on the M2 Pro (the world's woods, rocks and finds add 0.9 s).
+- **Orbits are as marginal as before.** The flight drifts from the space map's prediction by a few metres a minute at first, so an orbit that skims the hills can still be lost.
+- **True night is rare** (unchanged): the row of suns makes most nights long twilights.
+- **Audio** is checked in code and in the browser, not by ear.
+
+### Decisions
+
+Every choice made in this run, with its reason, is under "Run three decisions" in [DECISIONS.md](DECISIONS.md); PHYSICS.md has the new numbers (gravity, the launcher table, rocks, trees, creatures).
+
+### For you
+
+1. **itch.io:** upload `dist/glome-v1.0.zip` (built with `tools/package.sh`; it is gitignored) as an HTML game, with the settings and text in [ITCH.md](ITCH.md) (updated for the new things).
+2. **The hub:** approve or edit the copy on https://bengreff.github.io/ (unchanged since day two).
+3. **Play it with sound on.** The new things make few sounds of their own (rock underfoot, a chime when a socket lights); listening is the one check I could not make.

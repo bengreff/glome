@@ -8,9 +8,12 @@ export function buildTiles(W, H, lists) {
   const tx = Math.ceil(W / TILE), ty = Math.ceil(H / TILE), nt = tx * ty;
   if (!tiles.tab || tiles.tab.length < nt * 8) tiles.tab = new Float32Array(nt * 8);
   const tab = tiles.tab, idx = tiles.idx;
+  if (!tiles.cnt || tiles.cnt.length < nt) tiles.cnt = new Int32Array(nt);           // (scratch, kept between frames)
   let off = 0;
   lists.forEach((L, c) => {
-    const cnt = new Int32Array(nt), boxes = new Int32Array(L.n * 4);
+    const cnt = tiles.cnt; cnt.fill(0, 0, nt);
+    if (!tiles.boxes || tiles.boxes.length < L.n * 4) tiles.boxes = new Int32Array(Math.max(1024, L.n * 8));
+    const boxes = tiles.boxes;
     for (let g = 0; g < L.n; g++) {
       const x = L.data[L.stride * g], y = L.data[L.stride * g + 1], r = L.data[L.stride * g + 2];
       if (r <= 0) { boxes.set([1, 0, 1, 0], 4 * g); continue; }   // off the screen
@@ -21,8 +24,9 @@ export function buildTiles(W, H, lists) {
     }
     // each tile holds at most its share of the list (a near thing can cover the whole screen); in order, nearest first,
     // so where a tile is full it is the farthest that give way
-    const cap = Math.max(8, Math.floor(MAXIDX / (lists.length * nt)));
-    for (let t = 0; t < nt; t++) { const n = Math.min(cnt[t], cap); cnt[t] = n; tab[8 * t + 2 * c] = off; tab[8 * t + 2 * c + 1] = 0; off += n; }
+    // (and the whole list never outgrows its texture, however many tiles a large screen has)
+    const cap = Math.max(1, Math.floor(MAXIDX / (lists.length * nt)));
+    for (let t = 0; t < nt; t++) { const n = Math.max(0, Math.min(cnt[t], cap, MAXIDX - off)); cnt[t] = n; tab[8 * t + 2 * c] = off; tab[8 * t + 2 * c + 1] = 0; off += n; }
     for (let g = 0; g < L.n; g++) {
       const x0 = boxes[4 * g], x1 = boxes[4 * g + 1], y0 = boxes[4 * g + 2], y1 = boxes[4 * g + 3];
       for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {

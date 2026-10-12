@@ -396,7 +396,7 @@ function uploadDynamic(w, h) {
   buildTiles(w, h, [{ data: tgpu.groups, stride: 12, n: tgpu.n }, { data: props.circles, stride: 4, n: props.cut }, { data: props.shCircles, stride: 4, n: props.n }]);
   if (tiles.tx !== tileW || tiles.ty !== tileH) { if (tileTab) gl.deleteTexture(tileTab); tileTab = floatTex(gl.TEXTURE10, gl.RGBA, gl.RGBA32F, 2 * tiles.tx, tiles.ty); tileW = tiles.tx; tileH = tiles.ty; }
   gl.activeTexture(gl.TEXTURE10); gl.bindTexture(gl.TEXTURE_2D, tileTab); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 2 * tileW, tileH, gl.RGBA, gl.FLOAT, tiles.tab.subarray(0, tileW * tileH * 8));
-  if (tiles.nidx) { const rows = Math.ceil(tiles.nidx / 1024); gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, tileIdxTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, rows, gl.RED, gl.FLOAT, tiles.idx.subarray(0, rows * 1024)); }
+  if (tiles.nidx) { const rows = Math.min(MAXIDX / 1024, Math.ceil(tiles.nidx / 1024)); gl.activeTexture(gl.TEXTURE9); gl.bindTexture(gl.TEXTURE_2D, tileIdxTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1024, rows, gl.RED, gl.FLOAT, tiles.idx.subarray(0, rows * 1024)); }
   gl.activeTexture(gl.TEXTURE0);
 }
 function pass(p, fbo, cam, sun, x, y, w, h) {

@@ -1041,7 +1041,9 @@ vec3 shadeProp(vec4 p, vec4 n, int i, vec4 rd, float t) {
     bumpK = 0.06;
   } else if (mat == 5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; bumpK = 0.0; }   // a walker: brushed metal
   else { alb = vec3(0.56, 0.54, 0.50) * (0.9 + 0.08 * d1 + 0.05 * d2); bumpK = 0.03; }                   // a roller: smooth stone
+  if (mat <= 1 || mat == 4) alb *= 0.9 + 0.2 * h41(floor(nl * 2.5 + 0.5) + seed);    // each facet weathered a little differently
   if (mat <= 1 || mat == 3) alb = mix(alb, vec3(0.22, 0.31, 0.12), smoothstep(0.62, 0.92, dot(n, up) + 0.25 * d2) * 0.55);   // moss on top
+  if (mat <= 1) alb = mix(alb, vec3(0.62, 0.64, 0.42), smoothstep(0.32, 0.4, d2) * smoothstep(0.1, 0.5, dot(n, up)) * 0.45);   // lichen
   // the edges of the polyhedron your slice shows
   float edge = 0.0;
   if (shape == 1) { vec4 a = step(vec4(0.95), abs(q)); edge = step(2.0, a.x + a.y + a.z + a.w); }

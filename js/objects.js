@@ -414,10 +414,12 @@ export const objectsSave = {
     objects.pouch = s.pouch || 0;
     for (const o of s.bodies) {
       if (!KINDS[o.kind]) continue;
+      // a found thing from a world whose finds were made differently: theirs stand in its place (unless in your hand)
+      if (o.gen != null && s.gens !== G.genCount && o.id !== s.held) continue;
       let b = o.gen != null && s.gens === G.genCount ? gens.get(o.gen) : null;
       if (b && (!!o.inB && !!objects.worldB)) { w.remove(b); b = null; }
       if (b) { b.pos = o.pos.slice(); b.prevPos = b.pos.slice(); }
-      else { b = spawnAt(o.kind, o.pos, !!o.inB && !!objects.worldB); if (o.gen != null) b.gen = o.gen; }
+      else { b = spawnAt(o.kind, o.pos, !!o.inB && !!objects.worldB); if (o.gen != null && s.gens === G.genCount) b.gen = o.gen; }
       b.vel = o.vel; b.rot = o.rot; b.omega = o.omega; b.sleeping = o.sleeping; b.tag = o.tag; b.tier = o.tier;
       if (o.id === s.held) { objects.held = b; b.held = true; b.holdRel = o.holdRel && o.holdRel.l ? o.holdRel : null; hold.last = null; }
     }

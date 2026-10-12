@@ -74,7 +74,11 @@ export function updateLauncher(p) {
   let k = 0; while (near.has(k + 1)) k++;
   launcher.tier = k;
   launcher.pad.glow = k === 4 ? 0.9 : 0.12 * k;                 // a full set lights the pad
-  (launcher.sockets || []).forEach((so, i) => { so.glow = near.has(i + 1) ? 0.9 : 0.04; });   // each socket, as its part arrives
+  (launcher.sockets || []).forEach((so, i) => {                   // each socket, as its part arrives, with a chime
+    const lit = near.has(i + 1);
+    if (lit && !so.lit && G.simT > 2) G.audio?.emit('chime', so.c, near.size === 4 ? 1.0 : 0.55);
+    so.lit = lit; so.glow = lit ? 0.9 : 0.04;
+  });
   for (const b of objects.world.bodies) if (b.kind === 'part') b.glow = near.has(b.tier) && b.tier <= k ? 1 : 0.25;
   // standing on the pad: your feet on its top face, within its square
   const d = vec4.sub(p.pos, launcher.site), up = vec4.norm(launcher.site);

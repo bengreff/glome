@@ -529,7 +529,8 @@ export function drawRadarOverlay(r, sun) {
 export function landmarkList() {
   const out = [];
   for (const g of groves) out.push({ n: g.n, kind: 'grove', r: g.r });   // woods as soft patches
-  for (const t of trees) if (t.landmark) out.push({ n: t.n, kind: 'tree' });
+  if (!landmarkList.trees || landmarkList.count !== trees.length) { landmarkList.trees = trees.filter(t => t.landmark); landmarkList.count = trees.length; }
+  for (const t of landmarkList.trees) out.push({ n: t.n, kind: 'tree' });   // (the few landmark trees, found once)
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
   for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin' });
   if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: launcher.tier > 0 });
