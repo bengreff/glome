@@ -69,6 +69,8 @@ Before writing any code, interview the owner. Many questions need answers (secti
 6. I, the closed room.
 7. The launcher's barrel, gimbal and sliders.
 8. Creature concepts.
+9. **Tides** (owner, after segment 1): model the sea's tide from A's copies round the hoop. The equilibrium range is about 15 m, and it turns with the day; the real sea sloshes, because the forcing turns in minutes. New puzzle sites must sit above high water.
+10. **The hoop lighthouse puzzle** (owner, after segment 1): a lit tower whose own light you see blink on the copy's rim when the hoop lies level there, and a beam fired round the hoop into a detector, like a laser puzzle. Maybe with an element of what the owner called "the waves-as-gradients 4D mechanic" (ask what is meant). The copies must draw the tower.
 
 That is about four hours of segments. At a check-in, ask whether to continue autonomously after the owner leaves.
 

@@ -10,7 +10,7 @@ import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
 import { objects } from './objects.js';
-import { launcher } from './launcher.js';
+import { launcher, seated } from './launcher.js';
 import { artifacts } from './artifacts.js';
 import { flight } from './flight.js';
 import { carves } from './landforms.js';
@@ -18,7 +18,6 @@ import { carves } from './landforms.js';
 export const guide = { goal: null };
 const TIER = { room: 1, mirror: 2, knot: 3, antipode: 4 };
 const solved = a => !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1));
-const onPad = b => launcher.site && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring;
 const segDist = (p, a, b) => { const ab = vec4.sub(b, a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(p, a), ab) / Math.max(1e-9, vec4.dot(ab, ab)))); return vec4.len(vec4.sub(p, vec4.add(a, vec4.scale(ab, t)))); };
 
 // In the cave (its chamber, passage or tunnel, below the hillside's surface)?
@@ -43,12 +42,12 @@ function pickGoal() {
   const set = (pos, kind, o = {}) => { guide.goal = { pos, kind, cue: null, ...o }; };
   const near = (q, r) => vec4.len(vec4.sub(p.pos, q)) < r;
   const held = objects.held, bodies = objects.world.bodies;
-  // carrying a part: to the pad, and set it down in its ring
-  if (held && held.kind === 'part') return set(launcher.site, 'pad', { cue: near(launcher.site, launcher.ring) ? 'F' : null });
-  // a part set free and not yet on the pad: go and take it
+  // carrying a key: to the pillar beside the pad (its ball answers), and let it go over the spindle
+  if (held && held.kind === 'part') return set(launcher.pillar.top, 'pillar', { cue: near(launcher.pillar.top, 2.2) ? 'F' : null });
+  // a key set free and not yet on the pillar: go and take it
   let free = null, fd = Infinity;
   for (const b of bodies) {
-    if (b.kind !== 'part' || b.held || onPad(b)) continue;
+    if (b.kind !== 'part' || b.held || seated(b)) continue;
     const a = artifacts.find(x => TIER[x.id] === b.tier);
     if (a && !solved(a)) continue;
     const d = vec4.len(vec4.sub(b.pos, p.pos)); if (d < fd) { fd = d; free = b; }
@@ -98,6 +97,6 @@ export function updateBeam(cam) {
   const base = vec4.scale(nP, PLANET_R + Math.max(hf.heightAt(nP), 0));
   const up = vec4.norm(eye), d = vec4.sub(base, eye), dh = vec4.len(vec4.sub(d, vec4.scale(up, vec4.dot(d, up))));
   beam.B.set(base);
-  beam.C.set([...(g.kind === 'pad' || g.kind === 'launch' ? WARM : ACC), 150]);
+  beam.C.set([...(g.kind === 'pillar' || g.kind === 'launch' ? WARM : ACC), 150]);
   beam.S.set([Math.min(1, Math.max(0, (Math.abs(a) - 1.0) / 1.5)), Math.min(1, Math.max(0, (dh - 3) / 9)), 1, Math.abs(a)]);
 }

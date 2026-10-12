@@ -5,7 +5,7 @@ const { g, p, d, O, w, V, len, nz, gt } = PT;
 const L = d.launcher, C = d.cosmos, out = {};
 const SM = await import(document.querySelector('script[type=importmap]').textContent.match(/"\.\/js\/spacemap\.js": "([^"]+)"/)[1]);
 const up = nz(L.site), T = [[-up[1],up[0],up[3],-up[2]],[-up[2],-up[3],up[0],up[1]],[-up[3],up[2],-up[1],up[0]]];
-w.bodies.filter(b => b.kind === 'part').forEach((b, i) => { b.kinematic = false; b.pos = V.add(V.add(L.site, V.sc(i < 3 ? T[i] : V.sc(T[0], -1), 0.7)), V.sc(up, 0.2)); b.sleeping = false; });
+w.bodies.filter(b => b.kind === 'part').forEach(b => L.seat(b));
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0]; p.settleFrame(); await gt(1);
 out.tier = L.tier;
 // aim as a player does with the map: try directions, keep the one whose path passes nearest B, and refine it

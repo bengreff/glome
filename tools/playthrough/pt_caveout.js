@@ -9,7 +9,7 @@ out.start = { depth: depth(), goal: rel().kind };
 const kinds = [];
 for (let i = 0; i < 80; i++) {
   const r = rel(); if (kinds[kinds.length - 1] !== r.kind) kinds.push(r.kind);
-  if (r.kind === 'pad') break;
+  if (r.kind === 'pillar') break;
   faceGoal(); k.clear();
   if (Math.abs(r.a) > 1.0) k.add(r.a > 0 ? 'KeyE' : 'KeyQ'); else if (Math.hypot(r.f, r.r) > 1.5) k.add('KeyW');
   await gt(0.5);

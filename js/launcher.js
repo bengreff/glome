@@ -1,6 +1,7 @@
 // The launcher: a stone pad on the highest summit, where gravity is lightest. Its power comes in tiers; each tier is
-// a part (I–IV) found elsewhere and carried back to lie in the pad's ring. Stand on the pad and jump: it throws you
-// along your line of sight at its tier's speed. (Speeds re-derived for the summit: see DECISIONS.md.)
+// a key (a ring, I–IV) found elsewhere and carried back to the pillar beside the pad, where it drops onto the ball
+// that fits it (keys.js). Stand on the pad and jump: it throws you along your line of sight at its tier's speed.
+// (Speeds re-derived for the summit: see DECISIONS.md.)
 import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R, MASSIF } from './world.js';
@@ -9,9 +10,10 @@ import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
 import { objects, spawn, KINDS } from './objects.js';
 import { makeProp, addRock, SHAPE, MAT } from './props.js';
+import { PILLAR, RING, seatHeight, pillarParts, ringParts, ringDraw } from './keys.js';
 
 export const TIERS = [0, 28, 43, 53, 72];             // m/s for tiers 0 (no parts) .. IV (derived by integration: PHYSICS.md)
-export const launcher = { site: null, n: null, pad: null, tier: 0, onPad: false, ring: 3.6 };
+export const launcher = { site: null, n: null, pad: null, tier: 0, onPad: false, ring: 3.6, pillar: null };
 
 // The summit, found by climbing from the massif's centre in many directions (the same every time).
 export function findSummit(hf) {
@@ -51,35 +53,55 @@ export function buildLauncher(hf) {
   objects.world.add(pad);
   launcher.pad = pad;
   launcher.site = vec4.scale(s.p, PLANET_R + s.h + 0.25);
-  // four sockets set into the pad's top, one for each part, at four of its corners (a tetrahedron in the ground's three
-  // directions: your slice shows some of them, turning shows the others): dark until their part lies in the ring. They
-  // stand only 5 cm proud, so nothing on the pad can catch a launch, which leaves it nearly level.
-  const T = tangents(s.p), rot = squareOn(s.p), e = [0.3, 0.3, 0.3, 0.2];
-  launcher.sockets = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(([x, y, z]) => {
-    const off = [0, 1, 2, 3].map(i => 0.8 * (x * T[0][i] + y * T[1][i] + z * T[2][i]));
-    const p = makeProp({ c: vec4.add(vec4.add(launcher.site, off), vec4.scale(s.p, 0.05 - e[3])), rot, e, shape: SHAPE.box, mat: MAT.metal, glow: 0.04 });
-    p.kind = 'socket'; addRock(p);
-    return p;
-  });
+  // the pillar, 4 m from the pad's centre: a thin square spindle of metal with four balls on it, smaller going up,
+  // onto which the rings drop (keys.js). Solid as a fixed body, drawn as props (so the balls can light).
+  const T = tangents(s.p), dir = T[0].map(v => -v), off = 4;
+  const pn = vec4.norm(vec4.add(vec4.scale(s.p, Math.cos(off / PLANET_R)), vec4.scale(dir, Math.sin(off / PLANET_R))));
+  const prot = squareOn(pn), foot = vec4.scale(pn, PLANET_R + hf.heightAt(pn) - 0.03);
+  const body = makeBody({ shape: 'compound', parts: pillarParts(), mass: 1e9, mu: PILLAR.mu, pos: foot, kind: 'pillar' });
+  body.pos = vec4.add(foot, R4.apply(prot, body.com)); body.rot = prot;
+  body.kinematic = body.fixed = body.hidden = true; body.mat = 1;
+  objects.world.add(body);
+  const show = (c, e, shape, glow) => { const p = makeProp({ c, rot: prot, e, shape, mat: MAT.metal, glow }); p.kind = 'socket'; addRock(p); return p; };
+  launcher.pillar = {
+    n: pn, foot, up: pn, rot: prot, body,
+    spindle: show(vec4.add(foot, vec4.scale(pn, PILLAR.top / 2)), [PILLAR.p, PILLAR.p, PILLAR.p, PILLAR.top / 2], SHAPE.box, 0.04),
+    balls: PILLAR.R.map((r, k) => show(vec4.add(foot, vec4.scale(pn, PILLAR.z[k])), [r, r, r, r], SHAPE.ball, 0.04)),
+    seat: k => vec4.add(foot, vec4.scale(pn, seatHeight(k))),
+    top: vec4.add(foot, vec4.scale(pn, PILLAR.top + 0.25)),
+  };
 }
-// The four parts, placed now at the places the artifacts will guard (DESIGN.md: carried back by hand).
+// The four keys, placed now at the places the artifacts will guard (DESIGN.md: carried back by hand).
 export function placeParts(spots) {
-  spots.forEach((n, i) => { const b = spawn('part', n); b.tier = i + 1; b.tag = `part${i + 1}`; });
+  spots.forEach((n, i) => { const b = spawn('part', n, { extra: { tier: i + 1 } }); b.tag = `part${i + 1}`; });
 }
-// The tier: the highest k such that parts I..k all lie in the pad's ring.
+// Is ring k (1–4) resting on its ball? (Friction holds it where it landed, up to a few cm off the axis.)
+export function seated(b) {
+  const P = launcher.pillar;
+  if (!P || b.kind !== 'part' || b.held) return false;
+  const d = vec4.sub(b.pos, P.foot), h = vec4.dot(d, P.up), off = vec4.len(vec4.sub(d, vec4.scale(P.up, h)));
+  return Math.abs(h - seatHeight(b.tier - 1)) < 0.03 && off < 0.08;
+}
+// For tests and the scripted flights: set ring b on its ball.
+export function seat(b) { const P = launcher.pillar; b.pos = P.seat(b.tier - 1); b.rot = P.rot; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; b.kinematic = false; b.sleeping = true; }
+// The tier: the highest k such that rings I..k all rest on their balls.
 export function updateLauncher(p) {
   if (!launcher.pad) return;
-  const near = new Set();
-  for (const b of objects.world.bodies) if (b.kind === 'part' && !b.held && vec4.len(vec4.sub(b.pos, launcher.site)) < launcher.ring) near.add(b.tier);
-  let k = 0; while (near.has(k + 1)) k++;
+  const on = new Set();
+  let held = null;
+  for (const b of objects.world.bodies) if (b.kind === 'part') { if (seated(b)) on.add(b.tier); if (b.held) held = b.tier; }
+  let k = 0; while (on.has(k + 1)) k++;
   launcher.tier = k;
   launcher.pad.glow = k === 4 ? 0.9 : 0.12 * k;                 // a full set lights the pad
-  (launcher.sockets || []).forEach((so, i) => {                   // each socket, as its part arrives, with a chime
-    const lit = near.has(i + 1);
-    if (lit && !so.lit && G.simT > 2) G.audio?.emit('chime', so.c, near.size === 4 ? 1.0 : 0.55);
-    so.lit = lit; so.glow = lit ? 0.9 : 0.04;
+  const P = launcher.pillar, pulse = 0.5 + 0.5 * Math.sin(G.simT * 5);
+  P.balls.forEach((ball, i) => {                                 // each ball lights as its ring comes to rest, with a chime;
+    const lit = on.has(i + 1);                                   // the one whose ring you hold answers, pulsing
+    if (lit && !ball.lit && G.simT > 2) G.audio?.emit('chime', ball.c, on.size === 4 ? 1.0 : 0.55);
+    ball.lit = lit; ball.glow = lit ? 0.9 : held === i + 1 ? 0.25 + 0.45 * pulse : 0.04;
   });
-  for (const b of objects.world.bodies) if (b.kind === 'part') b.glow = near.has(b.tier) && b.tier <= k ? 1 : 0.25;
+  if (held && held !== launcher.answering && G.simT > 2) G.audio?.emit('chime', P.balls[held - 1].c, 0.3);   // (it answers once as you take it)
+  launcher.answering = held;
+  for (const b of objects.world.bodies) if (b.kind === 'part') b.glow = on.has(b.tier) && b.tier <= k ? 0.12 : 0;   // (a seated ring warms a little: still brass)
   // standing on the pad: your feet on its top face, within its square
   const d = vec4.sub(p.pos, launcher.site), up = vec4.norm(launcher.site);
   const hgt = vec4.dot(d, up), lat = vec4.len(vec4.sub(d, vec4.scale(up, hgt)));
@@ -97,3 +119,4 @@ export function tryLaunch(p, cam, jump) {
   G.flags.launches = (G.flags.launches || 0) + 1;
   return true;
 }
+launcher.seat = seat; launcher.seated = seated;     // (for the scripted playthroughs)

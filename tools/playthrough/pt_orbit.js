@@ -4,7 +4,7 @@ const L = d.launcher, C = d.cosmos, out = {};
 const SM = await import(document.querySelector('script[type=importmap]').textContent.match(/"\.\/js\/spacemap\.js": "([^"]+)"/)[1]);
 const up = nz(L.site), T = [[-up[1],up[0],up[3],-up[2]],[-up[2],-up[3],up[0],up[1]],[-up[3],up[2],-up[1],up[0]]];
 // carry parts I–III to the pad (teleported: the carrying is not the puzzle here)
-w.bodies.filter(b => b.kind === 'part' && b.tier <= 3).forEach((b, i) => { b.kinematic = false; b.pos = V.add(V.add(L.site, V.sc(T[i], 0.7)), V.sc(up, 0.2)); b.sleeping = false; });
+w.bodies.filter(b => b.kind === 'part' && b.tier <= 3).forEach(b => L.seat(b));
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0]; p.settleFrame(); await gt(1);
 out.tier = L.tier;
 // wait for a moment when a launch flat across the hoop exists, and aim with the map's own prediction

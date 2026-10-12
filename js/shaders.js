@@ -36,8 +36,10 @@ uniform int uBShadow;       // and only the first uBShadow can shade it
 const int MAXO = 16;
 uniform vec4 uOC[MAXO];     // objects near you: centres ...
 uniform mat4 uOM[MAXO];     // ... orientations (columns: the body's axes in the world) ...
-uniform vec4 uOP[MAXO];     // ... x: shape (0 glome, 1 tesseract, 2 duocylinder), y: radius or half side, z: material (0 stone, 1 metal,
-                            // 2 accent, 4 handed, 5 console, 6 wood, 7 lantern glass), w: glow
+uniform vec4 uOP[MAXO];     // ... x: shape (0 glome, 1 box, 2 duocylinder, 3 frame), y: radius, largest half side, or a frame's
+                            // hole's half-width, z: material (0 stone, 1 metal, 2 accent, 3 builder's stone, 4 handed,
+                            // 5 console, 6 wood, 7 lantern glass, 8 key brass), w: glow ...
+uniform vec4 uOE[MAXO];     // ... and a box's or frame's half-extents
 uniform int uON;            // how many; the first uOCut cross your slice
 uniform int uOCut;
 const int MAXL = 4;
@@ -350,8 +352,28 @@ float hitDuo(vec4 o, vec4 d, float a, out vec4 n) {
   }
   return t0 < t1 && t0 > 0.0 ? t0 : -1.0;
 }
-// Objects: 4D balls and tesseracts with any orientation in SO(4). The ray is carried into the object's own frame
-// (the transpose of its rotation), where a tesseract is the box |x_i| <= h: a 4D slab test.
+// Objects: 4D balls, boxes and frames with any orientation in SO(4). The ray is carried into the object's own frame
+// (the transpose of its rotation), where a box is |x_i| <= e_i: a 4D slab test. A frame (a key ring) is that box less
+// a square hole through it along its fourth axis, max(|x|, |y|, |z|) < a: where the ray enters the box inside the
+// hole's prism, the solid begins where it leaves the prism. Returns t (or -1) and the normal in the body's frame.
+float hitBoxFrame(vec4 o, vec4 dd, vec4 e, float a, bool frame, out vec4 nb) {
+  vec4 inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));   // never 0/0
+  vec4 t1 = (-e - o) * inv, t2 = (e - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
+  float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
+  nb = vec4(0.0);
+  if (tNear >= tFar || tNear <= 0.0) return -1.0;
+  if (frame) {
+    vec3 h1 = (-vec3(a) - o.xyz) * inv.xyz, h2 = (vec3(a) - o.xyz) * inv.xyz, hn = min(h1, h2), hf = max(h1, h2);
+    float iN = max(max(hn.x, hn.y), hn.z), iF = min(min(hf.x, hf.y), hf.z);
+    if (tNear > iN && tNear < iF) {                          // in through the hole: the hole's wall, or through
+      if (iF >= tFar) return -1.0;
+      nb = vec4(-vec3(equal(hf, vec3(iF))) * sign(dd.xyz), 0.0);
+      return iF;
+    }
+  }
+  nb = vec4(equal(tn, vec4(tNear))) * -sign(dd);
+  return tNear;
+}
 uniform sampler2D uPrev;     // the last frame (for the console's screen)
 uniform float uScreenOn;
 uniform int uGhost;          // the index of the ghost (where a held object would come to rest), or -1
@@ -367,24 +389,14 @@ float hitObject(vec4 ro, vec4 rd, float tMax, int count, out int idx, out vec4 n
       if (d > 0.0) { float t = -b - sqrt(d); if (t > 0.0 && t < best) { best = t; idx = i; nrm = (oc + rd * t) / h; } }
       continue;
     }
-    // a tesseract (circumradius 2h) or a duocylinder (h√2): its bounding ball first, which most rays miss
-    float bb = dot(oc, rd), Rb = uOP[i].x > 1.5 ? 1.415 * h : 2.0 * h;
+    // a box or frame (circumradius |e|) or a duocylinder (h√2): its bounding ball first, which most rays miss
+    bool duo = uOP[i].x > 1.5 && uOP[i].x < 2.5;
+    float bb = dot(oc, rd), Rb = duo ? 1.415 * h : length(uOE[i]);
     if (bb * bb - dot(oc, oc) + Rb * Rb <= 0.0 || bb > Rb) continue;
-    if (uOP[i].x > 1.5) {
-      vec4 n4; float t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4);
-      if (t > 0.0 && t < best) { best = t; idx = i; nrm = uOM[i] * n4; }
-    } else {
-      vec4 o = oc * uOM[i], dd = rd * uOM[i];           // into the body frame: Mᵀ·v
-      vec4 inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));   // never 0/0
-      vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv;
-      vec4 tn = min(t1, t2), tf = max(t1, t2);
-      float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
-      if (tNear < tFar && tNear > 0.0 && tNear < best) {
-        best = tNear; idx = i;
-        vec4 nb = vec4(equal(tn, vec4(tNear))) * -sign(dd);
-        nrm = uOM[i] * nb;
-      }
-    }
+    vec4 n4; float t;
+    if (duo) t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4);
+    else t = hitBoxFrame(oc * uOM[i], rd * uOM[i], uOE[i], h, uOP[i].x > 2.5, n4);   // (into the body frame: Mᵀ·v)
+    if (t > 0.0 && t < best) { best = t; idx = i; nrm = uOM[i] * n4; }
   }
   return best;
 }
@@ -392,18 +404,15 @@ float hitObjectOne(vec4 ro, vec4 rd, int i, out vec4 nrm) {
   vec4 oc = ro - uOC[i];
   float h = uOP[i].y;
   nrm = vec4(0.0);
-  if (uOP[i].x > 1.5) { vec4 n4; float t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4); nrm = uOM[i] * n4; return t; }
+  if (uOP[i].x > 1.5 && uOP[i].x < 2.5) { vec4 n4; float t = hitDuo(oc * uOM[i], rd * uOM[i], h, n4); nrm = uOM[i] * n4; return t; }
   if (uOP[i].x < 0.5) {
     float b = dot(oc, rd), c = dot(oc, oc) - h * h, d = b * b - c;
     if (d <= 0.0) return -1.0;
     float t = -b - sqrt(d); nrm = (oc + rd * t) / h; return t;
   }
-  vec4 o = oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));
-  vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
-  float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
-  if (tNear >= tFar || tNear <= 0.0) return -1.0;
-  nrm = uOM[i] * (vec4(equal(tn, vec4(tNear))) * -sign(dd));
-  return tNear;
+  vec4 n4; float t = hitBoxFrame(oc * uOM[i], rd * uOM[i], uOE[i], h, uOP[i].x > 2.5, n4);
+  nrm = uOM[i] * n4;
+  return t;
 }
 // Shadows from objects along a ray toward the sun: soft for balls, sharp for tesseracts.
 float objectShadow(vec4 ro, vec4 rd) {
@@ -415,13 +424,15 @@ float objectShadow(vec4 ro, vec4 rd) {
     float t = dot(oc, rd);
     if (t <= 0.0) continue;
     float h = uOP[i].y;
-    if (uOP[i].x < 0.5 || uOP[i].x > 1.5) {                // balls (and rollers, by their bounding ball)
+    if (uOP[i].x < 0.5 || (uOP[i].x > 1.5 && uOP[i].x < 2.5)) {   // balls (and rollers, by their bounding ball)
       float miss = sqrt(max(dot(oc, oc) - t * t, 0.0)) - h * (uOP[i].x > 1.5 ? 1.2 : 1.0);
       res = min(res, clamp(6.0 * miss / t + 0.5, 0.0, 1.0));
     } else {
-      if (dot(oc, oc) - t * t > 4.0 * h * h) continue;      // the ray passes outside its bounding ball (radius 2h)
-      vec4 o = -oc * uOM[i], dd = rd * uOM[i], inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));
-      vec4 t1 = (-h - o) * inv, t2 = (h - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
+      if (dot(oc, oc) - t * t > dot(uOE[i], uOE[i])) continue;   // the ray passes outside its bounding ball
+      vec4 o = -oc * uOM[i], dd = rd * uOM[i], nb;
+      if (uOP[i].x > 2.5) { if (hitBoxFrame(o, dd, uOE[i], h, true, nb) > 0.0) res = 0.0; continue; }
+      vec4 e = uOE[i], inv = 1.0 / (dd + vec4(1e-12) * (step(0.0, dd) * 2.0 - 1.0));
+      vec4 t1 = (-e - o) * inv, t2 = (e - o) * inv, tn = min(t1, t2), tf = max(t1, t2);
       float tNear = max(max(tn.x, tn.y), max(tn.z, tn.w)), tFar = min(min(tf.x, tf.y), min(tf.z, tf.w));
       if (tNear < tFar && tFar > 0.0) res = 0.0;
     }
@@ -957,6 +968,7 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   else if (mat < 1.5) { alb = vec3(0.50, 0.52, 0.56) * (0.94 + 0.04 * d2); spec = 0.6; }
   else if (mat < 2.5) { alb = mix(vec3(0.30, 0.31, 0.33), ACCENT, 0.55) * (0.95 + 0.05 * d2); spec = 0.35; }
   else if (mat < 3.5) { alb = vec3(0.20, 0.21, 0.24) * (0.9 + 0.1 * d1 + 0.04 * d2); spec = 0.25; }   // the builder's stone: dark, fixed
+  else if (mat > 7.5) { alb = vec3(0.80, 0.60, 0.26) * (0.9 + 0.06 * d1 + 0.05 * d2); spec = 1.0; }   // a key: brass, and nothing else is
   else if (mat > 6.5) { alb = vec3(0.9, 0.78, 0.6) * (0.95 + 0.05 * d2); spec = 0.8; }   // a lantern: warm glass
   else if (mat > 5.5) {                                   // wood: planks along the body's first axis
     float grain = 0.5 + 0.5 * sin(q.y * 26.0 + 3.0 * d1) * sin(q.w * 7.0);
@@ -980,8 +992,8 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
     if (q.x > h * 0.9) { alb = ACCENT * 0.8; spec = 0.3; }
     else if (q.y > h * 0.9) alb = vec3(0.10, 0.10, 0.12);
   }
-  if (uOP[i].x > 0.5 && uOP[i].x < 1.5) {                  // tesseract: darken the edges of the slice's polyhedron
-    vec4 a = step(vec4(h * 0.93), abs(q));
+  if ((uOP[i].x > 0.5 && uOP[i].x < 1.5) || uOP[i].x > 2.5) {   // box or frame: darken the edges of the slice's polyhedron
+    vec4 a = step(uOE[i] - vec4(h * 0.07), abs(q));
     float ed = a.x + a.y + a.z + a.w;
     alb *= ed >= 2.0 ? 0.62 : 1.0;
     if (mat > 2.5 && mat < 3.5 && ed >= 2.0) glow = max(glow, 0.3);   // (the builder's stone: its edges faintly lit)
@@ -999,9 +1011,9 @@ vec3 shadeObject(vec4 p, vec4 n, int i, vec4 rd, float t) {
   vec3 sunCol = mix(vec3(1.0, 0.52, 0.28), vec3(1.0, 0.94, 0.84), smoothstep(0.0, 0.35, sunEl));
   vec3 sky = mix(vec3(0.035, 0.045, 0.08), vec3(0.17, 0.25, 0.38), day);
   float skyVis = 0.5 + 0.5 * dot(nb, up);
-  vec3 col = alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.65 + 0.35 * skyVis) + (mat > 6.5 ? vec3(0.0) : lanternLight(p, nb)));   // (not lit by itself)
+  vec3 col = alb * (sunCol * dif * sh * 1.6 + sky * skyVis * (0.65 + 0.35 * skyVis) + (mat > 6.5 && mat < 7.5 ? vec3(0.0) : lanternLight(p, nb)));   // (not lit by itself)
   col += sunCol * spec * pow(max(dot(reflect(uSun, nb), rd), 0.0), 36.0) * sh * smoothstep(-0.04, 0.06, sunEl);
-  col += (mat > 6.5 ? vec3(0.95, 0.5, 0.17) : ACCENT) * glow * (0.6 + 0.4 * (0.5 + 0.5 * d2));   // (a lantern glows its own light)
+  col += (mat > 6.5 && mat < 7.5 ? vec3(0.95, 0.5, 0.17) : ACCENT) * glow * (0.6 + 0.4 * (0.5 + 0.5 * d2));   // (a lantern glows its own light)
   return col;
 }
 

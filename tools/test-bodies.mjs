@@ -1,5 +1,6 @@
 // Tests for js/bodies.js (Node, no packages): node tools/test-bodies.mjs
-import { World, makeBody, ballSubmerged, VOLUME, ROLL_RES } from '../js/bodies.js';
+import { World, makeBody, ballSubmerged, VOLUME, ROLL_RES, IApply } from '../js/bodies.js';
+import { ringParts, pillarParts, seatHeight, RING, PILLAR } from '../js/keys.js';
 import { rot as R4, wedge, bivApply } from '../js/so4.js';
 const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0), len = a => Math.hypot(...a);
 const sub = (a, b) => a.map((v, i) => v - b[i]), add = (a, b) => a.map((v, i) => v + b[i]), scale = (a, s) => a.map(v => v * s);
@@ -108,6 +109,63 @@ for (const [rho, wantFlat] of [[60, true], [450, false]]) {
   for (let i = 0; i < 60; i++) w.step();
   const t0 = performance.now(); for (let i = 0; i < 120; i++) w.step(); const ms = (performance.now() - t0) / 120;
   check('40 bodies: ms per step', ms < 4, `${ms.toFixed(2)} ms/step`);
+}
+// 9. compound bodies: a tesseract built of 16 cubes has a tesseract's inertia exactly
+{
+  const parts = []; for (let i = 0; i < 16; i++) parts.push({ shape: 'box', c: [0, 1, 2, 3].map(k => (i >> k & 1 ? 0.15 : -0.15)), e: [0.15, 0.15, 0.15, 0.15] });
+  const b = makeBody({ shape: 'compound', parts, density: 2600, pos: [0, 0, 0, 0] }), t = makeBody({ shape: 'tesseract', size: 0.6, density: 2600, pos: [0, 0, 0, 0] });
+  let err = Math.abs(b.m - t.m) / t.m;
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) err = Math.max(err, Math.abs(b.I6[r][c] - (r === c ? t.I : 0)) / t.I);
+  check('compound of 16 cubes = one tesseract', err < 1e-12, `relative error ${err.toExponential(1)}`);
+}
+// 10. an asymmetric compound tumbling freely keeps its L exactly and its energy closely, while its ω changes
+{
+  const w = new World({ accel: () => [0, 0, 0, 0], env: () => ({ d: 1e9, n: up }) });
+  const parts = [{ shape: 'box', c: [0, 0, 0, 0], e: [0.3, 0.1, 0.1, 0.1] }, { shape: 'box', c: [0.2, 0.2, 0, 0], e: [0.1, 0.1, 0.1, 0.1] }, { shape: 'box', c: [0.2, 0.2, 0.2, 0], e: [0.1, 0.1, 0.1, 0.1] }, { shape: 'glome', c: [-0.2, 0, 0, 0.15], r: 0.08 }];
+  const b = w.add(makeBody({ shape: 'compound', parts, density: 2600, pos: [0, 0, 0, 0], omega: [0.7, -0.3, 1.1, 0.2, -0.9, 0.4] }));
+  const L0 = IApply(b, b.omega), E0 = 0.5 * dot(b.omega, L0), w0 = b.omega.slice();
+  for (let i = 0; i < 120 * 60; i++) w.step();
+  const L1 = IApply(b, b.omega), E1 = 0.5 * dot(b.omega, L1);
+  const dL = len(sub(L1, L0)) / len(L0), dE = Math.abs(E1 - E0) / E0, dw = len(sub(b.omega, w0)) / len(w0);
+  check('asymmetric tumble: L kept, E close, ω turns', dL < 1e-9 && dE < 2e-3 && dw > 0.05, `dL ${dL.toExponential(1)}, dE ${dE.toExponential(1)} over 60 s, ω changed ${(100 * dw).toFixed(0)}%`);
+}
+// 11. a compound against a ball in free space: momentum and angular momentum conserved
+{
+  const w = new World({ accel: () => [0, 0, 0, 0], env: () => ({ d: 1e9, n: up }) });
+  const A = w.add(makeBody({ shape: 'compound', parts: ringParts(1), mass: 14, pos: [-1, 0.05, 0.02, 0], vel: [2, 0, 0, 0.1], mu: 0.6, omega: [0, 0.3, 0, 0, 0.2, 0] }));
+  const B = w.add(makeBody({ shape: 'glome', size: 0.3, mass: 9, pos: [1, -0.25, 0, 0.03], vel: [-1, 0.2, 0, 0], mu: 0.6 }));
+  const P = bs => bs.reduce((s, b) => add(s, scale(b.vel, b.m)), [0, 0, 0, 0]);
+  const Lt = bs => bs.reduce((s, b) => add(s, add(scale(wedge(b.vel, b.pos), b.m), IApply(b, b.omega))), [0, 0, 0, 0, 0, 0]);
+  const P0 = P([A, B]), L0 = Lt([A, B]), v0 = B.vel.slice();
+  for (let i = 0; i < 240; i++) w.step();
+  const dP = len(sub(P([A, B]), P0)) / len(P0), dL = len(sub(Lt([A, B]), L0)) / len(L0);
+  check('ring hits ball: P and L conserved', dP < 1e-9 && dL < 1e-6 && len(sub(B.vel, v0)) > 0.1, `dP ${dP.toExponential(1)}, dL ${dL.toExponential(1)}`);
+}
+// 12. the launcher's pillar: each ring, dropped level over it, threads the spindle, passes the smaller balls and
+// rests on its own; ring II dropped first sits on ball II, and ring I then rests on ring II (they go on in order)
+{
+  const pillar = (w) => { const b = makeBody({ shape: 'compound', parts: pillarParts(), mass: 1e9, mu: PILLAR.mu, pos: onGround(0) }); b.pos = add(onGround(0), b.com); b.kinematic = b.fixed = true; return w.add(b); };
+  const drop = (w, k, tilt = 0) => w.add(makeBody({ shape: 'compound', parts: ringParts(k), mass: RING.mass, mu: RING.mu, pos: onGround(PILLAR.top + 0.25 + 0.3 * k), rot: R4.planeRotation(0, 3, tilt) }));
+  const settle = (w, bs) => { for (let t = 0; t < 12 && !bs.every(b => b.sleeping); t += w.dt) w.step(); };
+  const seated = (b, k) => ({ dz: len(b.pos) - RP - seatHeight(k), off: len(sub(b.pos, scale(up, dot(b.pos, up)))) });
+  const out = [];
+  for (let k = 0; k < 4; k++) {
+    const w = planet(); pillar(w); const r = drop(w, k, k === 2 ? 0.08 : 0); settle(w, [r]);
+    const s = seated(r, k); out.push(s); 
+  }
+  // (friction holds a ring where it lands on its ball, up to a few cm off the axis: real, and it still rests on its own)
+  const ok = out.every(s => Math.abs(s.dz) < 0.01 && s.off < 0.05);
+  check('each ring rests on its own ball', ok, out.map((s, k) => `${'I II III IV'.split(' ')[k]} dz ${(100 * s.dz).toFixed(1)} cm off ${(100 * s.off).toFixed(1)} cm`).join(', '));
+  const w = planet(); pillar(w); const r2 = drop(w, 1); settle(w, [r2]); const r1 = drop(w, 0); r1.pos = add(r1.pos, scale(up, 0.5)); settle(w, [r1, r2]);
+  const s2 = seated(r2, 1), h1 = len(r1.pos) - RP;
+  check('in order: ring I rests on a seated ring II', Math.abs(s2.dz) < 0.01 && h1 > seatHeight(1), `II dz ${(100 * s2.dz).toFixed(1)} cm, I at ${h1.toFixed(2)} m`);
+}
+// 13. a ring on the ground lies flat and sleeps
+{
+  const w = planet(), r = w.add(makeBody({ shape: 'compound', parts: ringParts(0), mass: RING.mass, pos: onGround(0.6), rot: R4.compose(R4.planeRotation(0, 3, 0.3), R4.planeRotation(1, 3, 0.2)) }));
+  let t = 0; for (; t < 10 && !r.sleeping; t += w.dt) w.step();
+  const M = R4.toRows(r.rot), tilt = Math.acos(Math.min(1, Math.max(...[0, 1, 2, 3].map(j => Math.abs(M[3][j]))))) * 180 / Math.PI;
+  check('a dropped ring lies flat and sleeps', r.sleeping && tilt < 1.5, `slept at ${t.toFixed(2)} s, tilt ${tilt.toFixed(2)}°`);
 }
 for (const [s, n, i] of results) console.log(`${s}  ${n.padEnd(46)} ${i || ''}`);
 const fails = results.filter(r => r[0] === 'FAIL').length;

@@ -15,14 +15,15 @@ import { G } from './game.js';
 import { LAWS } from './laws.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
-import { World, makeBody, DENSITY, applyImpulse } from './bodies.js';
+import { World, makeBody, DENSITY, applyImpulse, kEff } from './bodies.js';
+import { RING, ringParts, ringDraw } from './keys.js';
 import { rot as R4, log as rotLog, qnorm, bivApply } from './so4.js';
 import { tangents } from './env.js';
 import { hoopAxisBody } from './cosmos.js';
 
 export const MAXO = 16, MAXL = 4;
 // What the shader draws: the nearest objects, the ones your slice cuts first.
-export const gpuObj = { C: new Float32Array(MAXO * 4), M: new Float32Array(MAXO * 16), P: new Float32Array(MAXO * 4), n: 0, cut: 0,
+export const gpuObj = { C: new Float32Array(MAXO * 4), M: new Float32Array(MAXO * 16), P: new Float32Array(MAXO * 4), E: new Float32Array(MAXO * 4), n: 0, cut: 0,
                         LP: new Float32Array(MAXL * 4), LC: new Float32Array(MAXL * 4), ln: 0, ghost: -1 };
 
 // The kinds of object. Densities are 4D (kg per m⁴); stone sinks in water (1000), wood floats.
@@ -33,7 +34,7 @@ export const KINDS = {
   tessL: { shape: 'tesseract', size: 0.5, density: DENSITY.stone, mat: 1 },
   stone: { shape: 'glome', size: 0.09, mass: 2.5, mat: 2, glow: 0.35 },          // an impulse stone
   lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 7, glow: 0.9, light: [1.9, 1.35, 0.75] },   // warm glass, glowing its light's colour
-  part: { shape: 'tesseract', size: 0.26, mass: 14, mat: 2, glow: 0.25 },          // a launcher part (tiers I–IV): it doesn't roll
+  part: { shape: 'compound', mass: RING.mass, mat: 8, glow: 0 },                   // a launcher key (tiers I–IV): a brass ring (keys.js)
   raft: { shape: 'tesseract', size: 1.3, density: 60, mat: 6 },                  // a hollow crate of planks (171 kg): a uniform cube floats flat
                                                                                    // only below about a fifth of water's density
   sail: { shape: 'tesseract', size: 0.4, density: DENSITY.wood, mat: 2, glow: 0.2 }, // set on a raft, it catches the wind
@@ -63,11 +64,17 @@ function groundFrame(n) {
   if (det(rows) < 0) rows.forEach(r => { r[0] = -r[0]; });
   return R4.fromMatrix(rows);
 }
+// The body of a kind (a key's shape is its tier's ring).
+function bodyOf(kind, pos, rot, extra) {
+  const K = KINDS[kind];
+  if (kind === 'part') { const k = (extra.tier || 1) - 1; return makeBody({ shape: 'compound', parts: ringParts(k), draw: ringDraw(k), mass: K.mass, mu: RING.mu, pos, rot: rot || undefined, kind, ...extra }); }
+  return makeBody({ shape: K.shape, size: K.size, density: K.density, mass: K.mass, pos, rot: rot || undefined, kind, ...extra });
+}
 export function spawn(kind, n, { lift = 0, rot = null, extra = {} } = {}) {
   const K = KINDS[kind], p = G.player, h = p.hf.heightAt(n);
   rot = rot || groundFrame(n);
-  const r = K.shape === 'tesseract' ? K.size / 2 : K.size;
-  const body = makeBody({ shape: K.shape, size: K.size, density: K.density, mass: K.mass, pos: vec4.scale(n, PLANET_R + h + r + 0.02 + lift), rot, kind, ...extra });
+  const r = kind === 'part' ? RING.t : K.shape === 'tesseract' ? K.size / 2 : K.size;   // (a ring lies flat: its hole upright)
+  const body = bodyOf(kind, vec4.scale(n, PLANET_R + h + r + 0.02 + lift), rot, extra);
   body.mat = K.mat; body.glow = K.glow || 0; body.light = K.light || null;
   objects.world.add(body);
   return body;
@@ -211,14 +218,17 @@ export function carryHeld(cam) {
 // Not what you stand on (picking up the raft under your feet would pull you after it).
 export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
   const hit = w.raycast(cam.eye, cam.F, reach, objects.held);
-  if (hit) return hit.body.fixed || hit.body === G.player.ride ? null : hit.body;
+  if (hit && !hit.body.fixed && hit.body !== G.player.ride) return hit.body;
+  // nothing to take where the ray strikes: the nearest thing it passes close by, short of anything fixed it meets (a
+  // ring looked at through its hole, at the wall behind)
+  const lim = hit ? hit.t : reach;
   let best = null, bd = 0.3;
   for (const b of w.bodies) {
     if (b === objects.held || b.fixed || b === G.player.ride) continue;
     const e0 = b.pos[0] - cam.eye[0], e1 = b.pos[1] - cam.eye[1], e2 = b.pos[2] - cam.eye[2], e3 = b.pos[3] - cam.eye[3], m = reach + b.bound + 0.3;
     if (e0 * e0 + e1 * e1 + e2 * e2 + e3 * e3 > m * m) continue;
     const d = vec4.sub(b.pos, cam.eye), t = vec4.dot(d, cam.F);
-    if (t < 0 || t > reach) continue;
+    if (t < 0 || t > lim) continue;
     const miss = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))) - b.bound;
     if (miss < bd) { bd = miss; best = b; }
   }
@@ -273,9 +283,9 @@ export function drawStone(cam) {
   takeHold(b, cam);                               // into the hand (not the pouch)
   return true;
 }
-export function spawnAt(kind, pos, inB = false) {
+export function spawnAt(kind, pos, inB = false, tier = null) {
   const K = KINDS[kind];
-  const body = makeBody({ shape: K.shape, size: K.size, density: K.density, mass: K.mass, pos, kind });
+  const body = bodyOf(kind, pos, null, tier ? { tier } : {});
   body.mat = K.mat; body.glow = K.glow || 0; body.light = K.light || null; body.inB = inB;
   worldOf(body).add(body);
   return body;
@@ -292,7 +302,7 @@ export function computeGhost(cam) {
   g.held = false; g.kinematic = false; g.sleeping = false; g.vel = [0, 0, 0, 0]; g.omega = [0, 0, 0, 0, 0, 0];
   for (const o of w.bodies) if (o !== g) o.sleeping = true;          // the others stay put while we look ahead
   for (let i = 0; i < 480 && !g.sleeping; i++) w.step();
-  objects.ghost = { pos: g.pos, rot: g.rot, shape: b.shape, half: b.half, inB: !!b.inB };
+  objects.ghost = { pos: g.pos, rot: g.rot, shape: b.shape, half: b.half, shapes: drawShapes(b), inB: !!b.inB };
 }
 export function setDown() {
   const b = objects.held, gh = objects.ghost;
@@ -328,7 +338,7 @@ export function playerContacts(p, w = hereWorld(), input = null) {
     if (vrel >= 0) continue;
     if (B.kinematic) { p.vel = vec4.sub(p.vel, vec4.scale(dir, vrel)); continue; }
     // an inelastic push between you (mass m_p) and the body at the contact point
-    const r = vec4.sub(c.point, B.pos), K = 1 / LAWS.PLAYER_M + B.invM + (vec4.dot(r, r) - vec4.dot(r, dir) ** 2) * B.invI;
+    const r = vec4.sub(c.point, B.pos), K = 1 / LAWS.PLAYER_M + kEff(B, r, dir);
     const lam = -vrel / K;
     p.vel = vec4.add(p.vel, vec4.scale(dir, lam / LAWS.PLAYER_M));
     applyImpulse(B, vec4.scale(dir, -lam), c.point);
@@ -352,19 +362,39 @@ function drawPose(b, cam, alpha) {
   if (alpha < 1 && !b.sleeping && b.prevPos && vec4.len(vec4.sub(b.pos, b.prevPos)) < 1) return { pos: lerp4(b.prevPos, b.pos, alpha), rot: lerpRot(b.prevRot, b.rot, alpha) };   // (asleep: still, and not stepped)
   return b;
 }
+// What a body is drawn as: one or more shapes in its own frame. A ball (code 0, radius), a box (1, half-extents),
+// a duocylinder (2) or a frame (3: a box with a square hole through it along its fourth axis, the hole's half-width
+// in place of the radius). A compound body draws its own list (a ring is one frame) or else its parts.
+const SHAPE_CODE = { glome: 0, tesseract: 1, box: 1, duo: 2, frame: 3 };
+function drawShapes(b) {
+  if (b.shape !== 'compound') return null;
+  return b.draws || (b.draws = (b.draw || b.parts.map(q => q.shape === 'glome' ? { shape: 'glome', c: q.c, r: q.r } : { shape: 'box', c: q.c, e: q.e }))
+    .map(q => ({ ...q, c: [0, 1, 2, 3].map(i => q.c[i] - (b.draw ? b.com[i] : 0)) })));   // (a drawing given about the parts' origin: moved to the centre)
+}
 export function uploadObjects(cam, alpha = 1) {
   const w = objects.world;
   gpuObj.n = 0; gpuObj.cut = 0; gpuObj.ln = 0; gpuObj.ghost = -1;
   if (!w) return;
   const list = [];
+  // its support along ana (does your slice cut it?)
+  const support = (rot, e) => { const M = R4.toRows(rot); let r = 0; for (let j = 0; j < 4; j++) r += e[j] * Math.abs(M[0][j] * cam.A[0] + M[1][j] * cam.A[1] + M[2][j] * cam.A[2] + M[3][j] * cam.A[3]); return r; };
   for (const b of w.bodies) {
+    if (b.hidden) continue;                                  // (drawn otherwise: the pillar, as props)
     const d = vec4.len(vec4.sub(b.pos, cam.eye));
     if (d > 120) continue;
+    const pose = drawPose(b, cam, alpha), shapes = drawShapes(b);
+    if (shapes) {
+      for (const q of shapes) {
+        const pos = vec4.add(pose.pos, R4.apply(pose.rot, q.c)), e = q.shape === 'glome' ? [q.r, q.r, q.r, q.r] : q.e;
+        const a = Math.abs(vec4.dot(vec4.sub(pos, cam.eye), cam.A));
+        list.push({ b, d, cut: a < (q.shape === 'glome' ? q.r : support(pose.rot, e)), pose: { pos, rot: pose.rot }, code: SHAPE_CODE[q.shape], h: q.shape === 'glome' ? q.r : q.shape === 'frame' ? q.a : Math.max(...e), e });
+      }
+      continue;
+    }
     // does your slice cut it? (its centre's distance from the slice against its support along the ana axis)
     const a = Math.abs(vec4.dot(vec4.sub(b.pos, cam.eye), cam.A));
-    let reach = b.size;
-    if (b.shape === 'tesseract') { const M = R4.toRows(b.rot); reach = 0; for (let j = 0; j < 4; j++) reach += b.half * Math.abs(M[0][j] * cam.A[0] + M[1][j] * cam.A[1] + M[2][j] * cam.A[2] + M[3][j] * cam.A[3]); }
-    list.push({ b, d, cut: a < reach, pose: drawPose(b, cam, alpha) });
+    const reach = b.shape === 'tesseract' ? support(b.rot, [b.half, b.half, b.half, b.half]) : b.size;
+    list.push({ b, d, cut: a < reach, pose });
   }
   for (const it of G.creatureItems || []) {                  // the creatures near you (creatures.js)
     const a = Math.abs(vec4.dot(vec4.sub(it.pos, cam.eye), cam.A));
@@ -372,14 +402,20 @@ export function uploadObjects(cam, alpha = 1) {
   }
   if (objects.ghost) {
     const g = objects.ghost, q = g.inB && objects.toA ? objects.toA(g.pos, g.rot) : g;
-    list.push({ b: { pos: q.pos, rot: q.rot, shape: g.shape, half: g.half, size: g.half, mat: 3, glow: 0.4, ghost: true }, d: 0, cut: true });
+    const sh = g.shapes && g.shapes[0];                      // (a compound's ghost: its first shape)
+    if (sh) list.push({ b: { mat: 3, glow: 0.4, ghost: true }, d: 0, cut: true, pose: { pos: vec4.add(q.pos, R4.apply(q.rot, sh.c)), rot: q.rot }, code: SHAPE_CODE[sh.shape], h: sh.shape === 'frame' ? sh.a : sh.shape === 'glome' ? sh.r : Math.max(...sh.e), e: sh.e || [sh.r, sh.r, sh.r, sh.r] });
+    else list.push({ b: { pos: q.pos, rot: q.rot, shape: g.shape, half: g.half, size: g.half, mat: 3, glow: 0.4, ghost: true }, d: 0, cut: true });
   }
   list.sort((x, y) => (y.cut - x.cut) || (x.d - y.d));
   const shown = list.slice(0, MAXO);
-  shown.forEach(({ b, cut, pose }, i) => {
+  shown.forEach(({ b, cut, pose, code, h, e }, i) => {
     gpuObj.C.set((pose || b).pos, 4 * i);
     gpuObj.M.set(R4.toMatrix((pose || b).rot), 16 * i);
-    gpuObj.P.set([b.shape === 'tesseract' ? 1 : b.shape === 'duo' ? 2 : 0, b.shape === 'tesseract' ? b.half : b.size, b.mat || 0, b.glow || 0], 4 * i);
+    if (code != null) { gpuObj.P.set([code, h, b.mat || 0, b.glow || 0], 4 * i); gpuObj.E.set(e, 4 * i); }
+    else {
+      gpuObj.P.set([b.shape === 'tesseract' ? 1 : b.shape === 'duo' ? 2 : 0, b.shape === 'tesseract' ? b.half : b.size, b.mat || 0, b.glow || 0], 4 * i);
+      const hh = b.shape === 'tesseract' ? b.half : b.size; gpuObj.E.set([hh, hh, hh, hh], 4 * i);
+    }
     if (cut) gpuObj.cut = i + 1;
     if (b.ghost) gpuObj.ghost = i;
   });
@@ -427,7 +463,7 @@ export const objectsSave = {
       let b = o.gen != null && s.gens === G.genCount ? gens.get(o.gen) : null;
       if (b && (!!o.inB && !!objects.worldB)) { w.remove(b); b = null; }
       if (b) { b.pos = o.pos.slice(); b.prevPos = b.pos.slice(); }
-      else { b = spawnAt(o.kind, o.pos, !!o.inB && !!objects.worldB); if (o.gen != null && s.gens === G.genCount) b.gen = o.gen; }
+      else { b = spawnAt(o.kind, o.pos, !!o.inB && !!objects.worldB, o.tier); if (o.gen != null && s.gens === G.genCount) b.gen = o.gen; }
       b.vel = o.vel; b.rot = o.rot; b.omega = o.omega; b.sleeping = o.sleeping; b.tag = o.tag; b.tier = o.tier;
       if (o.id === s.held) { objects.held = b; b.held = true; b.holdRel = o.holdRel && o.holdRel.l ? o.holdRel : null; hold.last = null; }
     }
