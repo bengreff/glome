@@ -321,3 +321,15 @@ It would reshape the beaches, the raft's shore and the islands joined through an
 - **The beam.** The tower fires a beam you aim with sliders, like the launcher's barrel. Aimed exactly along the hoop, the beam goes round the universe and comes back from behind, into a detector on the tower's back. Because the hoop's direction turns with the planet, you aim where it will be and wait for the moment. Often that's partly toward ana: the detector lights only if you aimed through ana too.
 - **What it needs:** the planet's copies would have to be drawn with their towers (today they are only ground and sea).
 - **The "waves as gradients" idea.** In four space dimensions a pulse of light leaves a fading tail behind its front, but at light's speed the tail is far too short to see. Sound would show it, but there is no air between the copies. So I'd leave that out unless you have another use for it.
+
+### Creature concepts (segment eight): pick one
+
+You asked for creatures that are elegant and complete: one smooth skin each, animal and visibly 4D. Here are three concepts, each a single blended 4D surface, shown as your slice of it at three turns through ana (in the plane of its side and ana):
+
+![Three creature concepts, each at 0°, 45° and 90° through ana](creature-concepts.png)
+
+- **A. Strider:** a long body on eight legs, four at each end: left, right, ana and kata. Square to it, a four-legged beast. Turned 45°, the legs are cut to stubs and it seems to float. At 90° it stands on its other four.
+- **B. Crab:** a round body with a leg along each of the ground's six directions. Square to it, it stands on four. At 45° only the front and back legs remain. At 90° the ana pair stands where the side pair was.
+- **C. Ringback:** a body that is a ring through ana. Square to it, your slice cuts the ring twice: two backs, one over the other. A quarter turn shows the whole ring, a hollow tube, with its legs gone into ana.
+
+To see them turning, serve the repo (`tools/serve.sh`) and open http://127.0.0.1:8650/tools/concepts/creatures.html (a slider sets the turn). Tell me which, or which parts of each, and I'll build it with walking legs and the herds' behaviour.
