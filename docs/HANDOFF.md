@@ -30,6 +30,12 @@ The owner played run seven's puzzles and answered its decisions. In their words:
 
 **Order:** 1 (scrap), 2 (stones), 3 (launcher), 4 (tides), 5 (crab), then 6. Ask at the start how the session runs (autonomous, or segments with check-ins), and confirm the two open numbers: the launcher's gating and the day's length.
 
+### Run eight: status (13 October, early afternoon)
+
+- **Live:** segments 1–5 (puzzles scrapped; stones reachable and the summit levelled for the pad; the lever panel; tides on with the 900 s day; loop and sandbox checked). Not yet tagged v1.6.
+- **Segment 6, the crab:** written but untested, on branch `crab` (worktree `.wt/crab`, commit "WIP crab"). Walkers become six-legged crabs drawn as one blended skin (trees.js skin groups; shaders.js `skinSD`, the skin search in `hitTrees`, shading by its gradient). Next: serve and look (`URL=http://127.0.0.1:8650/.wt/crab/ tools/dev/run.sh …`), fix, measure cost, merge.
+- **Settle gate pending:** the last run gave 30 fps in every view, with the Mac on battery at 5% and four other long jobs (`s0long`) on four cores. Re-run on mains power with the machine quiet.
+
 ### Run eight: the interview (13 October)
 
 - **Playable means both:** the loop works start to finish (find stones → aim and fire the launcher → fly, using stones in flight → land on B → the console), and the sandbox feels solid (walking, carrying, throwing, stacking, launching). Play it as a new player and fix the jank.
