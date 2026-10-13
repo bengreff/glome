@@ -72,9 +72,10 @@ document.addEventListener('pointerlockchange', () => {
 
 // A gamepad, if one is connected (standard mapping): the left stick walks (as far as it is pushed), the right stick
 // looks (holding LT, it turns toward ana and twists instead), LB/RB step kata/ana, A jumps, a left-stick click runs,
-// X picks up and drops (hold: set down), RT winds up a throw, Y draws an impulse stone, B the big radar, Start help,
-// the d-pad zooms the radar.
-export const pad = { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0, prev: [] };
+// X picks up and drops (hold: set down), RT winds up a throw, Y puts a stone in the pouch or takes one out, B the big
+// radar, Start help, the d-pad zooms the radar; a right-stick click, holding something, turns the stick to turning it
+// over in your hands (as R and the mouse do; with LT, through ana), and another click gives the stick back.
+export const pad = { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0, turn: false, prev: [] };
 const dead = v => Math.abs(v) < 0.15 ? 0 : (v - Math.sign(v) * 0.15) / 0.85;
 export function pollPad() {
   const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected && g.mapping === 'standard');
@@ -82,7 +83,7 @@ export function pollPad() {
     // unplugged with X or RT held: let go of them, or a set-down or a throw would be left winding up for ever
     if (pad.prev[2]) actions.fUp = true;
     if (pad.prev[7]) actions.mUp = true;
-    Object.assign(pad, { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0, prev: [] });
+    Object.assign(pad, { connected: false, lx: 0, ly: 0, rx: 0, ry: 0, alt: false, jump: false, run: false, ana: 0, zoom: 0, turn: false, prev: [] });
     return;
   }
   const on = i => i === 6 || i === 7 ? (gp.buttons[i]?.value || 0) > 0.4 : !!gp.buttons[i]?.pressed;
@@ -92,6 +93,7 @@ export function pollPad() {
   if (down(2)) actions.fDown = true;
   if (up(2)) actions.fUp = true;
   if (down(3)) actions.g = true;
+  if (down(11)) pad.turn = !pad.turn;
   if (down(7)) actions.mDown = true;
   if (up(7)) actions.mUp = true;
   const state = G.state;

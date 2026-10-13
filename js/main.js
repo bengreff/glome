@@ -191,7 +191,7 @@ function softReset() {
 }
 
 // ---------- main loop ----------
-let last = performance.now(), lastRaw = last, physAcc = 0, tilting = false;
+let last = performance.now(), lastRaw = last, physAcc = 0, tilting = false, padTilting = false;
 const STEP = 1 / 120;
 const accel = (x, v) => accelBodyA(x, v, state.time);
 // One bad frame must never stop the world: errors are recorded (and logged once) and the loop carries on.
@@ -223,7 +223,10 @@ function frameBody(now) {
   mouse.dx = mouse.dy = 0;
   // a gamepad's right stick: radians a second (holding LT: toward ana, and twist)
   pollPad();
-  if (pad.rx || pad.ry) {
+  if (pad.turn && !objects.held) pad.turn = false;
+  if (pad.turn && (pad.rx || pad.ry)) { const ry = settings.invert ? -pad.ry : pad.ry; tiltHeld(pad.rx * dt * 300, ry * dt * 300, pad.alt, sens * 2.5); padTilting = true; }   // (the stick turns what you hold)
+  else if (padTilting) { endTilt(); padTilting = false; }                  // (the stick let go: squared to a quarter turn)
+  else if (pad.rx || pad.ry) {
     const s2 = settings.sens, ry = settings.invert ? -pad.ry : pad.ry;
     if (pad.alt) { player.rotate('FA', pad.rx * 2.0 * s2 * dt); player.rotate('RA', -ry * 2.0 * s2 * dt); }
     else { player.rotate('FR', pad.rx * 2.6 * s2 * dt); player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - ry * 2.0 * s2 * dt)); }
