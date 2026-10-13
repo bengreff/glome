@@ -129,9 +129,12 @@ const margin = (a, b) => 0.02 + reach(a) + reach(b);
 // turning's 5×5) inside the sequential impulses, warm started, with a fifth of any drift taken back each step.
 // ca, cb: the hinge's point from a's centre in a's frame (in the world if a is null) and from b's centre in b's;
 // Fa, Fb: the hinge's frame in a's frame (the world's) and b's; plane [i, j] (i < j): its plane of turning, in that
-// frame. j.angle is the turn from the frames' meeting, axis i toward j.
-export function hinge({ a = null, b, ca, cb, Fa, Fb = R4.identity(), plane }) {
-  return { a, b, ca, cb, Fa, Fb, plane, angle: 0, accP: [0, 0, 0, 0], accA: [0, 0, 0, 0, 0, 0] };
+// frame. j.angle is the turn from the frames' meeting, axis i toward j; lo and hi, its stops (as a hinge's leaves
+// meet a stop): the turning may close on a stop within a step, and stops there, and is eased back if past it. With
+// a catch, once the turning comes within catchW of hi it is caught there (as a latch drops behind a gate): it can't
+// turn back further than that.
+export function hinge({ a = null, b, ca, cb, Fa, Fb = R4.identity(), plane, lo = -Infinity, hi = Infinity, catchW = 0 }) {
+  return { a, b, ca, cb, Fa, Fb, plane, lo, hi, catchW, angle: 0, accP: [0, 0, 0, 0], accA: [0, 0, 0, 0, 0, 0], accL: 0, side: 0 };
 }
 const E4 = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
 const dot6 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] + a[4] * b[4] + a[5] * b[5];
@@ -167,6 +170,23 @@ function jointPrep(j, dt) {
   const P = scale(j.accP, 0.9), H = j.B.reduce((h, Bm) => { const c = 0.9 * dot6(j.accA, Bm); return h.map((x, k) => x + c * Bm[k]); }, [0, 0, 0, 0, 0, 0]);
   applyImpulse(b, P, j.pb); applyImpulse(a, scale(P, -1), j.pa); angImpulse(b, H); angImpulse(a, H.map(x => -x));
   j.accP = P; j.accA = H;
+  // a stop near (or that the turning would reach within the step): the angle's rate is −⟨ω_b − ω_a, P⟩ (P the plane
+  // of turning; a positive angle takes axis i toward j, which is a negative rate in that plane: so4's planeRotation)
+  if (j.catchW && j.angle > j.hi - j.catchW) j.lo = Math.max(j.lo, j.hi - j.catchW);
+  let side = 0;
+  if (j.hi < Infinity || j.lo > -Infinity) {
+    j.Pl = wedge(u[pi], u[pj]);
+    const rate = -dot6(j.Pl, a ? b.omega.map((x, k) => x - a.omega[k]) : b.omega), ahead = 1.5 * Math.abs(rate) * dt + 0.02;
+    side = j.angle > j.hi - ahead ? 1 : j.angle < j.lo + ahead ? -1 : 0;
+  }
+  if (side) {
+    j.Kl = dot6(j.Pl, invIOf(a, j.Pl)) + dot6(j.Pl, invIOf(b, j.Pl));
+    const gap = side > 0 ? j.hi - j.angle : j.angle - j.lo;     // ≥ 0 while short of the stop
+    j.limT = -(gap >= 0 ? gap / dt : Math.max(0.2 * gap / dt, -0.3));   // the least ⟨ω_rel, P⟩·side allowed (past it, eased back gently)
+    j.accL = side === j.side ? 0.9 * j.accL : 0;
+    const Hl = j.Pl.map(x => x * side * j.accL); angImpulse(b, Hl); angImpulse(a, Hl.map(x => -x));
+  } else j.accL = 0;
+  j.side = side;
 }
 function jointSolve(j) {
   const { a, b } = j;
@@ -176,6 +196,11 @@ function jointSolve(j) {
   const lam = mulN(j.Ka, j.B.map((Bm, m) => j.biasA[m] - dot6(wr, Bm)));
   const H = j.B.reduce((h, Bm, m) => h.map((x, k) => x + lam[m] * Bm[k]), [0, 0, 0, 0, 0, 0]);
   angImpulse(b, H); angImpulse(a, H.map(x => -x)); j.accA = j.accA.map((x, k) => x + H[k]);
+  if (j.side && j.Kl > 0) {                                     // the stop: it only pushes
+    const w2 = a ? b.omega.map((x, k) => x - a.omega[k]) : b.omega, c = j.side * dot6(w2, j.Pl);
+    const l = Math.max(0, j.accL + (j.limT - c) / j.Kl), dl = l - j.accL; j.accL = l;
+    if (dl) { const Hl = j.Pl.map(x => x * j.side * dl); angImpulse(b, Hl); angImpulse(a, Hl.map(x => -x)); }
+  }
 }
 // A body as primitives in the world: balls { g: true, p, r } and boxes { g: false, p, A (axes), e (half-extents) },
 // i numbering its parts (for warm starting).
@@ -299,6 +324,16 @@ function primPair(A, B, pa, pb, out, mg = 0.02) {
     if (memo && memo.owner === owner && memo.k === k && Math.sign(s) === memo.sg) kept = cand;
   }
   if (kept && kept.ov <= best.ov + 0.03) best = kept;
+  // Clearly apart (by more than 5 mm along some face's normal): their nearest points, by turns (the nearest point of
+  // each to the other's, until it settles), give the true gap and its direction. The face normals alone can't see
+  // that two boxes meeting corner to corner are apart both ways (two walls of the fold side by side), and would
+  // stop one moving past the other's corner along the wrong normal.
+  if (best.ov < -0.005) {
+    let qa = boxNearest(pa, pb.p).pb, qb = boxNearest(pb, qa).pb, dl = len(sub(qb, qa));
+    for (let it = 0; it < 12; it++) { qa = boxNearest(pa, qb).pb; qb = boxNearest(pb, qa).pb; const l = len(sub(qb, qa)); if (dl - l < 1e-4) { dl = l; break; } dl = l; }
+    if (dl > mg) return;
+    if (dl > 1e-6) { out.push({ a: A, b: B, p: qa, n: scale(sub(qb, qa), 1 / dl), depth: -dl, key: key + 'n' }); return; }
+  }
   AXES_NEXT.set(key, { owner: best.owner, k: best.k, sg: Math.sign(dot(d, best.owner === 'A' ? pa.A[best.k] : pb.A[best.k])) });
   const n = best.ax;                                               // from A to B
   const [ref, inc, sign] = best.owner === 'A' ? [pa, pb, 1] : [pb, pa, -1];

@@ -202,6 +202,25 @@ for (const [rho, wantFlat] of [[60, true], [450, false]]) {
   const dP = len(sub(P([A, B]), P0)), dL = len(sub(Lt([A, B]), L0)) / len(L0);
   check('hinged pair keeps P and L', dP < 1e-9 && dL < 1e-2, `dP ${dP.toExponential(1)}, dL ${dL.toExponential(1)}`);
 }
+// 16. a hinge's stop: a plate lifted by its far edge (pushed up at a steady rate) turns up on its hinge, and past
+// upright it comes to rest on its stop at 94° and stays; let go, a plate short of upright falls back flat
+{
+  const w = planet(), L = 0.8, T = 0.04, at = onGround(0.06);
+  const parts = [{ shape: 'box', c: [0.01 + L / 2, 0, 0, -T / 2], e: [L / 2, L / 2, L / 2, T / 2] }];
+  const b = makeBody({ shape: 'compound', parts, density: 7800, pos: at }); b.pos = add(at, b.com); w.add(b);
+  const stop = 94 * Math.PI / 180, j = hinge({ b, ca: at, cb: scale(b.com, -1), Fa: R4.identity(), plane: [0, 3], lo: -0.05, hi: stop }); w.joints.push(j);
+  const angle = () => { const m = R4.toRows(b.rot); return Math.atan2(m[3][0] - m[0][3], m[0][0] + m[3][3]); };
+  // turn it up by an angular push in the hinge's plane until past its balance (2.8° past upright: it hangs below its hinge), then leave it
+  let t = 0;
+  for (; t < 6 && angle() < Math.PI / 2 + 0.06; t += w.dt) { b.omega[2] = -0.8; b.sleeping = false; w.step(); }
+  let maxA = 0; for (let i = 0; i < 600; i++) { w.step(); maxA = Math.max(maxA, angle()); }
+  const rest = angle();
+  const b2 = makeBody({ shape: 'compound', parts, density: 7800, pos: at }); b2.pos = add(at, b2.com); b2.rot = R4.planeRotation(0, 3, 1.2); b2.pos = add(at, R4.apply(b2.rot, b2.com));
+  const w2 = planet(); w2.add(b2); w2.joints.push(hinge({ b: b2, ca: at, cb: scale(b2.com, -1), Fa: R4.identity(), plane: [0, 3], lo: -0.05, hi: stop }));
+  for (let i = 0; i < 600; i++) w2.step();
+  const m2 = R4.toRows(b2.rot), back = Math.atan2(m2[3][0] - m2[0][3], m2[0][0] + m2[3][3]);
+  check('a hinge stop holds a plate past upright', Math.abs(rest - stop) < 0.01 && maxA < stop + 0.02 && Math.abs(back) < 0.06, `rests at ${(rest * 57.3).toFixed(2)}° (most ${(maxA * 57.3).toFixed(2)}°), short of upright falls back to ${(back * 57.3).toFixed(1)}°`);
+}
 for (const [s, n, i] of results) console.log(`${s}  ${n.padEnd(46)} ${i || ''}`);
 const fails = results.filter(r => r[0] === 'FAIL').length;
 console.log(fails ? `${fails} FAILED` : 'All checks passed.');

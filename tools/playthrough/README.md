@@ -39,3 +39,8 @@ Run seven, segment four: the knot gate rebuilt (knot.js). `pt_knot` squares the 
 the loop and lifts it (it slips from the hand; the leaf stays), slides it to the knob (the same), then steps through
 ana with it and lets go: the leaf falls in, ring III is free, and the bot walks in over the leaf and takes it.
 `pt_mirror` now also walks into the house and takes ring II.
+
+Run seven, segment five: the fold replaces the antipode (`pt_anti` removed). `pt_fold` lifts each plate by its far
+edge as a player does (standing beyond it facing in, turning through ana for the two arms toward ana and kata,
+walking in and looking up as it rises): the roof first, then the six walls, the arm that carries the roof last,
+taken from beside it. All seven come up to 90°, the tesseract closes, the chest's lid is gone and ring IV is taken.

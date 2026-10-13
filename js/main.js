@@ -491,7 +491,7 @@ function frameBody(now) {
       // ruins, cairns and caches, and lines of cairns toward the artifacts and the launcher
       await step('Building the ruins…', 'woods');
       G.findsMade = makeFinds(hf, home, [...(G.artifacts || []).map(a => a.n), launcher.n], keepOut);
-      // the flora: grown near you as you go; none on the pad, in the cave's mouth or the bowl, or on an artifact's place
+      // the flora: grown near you as you go; none on the pad, in the cave's mouth, or on an artifact's place
       const clearOf = [[launcher.n, 6], ...(G.artifacts || []).map(a => [a.n, a.clear || 3]), ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
       const clear = n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2;
       initFlora(hf, clear); creatures.keep = clear;               // (and no herd's home there either)
@@ -521,6 +521,17 @@ function frameBody(now) {
           k.leaf.pos = s.leaf.pos.slice(); k.leaf.prevPos = k.leaf.pos.slice(); k.leaf.rot = s.leaf.rot; k.leaf.prevRot = k.leaf.rot;
           k.leaf.vel = [0, 0, 0, 0]; k.leaf.omega = [0, 0, 0, 0, 0, 0]; k.asleep = !!s.asleep; k.leaf.sleeping = k.asleep; k.lastAngle = null;
           k.joint.accP = [0, 0, 0, 0]; k.joint.accA = [0, 0, 0, 0, 0, 0];
+        } };
+    }
+    if (G.fold) {
+      // the fold's plates: built with the world, saved here (where each lies on its hinge)
+      const fd = G.fold, r5 = v => Math.round(v * 1e5) / 1e5;
+      hooks.fold = {
+        save: () => fd.plates.map(b => ({ pos: b.pos.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) } })),
+        load: s => {
+          if (!Array.isArray(s) || s.length !== fd.plates.length) return;
+          fd.plates.forEach((b, i) => { b.pos = s[i].pos.slice(); b.prevPos = b.pos.slice(); b.rot = s[i].rot; b.prevRot = b.rot; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; b.sleeping = true; });
+          for (const j of fd.joints) { j.accP = [0, 0, 0, 0]; j.accA = [0, 0, 0, 0, 0, 0]; j.accL = 0; }
         } };
     }
     G.objects = objects;

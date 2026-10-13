@@ -13,7 +13,7 @@ const loopPt = () => R.x[R.loop[0] + 6];                         // the loop's f
 const face = q => { for (let i = 0; i < 80; i++) { const dir = nz(V.sub(q, p.camera().eye)); const a = Math.atan2(V.dot(dir, p.R), V.dot(dir, p.F)), b = Math.atan2(V.dot(dir, p.A), V.dot(dir, p.F)); if (Math.abs(a) + Math.abs(b) < 0.002) break; p.rotate('FR', a); p.rotate('FA', b); } };
 const look = q => { const dd = V.sub(q, p.camera().eye); p.pitch = Math.asin(V.dot(nz(dd), p.up())); };
 const tap = async () => { d.actions.fDown = true; await gt(0.05); d.actions.fUp = true; await gt(0.3); };
-const grab = async () => { look(loopPt()); await gt(0.2); await tap(); return g.G.ropeHeld != null; };
+const grab = async () => { face(loopPt()); look(loopPt()); await gt(0.1); face(loopPt()); look(loopPt()); await tap(); return g.G.ropeHeld != null; };
 // 0. beside the rope, 1.4 m off its plane toward +s and in front of the peg; face the loop and twist until your
 // slice holds the rope's plane (your ana across both f and your offset from it)
 standAt(at([-3.3, 1.2, 0, 0])); await gt(0.6);

@@ -16,7 +16,7 @@ import { flight } from './flight.js';
 import { carves } from './landforms.js';
 
 export const guide = { goal: null };
-const TIER = { room: 1, mirror: 2, knot: 3, antipode: 4 };
+const TIER = { room: 1, mirror: 2, knot: 3, fold: 4 };
 const solved = a => !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1));
 const segDist = (p, a, b) => { const ab = vec4.sub(b, a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(p, a), ab) / Math.max(1e-9, vec4.dot(ab, ab)))); return vec4.len(vec4.sub(p, vec4.add(a, vec4.scale(ab, t)))); };
 
@@ -72,10 +72,6 @@ function pickGoal() {
     // the rope's loop on its peg (how to free it is the puzzle)
     const q = G.rope.x[next.loop[0]];
     return set(q, 'loop', { cue: G.ropeHeld == null && G.canTake && near(q, 3.5) ? 'F' : null });
-  }
-  if (next.id === 'antipode') {
-    // the bowl on the summit wants something left in it (anything you can carry)
-    return set(next.bowl, 'bowl', { thing: !held, cue: held && near(next.bowl, 2.5) ? 'F' : null });
   }
   set(vec4.scale(next.n, PLANET_R + p.hf.heightAt(next.n)), 'artifact');
 }

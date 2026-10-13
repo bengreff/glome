@@ -112,7 +112,7 @@ export function stepObjects(cam, kick, w = objects.world, far = 150, gone = 1500
   }
   if (h) holdDrive(h, cam, w, kick);
   w.step();
-  if (h) holdRecord(h, cam);
+  if (h && !h.hinged) holdRecord(h, cam);
   soundImpacts(w);
 }
 // What a body sounds like when it strikes something: a glome rings (its overtones a 3-sphere's, audio.js), metal
@@ -155,6 +155,7 @@ export function camRot(c) {
 }
 export const HOLD_F = 4200, HOLD_T = 400;        // the drive's strength: newtons (lifting about 265 kg at sea level), newton-metres
 const HOLD_TAU = 0.04, HOLD_TAU_R = 0.05;        // how fast it closes a gap, in position and in attitude (s)
+const HINGED_V = 2.0;                            // the fastest your hand moves a thing on a hinge (m/s)
 export const hold = { last: null, snag: 0, snapped: false, rel: null, relPrev: null };
 // Your body's frame (the camera's without the head's tilt: forward level, right, ana, up), as a proper rotation.
 // What you hold keeps its attitude in this frame: it turns as you turn and twist through ana, and stays level when
@@ -184,7 +185,29 @@ function handTarget(b, cam) {
   const out = b.parts ? reachAlong(b, rot, cam.F) : b.bound, down = b.parts ? reachAlong(b, rot, cam.up) : b.half;
   return { pos: vec4.add(vec4.add(cam.eye, vec4.scale(cam.F, 0.55 + out)), vec4.scale(cam.up, -(0.22 + 0.9 * down))), rot };
 }
+// A thing on a hinge (the fold's plates): your hand draws the point you took toward where your hand is, with the
+// drive's strength, and the hinge decides how it moves; it doesn't turn it (the hinge does that too).
+function hingedDrive(b, cam, w, kick) {
+  const dt = w.dt, r = R4.apply(b.rot, hold.point), P = vec4.add(b.pos, r), o = hold.off;
+  const T = [cam.F, cam.R, cam.U, cam.A].reduce((q, e, k) => vec4.add(q, vec4.scale(e, o[k])), cam.eye);
+  const vT = hold.last ? vec4.scale(vec4.sub(T, hold.last), 1 / dt) : [0, 0, 0, 0]; hold.last = T;
+  const err = vec4.sub(T, P), vP = vec4.add(b.vel, bivApply(b.omega, r));
+  let want = vec4.add(vT, vec4.scale(err, 1 / HOLD_TAU)); const wl = vec4.len(want);
+  if (wl > HINGED_V) want = vec4.scale(want, HINGED_V / wl);           // (hands don't swing a heavy plate faster than this)
+  const dv = vec4.sub(want, vP), l = vec4.len(dv);
+  if (l > 1e-9) {
+    const k = kEff(b, r, vec4.scale(dv, 1 / l));
+    let J = vec4.scale(dv, 1 / Math.max(k, 1e-9)); const Jl = vec4.len(J), Jmax = HOLD_F * dt;
+    if (Jl > Jmax) J = vec4.scale(J, Jmax / Jl);
+    hold.strain = 0.9 * (hold.strain || 0) + 0.1 * Math.min(1, Jl / Jmax);
+    applyImpulse(b, J, P); kick(vec4.scale(J, -1 / LAWS.PLAYER_M));
+  }
+  const gap = vec4.len(err);                                // drawn a metre from your hand and not coming: let go
+  hold.snag = gap > 1.0 ? hold.snag + dt : 0;
+  if (hold.snag > 0.4) { drop(); G.audio?.emit('clack', P, 0.3); }
+}
 function holdDrive(b, cam, w, kick) {
+  if (b.hinged) { b.sleeping = false; b.sleepT = 0; return hingedDrive(b, cam, w, kick); }
   const T = handTarget(b, cam), L = hold.last, dt = w.dt;
   b.sleeping = false; b.sleepT = 0;
   hold.last = T;
@@ -223,7 +246,7 @@ const tilt = { base: null, plane: null, angle: 0, px: 0, py: 0 };
 const TILT_PLANES = { pitch: [0, 3], roll: [1, 3], anaTip: [2, 3], anaTurn: [0, 2] };   // (body axes: forward 0, right 1, ana 2, up 3)
 export function tiltHeld(dx, dy, alt, sens) {
   const b = objects.held;
-  if (!b) return;
+  if (!b || b.hinged) return;
   if (!tilt.base) { tilt.base = b.holdRel || null; tilt.plane = null; tilt.angle = 0; tilt.px = tilt.py = 0; }
   if (!tilt.base) return;
   if (!tilt.plane) {                                   // the first 6 px of motion choose the plane
@@ -256,6 +279,7 @@ function holdRecord(b, cam) {
 export function carryHeld(cam) {
   const b = objects.held;
   if (!b) return;
+  if (b.hinged) { drop(); return; }               // (a thing on a hinge stays on it)
   const T = handTarget(b, cam);
   b.pos = T.pos.slice(); b.rot = T.rot; b.omega = [0, 0, 0, 0, 0, 0];
   hold.last = T; hold.snapped = true; hold.rel = hold.relPrev = null;
@@ -266,7 +290,7 @@ export function carryHeld(cam) {
 // Not what you stand on (picking up the raft under your feet would pull you after it).
 export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
   const hit = w.raycast(cam.eye, cam.F, reach, objects.held);
-  if (hit && !hit.body.fixed && !hit.body.noTake && hit.body !== G.player.ride) return hit.body;
+  if (hit && !hit.body.fixed && !hit.body.noTake && hit.body !== G.player.ride) { objects.lookPoint = vec4.add(cam.eye, vec4.scale(cam.F, hit.t)); return hit.body; }
   // nothing to take where the ray strikes: the nearest thing it passes close by, short of anything fixed it meets (a
   // ring looked at through its hole, at the wall behind)
   const lim = hit ? hit.t : reach;
@@ -278,7 +302,7 @@ export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
     const d = vec4.sub(b.pos, cam.eye), t = vec4.dot(d, cam.F);
     if (t < 0 || t > lim) continue;
     const miss = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))) - b.bound;
-    if (miss < bd) { bd = miss; best = b; }
+    if (miss < bd) { bd = miss; best = b; objects.lookPoint = vec4.add(cam.eye, vec4.scale(cam.F, t)); }
   }
   return best;
 }
@@ -290,6 +314,11 @@ function takeHold(b, cam) {
   objects.held = b; b.held = true; b.kinematic = false; b.sleeping = false; b.sleepT = 0;
   b.holdRel = R4.compose(R4.inverse(bodyRot(cam)), b.rot);  // its attitude to your body, kept while you hold it
   hold.snag = 0; hold.gap = null; hold.snapped = false; hold.rel = hold.relPrev = null;
+  if (b.hinged) {                                  // a thing on a hinge: held by the point you took, where you took it
+    const P = objects.lookPoint || b.pos, d = vec4.sub(P, cam.eye);
+    hold.point = R4.applyInv(b.rot, vec4.sub(P, b.pos)); hold.off = [cam.F, cam.R, cam.U, cam.A].map(e => vec4.dot(d, e));
+    hold.last = null; return;
+  }
   hold.last = handTarget(b, cam);
 }
 function release(b, vel) {
@@ -305,6 +334,7 @@ export function drop() {                          // let go: it keeps the motion
 export function throwHeld(cam, charge, kickPlayer) {
   const b = objects.held;
   if (!b) return null;
+  if (b.hinged) { drop(); return null; }
   const mp = LAWS.PLAYER_M, mo = b.m;
   const u = b.kind === 'stone' ? STONE_SPEED : Math.min(THROW_VMAX, (0.15 + 0.85 * charge) * THROW_MAX / mo);   // speed relative to you
   const dir = cam.F;
@@ -342,7 +372,7 @@ export function spawnAt(kind, pos, inB = false, tier = null) {
 // Where the held object would come to rest if you let it go here: simulate a copy of the nearby world forward.
 export function computeGhost(cam) {
   const b = objects.held;
-  if (!b) { objects.ghost = null; return; }
+  if (!b || b.hinged) { objects.ghost = null; return; }
   const w = worldOf(b).clone();
   w.bodies = w.bodies.filter(o => vec4.len(vec4.sub(o.pos, b.pos)) < 12);
   const g = w.bodies.find(o => o.id === b.id);
@@ -403,7 +433,7 @@ function lerpRot(A, B, t) {
   return { l: qnorm(A.l.map((x, i) => s * x * (1 - t) + B.l[i] * t)), r: qnorm(A.r.map((x, i) => s * x * (1 - t) + B.r[i] * t)) };
 }
 function drawPose(b, cam, alpha) {
-  if (b.held && hold.rel) {
+  if (b.held && hold.rel && !b.hinged) {
     const C = camRot(cam), r0 = hold.relPrev || hold.rel, r1 = hold.rel;
     return { pos: vec4.add(cam.eye, R4.apply(C, lerp4(r0.p, r1.p, alpha))), rot: R4.compose(C, lerpRot(r0.R, r1.R, alpha)) };
   }

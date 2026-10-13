@@ -7,8 +7,8 @@
 //        slides in, completing the cube, and the house beside it opens.
 //   III  the knot gate (knot.js): a heavy leaf hung by its foot, leaning in, held shut by a rope whose loop hangs
 //        over a peg with a knob on its end. In 3D the loop is captive; in 4D it lifts off the peg through ana.
-//   IV   the antipode: what you leave in the bowl on the summit opens the vault at the planet's opposite point.
-//        (The bowl is carved, in landforms' way: a 4D ball taken out of the summit.)
+//   IV   the fold (fold.js): the net of a tesseract, eight cells in a cross lying flat; lift the six round the middle
+//        on their hinges, turn the last over onto them, and they close into a tesseract: the chest beside it opens.
 import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
@@ -16,12 +16,11 @@ import { tangents } from './env.js';
 import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
 import { objects, spawn, KINDS } from './objects.js';
-import { launcher } from './launcher.js';
-import { carves } from './landforms.js';
 import { makeProp, addRock, SHAPE, MAT } from './props.js';
 import { mouldParts, MOULD, cellCentre, RING } from './keys.js';
 import { reachAlong, bodyOf, spawnAt } from './objects.js';
 import { gateParts, gateBuild, GATE } from './knot.js';
+import { foldParts, foldBuild, CHEST } from './fold.js';
 import { terrainSD } from './env.js';
 
 export const artifacts = [];        // { id, name, n (unit position), solved(), vault, part, ... }
@@ -43,15 +42,6 @@ function frameAt(n, f0) {
   if (vec4.len(a) < 0.3) a = vec4.sub(vec4.sub(T[0], vec4.scale(f, vec4.dot(T[0], f))), vec4.scale(s, vec4.dot(T[0], s)));
   a = proj(a, n);
   return { f, s, a, up: n };
-}
-// A fixed block of the builder's dark stone (or metal), a tesseract of the given side, resting on the ground: unlike
-// the pale things you can carry, its edges are faintly lit.
-function block(n, side, { lift = 0, mat = 3, glow = 0, rot = null, tag = null } = {}) {
-  const h = G.player.hf.heightAt(n), fr = frameAt(n);
-  const b = makeBody({ shape: 'tesseract', size: side, mass: 1e9, pos: vec4.scale(n, PLANET_R + h + side / 2 + lift - 0.04), rot: rot || rotFromCols([fr.f, fr.s, fr.a, n]), kind: 'block' });
-  b.kinematic = true; b.fixed = true; b.mat = mat; b.glow = glow; b.tag = tag;
-  objects.world.add(b);
-  return b;
 }
 const partOf = k => objects.world.bodies.find(b => b.kind === 'part' && b.tier === k);
 // A rotation from four columns (the body's axes in the world), made proper by turning the third if need be.
@@ -188,21 +178,26 @@ export function buildArtifacts() {
       // solved when the leaf has swung in past 46° (it falls flat on the floor)
       check() { return k.angle() > 0.8; } });
   }
-  // IV. the antipode: the bowl on the summit (four posts round a hollow) and the vault at the opposite point
+  // IV. the fold (fold.js): on open, level, dry ground near where part IV was put (as near the summit's antipode as
+  // there is dry ground), a stone platform a little over the highest ground under it, the cross lying on it and the
+  // chest at its foot (−f), ring IV inside under the lid
   {
-    const p = partOf(4), n = vec4.norm(p.pos);
-    const vault = block(n, 1.0, { lift: -0.4, tag: 'vault4' }); freeze(p);
-    const s0 = launcher.n, fr = frameAt(s0), bowl = off(s0, fr.s, 4.2), bf = frameAt(bowl);
-    // the bowl: a hollow carved in the summit by a 4D ball (in your 3D ground, a round stone basin 1.9 m across and
-    // 0.45 m deep), so what you leave in it rolls to its bottom and stays; six posts mark its rim, two on each of
-    // the ground's three directions
-    const hb = G.player.hf.heightAt(bowl);
-    carves.push({ a: vec4.scale(bowl, PLANET_R + hb + 0.75), b: vec4.scale(bowl, PLANET_R + hb + 0.75), r: 1.2, name: 'bowl' });
-    for (const ax of [bf.f, bf.s, bf.a]) for (const sg of [-1, 1]) block(off(bowl, ax, 1.25 * sg), 0.24, { lift: 0.2, mat: 2, glow: 0.15, tag: 'bowlpost' });
-    for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const fv = frameAt(n); block(off(n, vec4.norm(vec4.add(vec4.scale(fv.f, x), vec4.scale(fv.a, y))), 1.5), 0.24, { mat: 2, glow: 0.15 }); }
-    const bowlPos = vec4.scale(bowl, PLANET_R + G.player.hf.heightAt(bowl));
-    artifacts.push({ id: 'antipode', name: 'the antipode', n, vault, part: p, bowl: bowlPos,
-      check() { return objects.world.bodies.some(b => !b.fixed && !b.held && b.kind !== 'part' && vec4.len(vec4.sub(b.pos, this.bowl)) < 0.9); } });
+    const p = partOf(4), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const at = (o, c) => vec4.add(o, R4.apply(R, c));
+    let top = -Infinity;
+    for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) for (const y of [-2.2, 0, 2.2]) for (const z of [-2.2, 0, 2.2]) top = Math.max(top, hf.heightAt(vec4.norm(at(vec4.scale(n, PLANET_R), [x, y, z, 0]))));
+    const foot = vec4.scale(n, PLANET_R + top + 0.04), P = foldParts();
+    fixedCompound([...P.platform, ...P.chest], foot, R, 'foldsite');
+    for (const q of P.platform) showPart(at(foot, q.c), q, MAT.worked, R);
+    for (const q of P.chest) showPart(at(foot, q.c), q, MAT.basalt, R);
+    const base = fixedCompound(P.base, foot, R, 'cell'); base.hidden = false; base.mat = 1;          // the middle cell, fixed
+    const lid = fixedCompound(P.lid, at(foot, P.lidAt), R, 'lid'); lid.hidden = false; lid.mat = 3; lid.tag = 'vault4';
+    const fd = G.fold = foldBuild(objects.world, foot, R);
+    p.pos = vec4.add(at(foot, CHEST.ring), vec4.scale(n, RING.t + 0.005)); p.rot = R; p.vel = [0, 0, 0, 0]; freeze(p);
+    artifacts.push({ id: 'fold', name: 'the fold', n, vault: lid, part: p, clear: 5, plates: [base, ...fd.plates],
+      stoneAt: [at(foot, [-3.0, 1.6, 0, 0.12]), at(foot, [-1.2, 1.6, 0, 0.12])],
+      // solved when every hinge is within 4° of its stop: six cells up round the middle, the last over them
+      check() { return fd.angles().every(x => x > 1.5); } });
   }
   G.artifacts = artifacts;
 }
@@ -211,6 +206,7 @@ export function buildArtifacts() {
 function open(a, quiet) {
   if (a.vault) objects.world.remove(a.vault);
   if (a.balls) for (const b of a.balls) b.glow = 0.9;              // (the mirror key's mould: the cube is whole)
+  if (a.plates) for (const b of a.plates) b.glow = 0.12;           // (the fold: the tesseract is closed)
   if (a.part && !quiet) { a.part.kinematic = false; a.part.sleeping = false; }
   else if (a.part && !a.part.held) a.part.kinematic = false;              // (a part in your hand stays in your hand)
   if (!quiet) {
@@ -236,9 +232,6 @@ export function updateArtifacts() {
     const p = G.player;
     if (p.onB == null && vec4.len(vec4.sub(p.pos, G.cave.chamber)) < 7.5) { G.flags.part1 = true; G.flags.seen_mirror = true; }
   }
-  // the bowl's posts glow when something rests in it
-  const ant = artifacts.find(a => a.id === 'antipode');
-  if (ant) for (const b of objects.world.bodies) if (b.tag === 'bowlpost') b.glow = ant.check() ? 0.9 : 0.15;
 }
 // After a load: vaults of solved artifacts are gone, and the parts in the others are held fast again.
 export function syncArtifacts() {
