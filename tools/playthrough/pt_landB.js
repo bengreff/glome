@@ -18,7 +18,7 @@ for (; waited < 960 && !found; waited += 60) {
   let best = null;
   for (let i = 0; i < 80; i++) { const x = run([Math.random() * 2 * Math.PI, Math.random() * Math.PI, 0.05 + 1.3 * Math.random()]); if (!best || x.m < best.m) best = x; }
   for (let i = 0, st = 0.2; i < 80 && best.m > 0; i++) { const x = run(best.q.map(v => v + (Math.random() - 0.5) * st)); if (x.m < best.m) best = x; else if (i % 10 === 9) st *= 0.6; }
-  if (best.m === 0) found = { dir: dirOf(best.q), eta: (best.r.hit.t - t).toFixed(0) };
+  if (best.m === 0 && best.r.hit.t - t < 120) found = { dir: dirOf(best.q), eta: (best.r.hit.t - t).toFixed(0) };   // (a short flight: a long one is more at the mercy of the moment of the jump)
   else { g.state.time += 60; await gt(0.05); }
 }
 out.tries = tries; out.found = !!found;
