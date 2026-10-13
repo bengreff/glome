@@ -412,7 +412,8 @@ function frameBody(now) {
     buildLauncher(player.hf);
     {
       // the launcher's four parts, where the artifacts will guard them: near the start, by a river mouth, on an
-      // island joined only through ana, and as near the summit's antipode as there is dry ground
+      // island joined only through ana, and as near the summit's antipode as there is dry ground (each artifact is
+      // built on level, dry ground near its part's place)
       const hf = player.hf, home = player.up(), T = tangents(home);
       const dry = (n, tries = 400) => { if (hf.heightAt(n) > 0.8) return n; let b = null; for (let i = 0; i < tries; i++) { const t = tangents(n), r = 3 + i * 0.25, a = i * 2.4, c = i * 1.7; const d = vec4.norm([0, 1, 2, 3].map(k => Math.cos(a) * t[0][k] + Math.sin(a) * Math.cos(c) * t[1][k] + Math.sin(a) * Math.sin(c) * t[2][k])); const q = vec4.norm(vec4.add(vec4.scale(n, Math.cos(r / 250)), vec4.scale(d, Math.sin(r / 250)))); if (hf.heightAt(q) > 0.8 && hf.waterAt(q) <= 0.01) { b = q; break; } } return b || n; };
       const toward = vec4.norm(vec4.sub(MASSIF, vec4.scale(home, vec4.dot(MASSIF, home))));
@@ -420,10 +421,7 @@ function frameBody(now) {
       const R0 = RIVERS[0], p2 = R0.pts[Math.max(0, R0.pts.length - 8)];
       const p3 = ISLANDS[3].n, p4 = dry(vec4.scale(launcher.n, -1));
       placeParts([dry(p1), dry(p2), p3, p4]);
-      // part I lies on the cave's floor, in the chamber you reach only through the tunnel toward ana
-      const part1 = objects.world.bodies.find(b => b.kind === 'part' && b.tier === 1);
-      if (part1 && G.cave) { part1.pos = vec4.add(G.cave.floor, vec4.scale(vec4.norm(G.cave.floor), 0.6)); part1.sleeping = false; }
-      // and a lantern beside it, lighting the chamber
+      // a lantern in the cave's chamber (the cave is a place to find: its only way in leaves the chamber toward ana)
       if (G.cave) { const u = vec4.norm(G.cave.floor), t = tangents(u)[0], l = spawnObj('lantern', u); l.pos = vec4.add(vec4.add(G.cave.floor, vec4.scale(u, 0.5)), vec4.scale(t, 1.6)); l.sleeping = false; }
       G.partSpots = [p1, p2, p3, p4];
     }

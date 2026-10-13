@@ -156,6 +156,7 @@ export function camRot(c) {
 export const HOLD_F = 4200, HOLD_T = 400;        // the drive's strength: newtons (lifting about 265 kg at sea level), newton-metres
 const HOLD_TAU = 0.04, HOLD_TAU_R = 0.05;        // how fast it closes a gap, in position and in attitude (s)
 const HINGED_V = 2.0;                            // the fastest your hand moves a thing on a hinge (m/s)
+const STEP_UP = 0.26;                            // the highest edge you step up onto as you walk (m)
 export const hold = { last: null, snag: 0, snapped: false, rel: null, relPrev: null };
 // Your body's frame (the camera's without the head's tilt: forward level, right, ana, up), as a proper rotation.
 // What you hold keeps its attitude in this frame: it turns as you turn and twist through ana, and stays level when
@@ -397,12 +398,19 @@ export function setDown() {
 // treated as a body of your mass).
 export function playerContacts(p, w = hereWorld(), input = null) {
   if (!w) return;
-  const cap = p.capsule(), up = p.up();
-  for (const c of w.capsuleContacts(cap.a, cap.b, cap.r)) {
+  const cap = p.capsule(), up = p.up(), cs = w.capsuleContacts(cap.a, cap.b, cap.r);
+  const standing = p.grounded || cs.some(c => vec4.dot(c.n, up) > 0.6);
+  for (const c of cs) {
     const B = c.body, cu = vec4.dot(c.n, up);
     // footing (a surface within about 53° of level) holds you as friction would: its support is straight up, and
     // you move with the point under your feet (a push along a tilted top, a raft leaning under you, would slide you off)
     const foot = cu > 0.6, dir = foot ? up : c.n;
+    // a step: an edge met low at your feet (under 26 cm) while you walk on level footing into it lifts you onto it,
+    // as your legs would (a stair, a platform's step, a sill)
+    const rise = vec4.dot(vec4.sub(c.point, p.pos), up);
+    if (!foot && standing && rise > 0.01 && rise < STEP_UP && cu > -0.2 && vec4.dot(p.vel, c.n) < -0.05) {
+      p.pos = vec4.add(p.pos, vec4.scale(up, rise + 0.015)); p.supported = true; continue;
+    }
     p.pos = vec4.add(p.pos, vec4.scale(dir, Math.min(foot ? c.depth / cu : c.depth, 0.2)));
     // scramble up the side of something big (a large block, the raft, the built blocks), as up a boulder: holding
     // jump while walking into it, along the steepest way up its face (pressing on it a little, to stay against it)

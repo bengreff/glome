@@ -4,8 +4,9 @@
 // which way to step to reach it (E toward ana, Q toward kata, in the radar's colours) and how far. At a puzzle it
 // says only where, never what to do: the idea is the puzzle's. Elsewhere a cue says what the place is for: take a
 // part (F), set it down at the pad (F), jump from the charged pad (Space).
-// The goals follow the artifacts' chain: the cave's mouth and then its chamber; a part set free, then the
-// launcher's pad to lay it on; the next artifact and what it asks for; with all four parts, the pad itself.
+// The goals follow the artifacts' chain: the next artifact (where it is, never what to do there); a part set free,
+// then the pillar beside the launcher's pad to let it go over; with all four, the pad itself. Wandered into the cave
+// (a place, not a puzzle), the way out.
 import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
@@ -33,7 +34,7 @@ export function updateGuide() {
   pickGoal();
   // in the cave with somewhere else to go: out the way you came, up the tunnel and out of its mouth's hollow
   const g = guide.goal;
-  if (g && g.kind !== 'cave' && inCave() && vec4.len(vec4.sub(g.pos, G.cave.chamber)) > 12) guide.goal = { pos: G.cave.out, kind: 'exit', cue: null };
+  if (g && inCave() && vec4.len(vec4.sub(g.pos, G.cave.chamber)) > 12) guide.goal = { pos: G.cave.out, kind: 'exit', cue: null };
 }
 function pickGoal() {
   const p = G.player;
@@ -55,12 +56,6 @@ function pickGoal() {
   if (free) return set(free.pos, 'part', { cue: G.canTake && fd < 4 ? 'F' : null });
   const next = artifacts.find(a => !solved(a));
   if (!next) return set(launcher.site, 'launch', { cue: launcher.onPad ? 'Space' : null });
-  if (next.id === 'room' && G.cave) {
-    // the cave: down into its mouth first (a hollow in the hillside, round in any slice); once you stand in the
-    // tunnel, the chamber and the part on its floor
-    const part = bodies.find(b => b.kind === 'part' && b.tier === 1);
-    return inCave() ? set(part ? part.pos : G.cave.chamber, 'cave') : set(G.cave.pit, 'mouth');
-  }
   if (next.id === 'mirror') {
     const key = bodies.find(b => b.tag === 'key2');
     if (!key) return set(next.n && vec4.scale(next.n, PLANET_R), 'artifact');

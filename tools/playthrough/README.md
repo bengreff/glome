@@ -44,3 +44,8 @@ Run seven, segment five: the fold replaces the antipode (`pt_anti` removed). `pt
 edge as a player does (standing beyond it facing in, turning through ana for the two arms toward ana and kata,
 walking in and looking up as it rises): the roof first, then the six walls, the arm that carries the roof last,
 taken from beside it. All seven come up to 90°, the tesseract closes, the chest's lid is gone and ring IV is taken.
+
+Run seven, segment six: the closed room replaces the cave as artifact I. `pt_room` follows the way from where you
+arrive, squares up, walks at the room (its front wall stops you), steps round through ana past the walls' reach,
+over the floor and back in (solved), takes ring I and leaves through ana with it (the way then points to the pillar).
+`pt_caveout` starts in the cave's chamber, facing as you came in, and follows the way out to the surface.

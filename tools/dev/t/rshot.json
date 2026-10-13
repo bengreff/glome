@@ -1,0 +1,1 @@
+[{"eval":"1","wait":12000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/rshot.js","snap":"outside"},{"eval":"window.__rshot = 1"},{"file":"t/rshot.js","snap":"inside"},{"eval":"window.__rshot = 2"},{"file":"t/rshot.js","snap":"beside"}]

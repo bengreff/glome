@@ -1,7 +1,8 @@
 // The artifacts: wordless puzzles in the same geometric language as everything else, matte stone and brushed metal,
 // with the one accent colour for what responds. Each opens only to a genuinely 4D idea, and holds a launcher part
 // (in a stone vault) and a couple of impulse stones. Solving one marks the next on your radar.
-//   I    the closed room: the cave, whose only way in leaves its chamber toward ana (part I lies inside).
+//   I    the closed room (room.js): walled on every side in your slice, a grille to see ring I through; its walls
+//        reach only a metre toward ana, and stepping round them through ana is the way in.
 //   II   the mirror key: a mould on a plinth, four of its eight cells solid, and a brass key that is the empty cells'
 //        mirror image. No turn in 3D makes a thing its mirror image; half a turn through ana does, and then the key
 //        slides in, completing the cube, and the house beside it opens.
@@ -21,19 +22,12 @@ import { mouldParts, MOULD, cellCentre, RING } from './keys.js';
 import { reachAlong, bodyOf, spawnAt } from './objects.js';
 import { gateParts, gateBuild, GATE } from './knot.js';
 import { foldParts, foldBuild, CHEST } from './fold.js';
+import { roomParts, inRoom, ROOM } from './room.js';
 import { terrainSD } from './env.js';
 
 export const artifacts = [];        // { id, name, n (unit position), solved(), vault, part, ... }
 const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
 const proj = (v, n) => vec4.norm(vec4.sub(v, vec4.scale(n, vec4.dot(v, n))));
-function rotFromCols(cols) {
-  const rows = [0, 1, 2, 3].map(r => cols.map(c => c[r]));
-  const M = rows;
-  let d = 0;
-  for (let j = 0; j < 4; j++) { const m = [1, 2, 3].map(i => M[i].filter((_, k) => k !== j)); d += (j % 2 ? -1 : 1) * M[0][j] * (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])); }
-  if (d < 0) rows.forEach(r => { r[3] = -r[3]; });
-  return R4.fromMatrix(rows);
-}
 // A ground frame at unit n: three tangents and up, as a proper rotation (columns).
 function frameAt(n, f0) {
   const T = tangents(n), f = proj(f0 || T[0], n);
@@ -91,6 +85,25 @@ function siteNear(n, tol = 0.8) {
   }
   return best;
 }
+// A level stone platform for a built site at unit n (frame R): its top a little over the highest ground under it,
+// deep enough to meet the lowest, and as many steps round it as keep each rise under a quarter metre (you climb a
+// step that high without thinking; a ledge of half a metre you would have to jump). plat: the platform's box in
+// the site's frame, its top at 0. Returns the foot (the platform's top at n) and the boxes.
+function platformAt(n, R, plat) {
+  const hf = G.player.hf, at = c => vec4.norm(vec4.add(vec4.scale(n, PLANET_R), R4.apply(R, c)));
+  const sample = ex => { let lo = Infinity, hi = -Infinity; const e = plat.e.map((v, i) => (i < 3 ? v + ex : v));
+    const t9 = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+    for (const x of t9) for (const y of [-1, -0.5, 0, 0.5, 1]) for (const z of t9) {
+      const h = hf.heightAt(at([plat.c[0] + x * e[0], plat.c[1] + y * e[1], plat.c[2] + z * e[2], 0])); lo = Math.min(lo, h); hi = Math.max(hi, h);
+    } return { lo, hi }; };
+  const s0 = sample(0), top = s0.hi + 0.06;
+  let lo = s0.lo, k = 0;
+  for (let i = 0; i < 4; i++) { k = Math.max(0, Math.ceil((top - lo) / 0.25) - 1); lo = Math.min(lo, sample(0.5 * k).lo); }   // (wider steps reach lower ground)
+  const ledge = top - lo, deep = ledge + 0.4, B = (c, e) => ({ shape: 'box', c, e }), [c0, c1, c2] = plat.c, [e0, e1, e2] = plat.e;
+  const parts = [B([c0, c1, c2, -deep / 2], [e0, e1, e2, deep / 2])];
+  for (let i = 1; i <= k; i++) { const st = -i * ledge / (k + 1); parts.push(B([c0, c1, c2, (st - deep) / 2], [e0 + 0.5 * i, e1 + 0.5 * i, e2 + 0.5 * i, (st + deep) / 2])); }
+  return { foot: vec4.scale(n, PLANET_R + top), parts };
+}
 // A part of a built thing drawn as a prop (its solid shape is a fixed body): a box or a ball.
 function showPart(c, q, mat, rot) {
   const g = q.shape === 'glome', p = makeProp({ c, rot, e: g ? [q.r, q.r, q.r, q.r] : q.e, shape: g ? SHAPE.ball : SHAPE.box, mat });
@@ -101,18 +114,20 @@ function freeze(b) { if (b) { b.kinematic = true; b.sleeping = true; b.vel = [0,
 export function buildArtifacts() {
   artifacts.length = 0;
   const hf = G.player.hf;
-  // I. the closed room: eight posts of dark stone, faintly lit, ring the tunnel's mouth across the tunnel's way (so a
-  // slice through the mouth that the tunnel leaves, toward kata, shows them all round it); the cave itself is in
-  // landforms.js
-  if (G.cave) {
-    const m = vec4.norm(G.cave.mouth), toward = proj(vec4.sub(vec4.norm(G.cave.chamber), m), m), fr = frameAt(m, toward);
-    for (let i = 0; i < 8; i++) {
-      const ang = i * Math.PI / 4, dir = vec4.norm(vec4.add(vec4.scale(fr.s, Math.cos(ang)), vec4.scale(fr.a, Math.sin(ang))));
-      const q = off(m, dir, 3.6), f2 = frameAt(q, toward);
-      const p = makeProp({ c: vec4.scale(q, PLANET_R + hf.heightAt(q) + 0.55), rot: rotFromCols([f2.f, f2.s, f2.a, q]), e: [1.6, 0.18, 0.18, 0.75], shape: SHAPE.box, mat: MAT.basalt, glow: 0.14 });   // (long along the tunnel's way: seen within 1.6 m of its slice)
-      p.kind = 'ruin'; addRock(p);
-    }
-    artifacts.push({ id: 'room', name: 'the closed room', n: m, solved: () => !!G.flags.part1 });
+  // I. the closed room (room.js): on open, level, dry ground near where part I was put (14 m from where you arrive,
+  // toward the summit), a stone platform a little over the highest ground under it, the room on it, ring I inside
+  {
+    const p = partOf(1), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const at = (o, c) => vec4.add(o, R4.apply(R, c));
+    const P = roomParts(), { foot, parts: plat } = platformAt(n, R, P.platform[0]);
+    fixedCompound([...plat, ...P.walls, ...P.bars], foot, R, 'room');
+    for (const q of plat) showPart(at(foot, q.c), q, MAT.worked, R);
+    for (const q of P.walls) showPart(at(foot, q.c), q, MAT.basalt, R);
+    for (const q of P.bars) showPart(at(foot, q.c), q, MAT.metal, R);
+    p.pos = vec4.add(at(foot, ROOM.part), vec4.scale(n, RING.t + 0.005)); p.rot = R; p.vel = [0, 0, 0, 0]; p.omega = [0, 0, 0, 0, 0, 0]; p.sleeping = true;
+    artifacts.push({ id: 'room', name: 'the closed room', n, part: p, clear: 6, R, foot,
+      // inside it: you stand within its walls (and so within their reach toward ana)
+      inside: q => inRoom(R4.applyInv(R, vec4.sub(q, foot))), solved: () => !!G.flags.part1 });
   }
   // II. the mirror key: on open, level, dry ground near where part II was put (by the river's mouth), a plinth with
   // the mould at chest height, open toward −f; a small stone house 4.2 m to its side (+s) with its door toward it
@@ -165,15 +180,14 @@ export function buildArtifacts() {
   {
     const p = partOf(3), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
     const at = (o, c) => vec4.add(o, R4.apply(R, c));
-    let top = -Infinity;
-    for (const x of [-3.8, -1.9, 0, 1.9, 3.8]) for (const y of [-1.6, 0, 1.6]) for (const z of [-1.6, 0, 1.6]) top = Math.max(top, hf.heightAt(vec4.norm(at(vec4.scale(n, PLANET_R), [x, y, z, 0]))));
-    const foot = vec4.scale(n, PLANET_R + top + 0.04), parts = gateParts();
-    fixedCompound(parts, foot, R, 'gatehouse');
-    parts.forEach((q, i) => showPart(at(foot, q.c), q, i === 0 ? MAT.worked : i >= parts.length - 2 ? MAT.metal : MAT.basalt, R));
+    const all = gateParts(), { foot, parts: plat } = platformAt(n, R, all[0]), parts = all.slice(1);
+    fixedCompound([...plat, ...parts], foot, R, 'gatehouse');
+    for (const q of plat) showPart(at(foot, q.c), q, MAT.worked, R);
+    parts.forEach((q, i) => showPart(at(foot, q.c), q, i >= parts.length - 2 ? MAT.metal : MAT.basalt, R));
     const k = G.knot = gateBuild(objects.world, foot, R, terrainSD);
     G.rope = k.rope;
     p.pos = vec4.add(at(foot, GATE.part), vec4.scale(n, RING.t + 0.005)); p.rot = R; p.vel = [0, 0, 0, 0]; freeze(p);
-    artifacts.push({ id: 'knot', name: 'the knot gate', n, vault: null, part: p, clear: 5, loop: k.rope.loop,
+    artifacts.push({ id: 'knot', name: 'the knot gate', n, vault: null, part: p, clear: 6, loop: k.rope.loop,
       stoneAt: [at(foot, [-1.2, 1.1, 0, 0.12]), at(foot, [-1.2, -1.1, 0, 0.12])],
       // solved when the leaf has swung in past 46° (it falls flat on the floor)
       check() { return k.angle() > 0.8; } });
@@ -184,17 +198,15 @@ export function buildArtifacts() {
   {
     const p = partOf(4), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
     const at = (o, c) => vec4.add(o, R4.apply(R, c));
-    let top = -Infinity;
-    for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) for (const y of [-2.2, 0, 2.2]) for (const z of [-2.2, 0, 2.2]) top = Math.max(top, hf.heightAt(vec4.norm(at(vec4.scale(n, PLANET_R), [x, y, z, 0]))));
-    const foot = vec4.scale(n, PLANET_R + top + 0.04), P = foldParts();
-    fixedCompound([...P.platform, ...P.chest], foot, R, 'foldsite');
-    for (const q of P.platform) showPart(at(foot, q.c), q, MAT.worked, R);
+    const P = foldParts(), { foot, parts: plat } = platformAt(n, R, P.platform[0]);
+    fixedCompound([...plat, ...P.chest], foot, R, 'foldsite');
+    for (const q of plat) showPart(at(foot, q.c), q, MAT.worked, R);
     for (const q of P.chest) showPart(at(foot, q.c), q, MAT.basalt, R);
     const base = fixedCompound(P.base, foot, R, 'cell'); base.hidden = false; base.mat = 1;          // the middle cell, fixed
     const lid = fixedCompound(P.lid, at(foot, P.lidAt), R, 'lid'); lid.hidden = false; lid.mat = 3; lid.tag = 'vault4';
     const fd = G.fold = foldBuild(objects.world, foot, R);
     p.pos = vec4.add(at(foot, CHEST.ring), vec4.scale(n, RING.t + 0.005)); p.rot = R; p.vel = [0, 0, 0, 0]; freeze(p);
-    artifacts.push({ id: 'fold', name: 'the fold', n, vault: lid, part: p, clear: 5, plates: [base, ...fd.plates],
+    artifacts.push({ id: 'fold', name: 'the fold', n, vault: lid, part: p, clear: 6, plates: [base, ...fd.plates],
       stoneAt: [at(foot, [-3.0, 1.6, 0, 0.12]), at(foot, [-1.2, 1.6, 0, 0.12])],
       // solved when every hinge is within 4° of its stop: six cells up round the middle, the last over them
       check() { return fd.angles().every(x => x > 1.5); } });
@@ -228,10 +240,8 @@ export function updateArtifacts() {
       G.flags['seen_' + next.id] = true;                    // a solved artifact points the way to the next
     }
   });
-  if (!G.flags.part1 && G.cave) {                           // the cave counts as solved once you've stood in its chamber
-    const p = G.player;
-    if (p.onB == null && vec4.len(vec4.sub(p.pos, G.cave.chamber)) < 7.5) { G.flags.part1 = true; G.flags.seen_mirror = true; }
-  }
+  const room = artifacts.find(a => a.id === 'room');               // the room counts as solved once you've stood in it
+  if (room && !G.flags.part1 && G.player.onB == null && room.inside(G.player.pos)) { G.flags.part1 = true; G.flags.seen_mirror = true; }
 }
 // After a load: vaults of solved artifacts are gone, and the parts in the others are held fast again.
 export function syncArtifacts() {
