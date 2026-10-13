@@ -2,7 +2,7 @@
 // carry (balls, blocks, lanterns, impulse stones). The ruins are built for a 4D world: a ring of pillars stands on a
 // sphere round its centre (your slice cuts the sphere in a circle, a different circle of pillars as you turn); a room's
 // walls are 3D cells, six of them, of which ruin has taken some; a gate is two pillars and a lintel. Lines of cairns
-// lead out from where you arrive toward the artifacts and the launcher.
+// lead out from where you arrive toward the launcher.
 // The ruins are props (solid, climbable); the cairns and caches are ordinary bodies, numbered (gen) so that a save
 // keeps only the ones you have moved.
 import { G } from './game.js';

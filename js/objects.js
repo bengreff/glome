@@ -16,7 +16,6 @@ import { LAWS } from './laws.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
 import { World, makeBody, DENSITY, applyImpulse, kEff } from './bodies.js';
-import { RING, ringParts, ringDraw, KEY, keyParts } from './keys.js';
 import { rot as R4, log as rotLog, qnorm, bivApply } from './so4.js';
 import { tangents } from './env.js';
 import { hoopAxisBody } from './cosmos.js';
@@ -34,11 +33,9 @@ export const KINDS = {
   tessL: { shape: 'tesseract', size: 0.5, density: DENSITY.stone, mat: 1 },
   stone: { shape: 'glome', size: 0.09, mass: 2.5, mat: 2, glow: 0.35 },          // an impulse stone
   lantern: { shape: 'glome', size: 0.12, mass: 3, mat: 7, glow: 0.9, light: [1.9, 1.35, 0.75] },   // warm glass, glowing its light's colour
-  part: { shape: 'compound', mass: RING.mass, mat: 8, glow: 0 },                   // a launcher key (tiers I–IV): a brass ring (keys.js)
   raft: { shape: 'tesseract', size: 1.3, density: 60, mat: 6 },                  // a hollow crate of planks (171 kg): a uniform cube floats flat
                                                                                    // only below about a fifth of water's density
   sail: { shape: 'tesseract', size: 0.4, density: DENSITY.wood, mat: 2, glow: 0.2 }, // set on a raft, it catches the wind
-  key: { shape: 'compound', mass: KEY.mass, mat: 8 },                             // the mirror key: four brass cells, handed (keys.js)
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
 export const POUCH_MAX = 9;        // the pouch holds nine
@@ -64,24 +61,22 @@ function groundFrame(n) {
   if (det(rows) < 0) rows.forEach(r => { r[0] = -r[0]; });
   return R4.fromMatrix(rows);
 }
-// The body of a kind (a key's shape is its tier's ring).
+// The body of a kind.
 export function bodyOf(kind, pos, rot, extra) {
   const K = KINDS[kind];
-  if (kind === 'part') { const k = (extra.tier || 1) - 1; return makeBody({ shape: 'compound', parts: ringParts(k), draw: ringDraw(k), mass: K.mass, mu: RING.mu, pos, rot: rot || undefined, kind, ...extra }); }
-  if (kind === 'key') return makeBody({ shape: 'compound', parts: keyParts(), mass: K.mass, mu: KEY.mu, pos, rot: rot || undefined, kind, ...extra });
   return makeBody({ shape: K.shape, size: K.size, density: K.density, mass: K.mass, pos, rot: rot || undefined, kind, ...extra });
 }
 export function spawn(kind, n, { lift = 0, rot = null, extra = {} } = {}) {
   const K = KINDS[kind], p = G.player, h = p.hf.heightAt(n);
   rot = rot || groundFrame(n);
-  const r = kind === 'part' ? RING.t : K.shape === 'tesseract' ? K.size / 2 : K.size;   // (a ring lies flat: its hole upright)
+  const r = K.shape === 'tesseract' ? K.size / 2 : K.size;
   const body = bodyOf(kind, vec4.scale(n, PLANET_R + h + r + 0.02 + lift), rot, extra);
   body.mat = K.mat; body.glow = K.glow || 0; body.light = K.light || null;
   objects.world.add(body);
   return body;
 }
 // The first objects: a loose cairn a few steps from where you arrive, and a few impulse stones and a lantern
-// further off (more are found in the artifacts).
+// further off (more are found in caches, and grow on the monuments' pedestals: nooks.js).
 export function placeStart(rand) {
   const p = G.player, home = p.up(), T = tangents(home);
   const at = (a, b, c, m) => vec4.norm(vec4.add(vec4.scale(home, Math.cos(m / PLANET_R)), vec4.scale(vec4.norm([0, 1, 2, 3].map(i => a * T[0][i] + b * T[1][i] + c * T[2][i])), Math.sin(m / PLANET_R))));

@@ -24,15 +24,13 @@ import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
          drawStone, pouchKey, tiltHeld, endTilt, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
-import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
+import { launcher, buildLauncher, updateLauncher, tryLaunch } from './launcher.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
 import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
 import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
-import { stepGate } from './knot.js';
 import { tides, updateTides } from './tides.js';
 import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
-import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad } from './cosmos.js';
 import { stepBoats, windAt } from './boats.js';
@@ -107,13 +105,6 @@ const hold = { fT: -1, mT: -1, ghostT: 0 };
 // A change of your velocity given in A's frame (the frame objects live in): in flight it goes to the inertial state,
 // on B into B's frame (whose axes are inertial).
 const kickPlayer = dv => { const p = G.player; if (flight.active) kick(dv); else if (p.onB != null) p.vel = vec4.add(p.vel, dirToInertial(dv, state.time)); else p.vel = vec4.add(p.vel, dv); };
-// The rope where you look at it (within reach, and within 12 cm of your gaze in all four directions): its particle.
-function ropeAt(cam) {
-  if (!G.rope || G.player.onB != null) return -1;
-  let best = -1, bd = 0.12;
-  G.rope.x.forEach((q, i) => { const d = vec4.sub(q, cam.eye), t = vec4.dot(d, cam.F); if (t > 0 && t < 3.2) { const m = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))); if (m < bd) { bd = m; best = i; } } });
-  return best;
-}
 function handleActions(cam) {
   const now = G.simT, p = G.player;
   // things are handled in the frame of the world they are in: on B, B's (your own frame there)
@@ -121,15 +112,10 @@ function handleActions(cam) {
   if (actions.fDown) {
     actions.fDown = false;
     if (!objects.held && nearConsole(G.player)) { if ($('console').hidden) openConsole(); else closeConsole(); }
-    else if (G.ropeHeld != null) G.ropeHeld = null;       // let go of the rope
     else if (objects.held) hold.fT = now;                  // tap: drop · hold: show where it will rest
     else {
       const b = lookedAt(camW);
       if (b) pickUp(b, camW);
-      else {                                               // or take hold of the rope, where it is (your hand keeps it there, as you turn and go)
-        const i = ropeAt(cam);
-        if (i >= 0) { const d = vec4.sub(G.rope.x[i], cam.eye); G.ropeHeld = i; G.ropeOff = [cam.F, cam.R, cam.U, cam.A].map(e => vec4.dot(d, e)); G.audio?.emit('clack', G.rope.x[i], 0.25); }
-      }
     }
   }
   if (actions.fUp) {
@@ -277,12 +263,6 @@ function frameBody(now) {
     if (objects.held && !!objects.held.inB !== (player.onB != null)) moveHeld(player.onB != null);   // landing on B or leaving it: what you hold comes too
     stepObjects(cameraNow(), kickPlayer);
     if (player.onB != null) stepObjects(player.camera(), dv => { player.vel = vec4.add(player.vel, dv); }, objects.worldB, 150, 900);
-    if (G.knot && !onB) {                                  // the knot gate's rope, held where your hand is
-      const c = cameraNow(), o = G.ropeOff || [0.8, 0, -0.3, 0];
-      const hand = G.ropeHeld != null ? { i: G.ropeHeld, p: [c.F, c.R, c.U, c.A].reduce((q, e, k) => vec4.add(q, vec4.scale(e, o[k])), c.eye) } : null;
-      stepGate(G.knot, STEP, c.eye, hand);
-      if (hand && G.rope.strain() > 0.08) G.ropeHeld = null;   // pulled hard (by the leaf, or caught on something), it slips from your hand
-    }
     state.time += STEP;
   }
   if (player.depth > CHEST) fadeOut(backToDry);
@@ -299,7 +279,6 @@ function frameBody(now) {
   octx.clearRect(0, 0, overlay.width, overlay.height);
   let rad = null;
   if (player.onB == null) {
-    updateArtifacts();
     updateNooks();
     stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
     const cd = creatureDraw(cam.eye, cam.A, player.hf, dt);
@@ -325,8 +304,8 @@ function frameBody(now) {
   const q = gpuBegin();
   drawSlice(cam, sun, 0, 0, scene.w, scene.h);
   mark('slice');
-  // above the ground (or on a charged launcher) the radar becomes the space map
-  const onLauncher = launcher.onPad && launcher.tier > 0 && !flight.active;
+  // above the ground (or on the launcher's pad) the radar becomes the space map
+  const onLauncher = launcher.onPad && !flight.active;
   const spaceMode = flight.active || onLauncher || player.onB != null || player.heightAboveGround() > 60;
   if (!state.radar.hidden && !state.bare && !spaceMode) rad = drawRadar(cam, sun, G.simT, FOV * scene.w / scene.h);
   else radar.last = null;                                    // (the space map takes no clicks: nothing stale to pick)
@@ -337,14 +316,13 @@ function frameBody(now) {
   mark('present');
   radar.gaze = gazePoint(cam);
   // what the dot rests on: something you could take (or the console, on B), and how hard you strain at what you hold
-  G.canTake = !objects.held && G.ropeHeld == null && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || ropeAt(cam) >= 0 || nearConsole(player));
+  G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
   if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); }
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
   if (spaceMode && !state.radar.hidden && !state.bare) {
-    const u = player.up(), pc = player.camera(), dir = vec4.dot(pc.F, u) > 0.05 ? pc.F : u;
-    updateSpaceMap({ flight, launch: onLauncher ? vec4.scale(dir, TIERS[launcher.tier]) : null, onB: player.onB });
+    updateSpaceMap({ flight, launch: onLauncher ? vec4.scale(launcher.aim.dir, launcher.speed) : null, onB: player.onB });   // (along the barrel)
     radar.rect = radarRect();
     drawSpaceMap(radar.rect, state.radar.yaw, state.radar.el);
   }
@@ -417,24 +395,11 @@ function frameBody(now) {
     initObjects(accel, envSD, { height: p => vec4.len(p) - 250 - player.hf.waterAt(vec4.norm(p)), up: p => vec4.norm(p), density: 1000 });
     placeStart(rand);
     buildLauncher(player.hf);
-    {
-      // the launcher's four parts, where the artifacts will guard them: near the start, by a river mouth, on an
-      // island joined only through ana, and as near the summit's antipode as there is dry ground (each artifact is
-      // built on level, dry ground near its part's place)
-      const hf = player.hf, home = player.up(), T = tangents(home);
-      const dry = (n, tries = 400) => { if (hf.heightAt(n) > 0.8) return n; let b = null; for (let i = 0; i < tries; i++) { const t = tangents(n), r = 3 + i * 0.25, a = i * 2.4, c = i * 1.7; const d = vec4.norm([0, 1, 2, 3].map(k => Math.cos(a) * t[0][k] + Math.sin(a) * Math.cos(c) * t[1][k] + Math.sin(a) * Math.sin(c) * t[2][k])); const q = vec4.norm(vec4.add(vec4.scale(n, Math.cos(r / 250)), vec4.scale(d, Math.sin(r / 250)))); if (hf.heightAt(q) > 0.8 && hf.waterAt(q) <= 0.01) { b = q; break; } } return b || n; };
-      const toward = vec4.norm(vec4.sub(MASSIF, vec4.scale(home, vec4.dot(MASSIF, home))));
-      const p1 = vec4.norm(vec4.add(vec4.add(vec4.scale(home, Math.cos(14 / 250)), vec4.scale(toward, Math.sin(14 / 250) * 0.95)), vec4.scale(player.A, Math.sin(14 / 250) * 0.3)));
-      const R0 = RIVERS[0], p2 = R0.pts[Math.max(0, R0.pts.length - 8)];
-      const p3 = ISLANDS[3].n, p4 = dry(vec4.scale(launcher.n, -1));
-      placeParts([dry(p1), dry(p2), p3, p4]);
-      // a lantern in the cave's chamber (the cave is a place to find: its only way in leaves the chamber toward ana)
-      if (G.cave) { const u = vec4.norm(G.cave.floor), t = tangents(u)[0], l = spawnObj('lantern', u); l.pos = vec4.add(vec4.add(G.cave.floor, vec4.scale(u, 0.5)), vec4.scale(t, 1.6)); l.sleeping = false; }
-      G.partSpots = [p1, p2, p3, p4];
-    }
+    // a lantern in the cave's chamber (the cave is a place to find: its only way in leaves the chamber toward ana)
+    if (G.cave) { const u = vec4.norm(G.cave.floor), t = tangents(u)[0], l = spawnObj('lantern', u); l.pos = vec4.add(vec4.add(G.cave.floor, vec4.scale(u, 0.5)), vec4.scale(t, 1.6)); l.sleeping = false; }
     hooks.objects = objectsSave;
     {
-      // herds where you will go first: near where you arrive, on the way up to the summit, and by each artifact's place
+      // herds where you will go first: near where you arrive, and on the way up to the summit
       const home = player.up(), way = f => vec4.norm(vec4.add(vec4.scale(home, 1 - f), vec4.scale(launcher.n, f)));
       initCreatures(player.hf);
       // and a few in your first view, grazing ahead of you in your slice; most of them will come and look
@@ -454,14 +419,11 @@ function frameBody(now) {
       if (beach) { const r = spawnObj('raft', beach); r.boat = true; G.raftHome = beach; }
       spawnObj('sail', ISLANDS[2].n);
     }
-    buildArtifacts();
     {
       // the rocks: clusters of 4D shapes by kind over the whole planet, and a few of each near where you arrive; none
-      // on the start, the paths of the artifacts, the launcher, the cave's mouth or the raft's beach
+      // on the start, the launcher, the cave's mouth or the raft's beach
       const hf = player.hf, home = player.up(), keep = [[home, 7]];
       if (launcher.n) keep.push([launcher.n, 45]);                  // (the summit stays clear: a launch leaves it nearly level)
-      for (const n of G.partSpots || []) keep.push([vec4.norm(n), 8]);
-      for (const a of G.artifacts || []) keep.push([a.n, 9]);
       if (G.cave) keep.push([vec4.norm(G.cave.mouth), 10]);
       if (G.raftHome) keep.push([G.raftHome, 8]);
       const keepOut = (n, r) => keep.some(([q, m]) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 < m + r)
@@ -493,11 +455,11 @@ function frameBody(now) {
       }
       await step('Growing the woods…', 'rocks');
       G.treesMade = makeForests(hf, home, (n, r) => keepOut(n, r) || inStone(n, r + 0.5), player.R);
-      // ruins, cairns and caches, and lines of cairns toward the artifacts and the launcher
+      // ruins, cairns and caches, and a line of cairns toward the launcher
       await step('Building the ruins…', 'woods');
-      G.findsMade = makeFinds(hf, home, [...(G.artifacts || []).map(a => a.n), launcher.n], keepOut);
-      // the flora: grown near you as you go; none on the pad, in the cave's mouth, or on an artifact's place
-      const clearOf = [[launcher.n, 6], ...(G.artifacts || []).map(a => [a.n, a.clear || 3]), ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
+      G.findsMade = makeFinds(hf, home, [launcher.n], keepOut);
+      // the flora: grown near you as you go; none on the pad or in the cave's mouth
+      const clearOf = [[launcher.n, 6], ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
       const clear = n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2;
       initFlora(hf, clear); creatures.keep = clear;               // (and no herd's home there either)
       G.genCount = finds.gen;
@@ -514,32 +476,6 @@ function frameBody(now) {
     hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly, tides: !!G.tides }),
                    load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; G.tides = !!s.tides || /[?&]tides\b/.test(location.search); } };
     if (/[?&]tides\b/.test(location.search)) G.tides = true;      // (tides on from the page's address: ?tides)
-    if (G.knot) {
-      // the knot gate (built with the artifacts): its rope is drawn with the trees' pieces; the leaf and the rope are
-      // saved here (the leaf is rebuilt with the world, not saved with the things you carry)
-      const k = G.knot, r5 = v => Math.round(v * 1e5) / 1e5;
-      ropeSlot.obj = k.rope;
-      hooks.knot = {
-        save: () => ({ x: k.rope.x.map(v => v.map(r5)), leaf: { pos: k.leaf.pos.map(r5), rot: { l: k.leaf.rot.l.map(r5), r: k.leaf.rot.r.map(r5) } }, asleep: !!k.asleep }),
-        load: s => {
-          if (!s || !s.x || s.x.length !== k.rope.x.length || !s.leaf) return;
-          k.rope.x = s.x.map(v => v.slice()); k.rope.v = s.x.map(() => [0, 0, 0, 0]); k.rope.prevX = null;
-          k.leaf.pos = s.leaf.pos.slice(); k.leaf.prevPos = k.leaf.pos.slice(); k.leaf.rot = s.leaf.rot; k.leaf.prevRot = k.leaf.rot;
-          k.leaf.vel = [0, 0, 0, 0]; k.leaf.omega = [0, 0, 0, 0, 0, 0]; k.asleep = !!s.asleep; k.leaf.sleeping = k.asleep; k.lastAngle = null;
-          k.joint.accP = [0, 0, 0, 0]; k.joint.accA = [0, 0, 0, 0, 0, 0];
-        } };
-    }
-    if (G.fold) {
-      // the fold's plates: built with the world, saved here (where each lies on its hinge)
-      const fd = G.fold, r5 = v => Math.round(v * 1e5) / 1e5;
-      hooks.fold = {
-        save: () => fd.plates.map(b => ({ pos: b.pos.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) } })),
-        load: s => {
-          if (!Array.isArray(s) || s.length !== fd.plates.length) return;
-          fd.plates.forEach((b, i) => { b.pos = s[i].pos.slice(); b.prevPos = b.pos.slice(); b.rot = s[i].rot; b.prevRot = b.rot; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; b.sleeping = true; });
-          for (const j of fd.joints) { j.accP = [0, 0, 0, 0]; j.accA = [0, 0, 0, 0, 0, 0]; j.accL = 0; }
-        } };
-    }
     if (launcher.aim) hooks.aim = { save: () => launcher.aim.knobs.map(b => +b.slider.x.toFixed(4)),   // the launcher's sliders, where you left them
       load: xs => { if (Array.isArray(xs) && xs.length === 3) launcher.aim.knobs.forEach((b, k) => { b.slider.x = Math.max(0, Math.min(1, +xs[k] || 0)); }); } };
     G.objects = objects;
@@ -554,7 +490,6 @@ function frameBody(now) {
     await step('Preparing the view…');
     stamps.shaders = Math.round(await programsReady(ms => { const e = $('load-msg'); if (e && ms > 1500) e.textContent = `Preparing the view (compiling the shaders, ${Math.round(ms / 1000)} s)…`; }));
     loadWorld();                       // a saved world, if there is one, replaces the fresh start
-    syncArtifacts();
     startAutosave();
     bindSettings();
     G.boot = { ...stamps, total: performance.now() - bootT0 };
@@ -565,7 +500,7 @@ function frameBody(now) {
       $('hint').textContent = 'Glome needs a keyboard and mouse to explore.';
     // a handle for debugging from the console (__hoop is the old name)
     window.__glome = window.__hoop = { state, player, keys, sunDir, dyn, radar, boulders, prof, compassAt, logMap, recordTrail, LAWS, G, settings,
-      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, TIERS, smap, cameraNow, trees, creatures, artifacts, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer, guide, flora } };
+      dbg: { gl, drawRadar, drawSlice, scene, updateBoulders, accel, envSD, fade, STEP, save: saveMod, cosmos, backToDry, gpuObj, objects, flight, launcher, smap, cameraNow, trees, creatures, bworld, openConsole, windAt, props, hits, groves, sunbuf, tgpu, tiles, finds, carves: () => import('./landforms.js'), hold, handleActions, actions, kickPlayer, guide, flora } };
     requestAnimationFrame(t => { last = t; frame(t); });
   } catch (e) {
     fail(e.message);

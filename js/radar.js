@@ -15,7 +15,7 @@ export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   
 // mouse free). The disc, the ground your slice shows, is always there.
 export const RADAR_LAYERS = [
   { key: 'things', name: 'things to carry', on: true },     // balls, blocks, stones, lanterns, parts, raft, sail; a cache as one mark
-  { key: 'landmarks', name: 'places: cave, ruins, launcher, artifacts', on: true },
+  { key: 'landmarks', name: 'places: cave, ruins, launcher', on: true },
   { key: 'creatures', name: 'creatures', on: false },
   { key: 'water', name: 'water and coast', on: false },
   { key: 'mountains', name: 'solid mountains', on: false },  // ground above 24 m, and its shadow on the disc toward ana or kata
@@ -416,8 +416,7 @@ export function drawRadarOverlay(r, sun) {
       }
     }
   }
-  // landmarks: the cave's mouth, ruins, the launcher, and the artifacts you have found (faint) or solved (bright), the
-  // last two kept on the rim, toward where they lie, when they are out of range
+  // landmarks: the cave's mouth, ruins, and the launcher (kept on the rim, toward where it lies, when out of range)
   if (sh.landmarks) {
     const at = (n, keep) => { const m = logMap(n, B, u), r = Math.hypot(...m); return r < RB * 0.95 ? proj(m) : keep ? proj(m.map(v => v / r * RB * 0.95)) : null; };
     for (const L of landmarkList()) {
@@ -584,11 +583,7 @@ export function landmarkList() {
   const out = [];
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
   for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin' });
-  if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: launcher.tier > 0 });
-  for (const a of G.artifacts || []) {
-    const solved = !!(G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1));
-    if (G.flags['seen_' + a.id] && a.id !== 'room') out.push({ n: a.n, kind: 'artifact', keep: true, bright: solved });
-  }
+  if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: true });
   return out;
 }
 const ACCENT = 'rgba(82, 220, 200, 0.95)';
@@ -602,11 +597,6 @@ export function drawLandmark(kind, P, k, bright) {
   } else if (kind === 'cave') {                               // an arch
     octx.strokeStyle = 'rgba(230, 210, 180, 0.95)'; octx.lineWidth = 1.8 * k;
     octx.beginPath(); octx.moveTo(x - 4.5 * k, y + 3.5 * k); octx.lineTo(x - 4.5 * k, y); octx.arc(x, y, 4.5 * k, Math.PI, 0); octx.lineTo(x + 4.5 * k, y + 3.5 * k); octx.stroke();
-  } else if (kind === 'next') {                               // the nearest unsolved artifact: a ring that pulses slowly
-    const ph = (performance.now() / 1600) % 1;
-    octx.strokeStyle = `rgba(82, 220, 200, ${(0.9 * (1 - ph)).toFixed(3)})`; octx.lineWidth = 1.6 * k;
-    octx.beginPath(); octx.arc(x, y, (4 + 9 * ph) * k, 0, 7); octx.stroke();
-    octx.fillStyle = 'rgba(82, 220, 200, 0.9)'; octx.beginPath(); octx.arc(x, y, 2 * k, 0, 7); octx.fill();
   } else if (kind === 'ruin') {                               // worked stone: two pillars and a lintel
     octx.strokeStyle = 'rgba(225, 215, 195, 0.9)'; octx.lineWidth = 1.6 * k;
     octx.beginPath(); octx.moveTo(x - 4 * k, y + 4 * k); octx.lineTo(x - 4 * k, y - 3 * k); octx.moveTo(x + 4 * k, y + 4 * k); octx.lineTo(x + 4 * k, y - 3 * k);
@@ -615,11 +605,6 @@ export function drawLandmark(kind, P, k, bright) {
     octx.strokeStyle = bright ? ACCENT : 'rgba(200, 210, 225, 0.85)';
     octx.strokeRect(x - 4.5 * k, y - 4.5 * k, 9 * k, 9 * k);
     octx.beginPath(); octx.moveTo(x - 2.5 * k, y + 1.5 * k); octx.lineTo(x, y - 1.5 * k); octx.lineTo(x + 2.5 * k, y + 1.5 * k); octx.stroke();
-  } else {                                                    // an artifact: a diamond, filled once solved
-    const z = 5 * k;
-    octx.strokeStyle = bright ? ACCENT : 'rgba(82, 220, 200, 0.55)'; octx.lineWidth = 1.6 * k;
-    octx.beginPath(); octx.moveTo(x, y - z); octx.lineTo(x + z, y); octx.lineTo(x, y + z); octx.lineTo(x - z, y); octx.closePath(); octx.stroke();
-    if (bright) { octx.fillStyle = 'rgba(82, 220, 200, 0.35)'; octx.fill(); }
   }
 }
 

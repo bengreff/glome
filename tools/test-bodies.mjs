@@ -1,6 +1,5 @@
 // Tests for js/bodies.js (Node, no packages): node tools/test-bodies.mjs
 import { World, makeBody, ballSubmerged, VOLUME, ROLL_RES, IApply, hinge } from '../js/bodies.js';
-import { ringParts, pillarParts, seatHeight, RING, PILLAR } from '../js/keys.js';
 import { rot as R4, wedge, bivApply } from '../js/so4.js';
 const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0), len = a => Math.hypot(...a);
 const sub = (a, b) => a.map((v, i) => v - b[i]), add = (a, b) => a.map((v, i) => v + b[i]), scale = (a, s) => a.map(v => v * s);
@@ -9,6 +8,17 @@ const check = (name, ok, info) => { results.push([ok ? 'PASS' : 'FAIL', name, in
 const RP = 250, g0 = 9.8;
 const planet = () => new World({ accel: p => scale(p, -g0 / len(p)), env: p => ({ d: len(p) - RP, n: scale(p, 1 / len(p)) }) });
 const up = [0, 0, 0, 1], onGround = h => [0, 0, 0, RP + h];
+// A ring (a square frame round a hole along its fourth axis, the shape of the old launcher keys): an awkward compound
+// of six boxes, hole half-width a, wall w, half-thickness t.
+const RING = { a: [0.39, 0.30], w: 0.12, t: 0.05, mass: 14 };
+function ringParts(k) {
+  const a = RING.a[k], w = RING.w, t = RING.t, o = a + w, m = a + w / 2;
+  return [
+    { shape: 'box', c: [m, 0, 0, 0], e: [w / 2, o, o, t] }, { shape: 'box', c: [-m, 0, 0, 0], e: [w / 2, o, o, t] },
+    { shape: 'box', c: [0, m, 0, 0], e: [a, w / 2, o, t] }, { shape: 'box', c: [0, -m, 0, 0], e: [a, w / 2, o, t] },
+    { shape: 'box', c: [0, 0, m, 0], e: [a, a, w / 2, t] }, { shape: 'box', c: [0, 0, -m, 0], e: [a, a, w / 2, t] },
+  ];
+}
 
 // 1. free tumble: energy and angular momentum conserved
 {
@@ -140,25 +150,6 @@ for (const [rho, wantFlat] of [[60, true], [450, false]]) {
   for (let i = 0; i < 240; i++) w.step();
   const dP = len(sub(P([A, B]), P0)) / len(P0), dL = len(sub(Lt([A, B]), L0)) / len(L0);
   check('ring hits ball: P and L conserved', dP < 1e-9 && dL < 1e-6 && len(sub(B.vel, v0)) > 0.1, `dP ${dP.toExponential(1)}, dL ${dL.toExponential(1)}`);
-}
-// 12. the launcher's pillar: each ring, dropped level over it, threads the spindle, passes the smaller balls and
-// rests on its own; ring II dropped first sits on ball II, and ring I then rests on ring II (they go on in order)
-{
-  const pillar = (w) => { const b = makeBody({ shape: 'compound', parts: pillarParts(), mass: 1e9, mu: PILLAR.mu, pos: onGround(0) }); b.pos = add(onGround(0), b.com); b.kinematic = b.fixed = true; return w.add(b); };
-  const drop = (w, k, tilt = 0) => w.add(makeBody({ shape: 'compound', parts: ringParts(k), mass: RING.mass, mu: RING.mu, pos: onGround(PILLAR.top + 0.25 + 0.3 * k), rot: R4.planeRotation(0, 3, tilt) }));
-  const settle = (w, bs) => { for (let t = 0; t < 12 && !bs.every(b => b.sleeping); t += w.dt) w.step(); };
-  const seated = (b, k) => ({ dz: len(b.pos) - RP - seatHeight(k), off: len(sub(b.pos, scale(up, dot(b.pos, up)))) });
-  const out = [];
-  for (let k = 0; k < 4; k++) {
-    const w = planet(); pillar(w); const r = drop(w, k, k === 2 ? 0.08 : 0); settle(w, [r]);
-    const s = seated(r, k); out.push(s); 
-  }
-  // (friction holds a ring where it lands on its ball, up to a few cm off the axis: real, and it still rests on its own)
-  const ok = out.every(s => Math.abs(s.dz) < 0.01 && s.off < 0.05);
-  check('each ring rests on its own ball', ok, out.map((s, k) => `${'I II III IV'.split(' ')[k]} dz ${(100 * s.dz).toFixed(1)} cm off ${(100 * s.off).toFixed(1)} cm`).join(', '));
-  const w = planet(); pillar(w); const r2 = drop(w, 1); settle(w, [r2]); const r1 = drop(w, 0); r1.pos = add(r1.pos, scale(up, 0.5)); settle(w, [r1, r2]);
-  const s2 = seated(r2, 1), h1 = len(r1.pos) - RP;
-  check('in order: ring I rests on a seated ring II', Math.abs(s2.dz) < 0.01 && h1 > seatHeight(1), `II dz ${(100 * s2.dz).toFixed(1)} cm, I at ${h1.toFixed(2)} m`);
 }
 // 13. a ring on the ground lies flat and sleeps
 {

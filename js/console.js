@@ -1,7 +1,6 @@
 // Planet B's built things and the console of the simulation.
-// The console stands among four pillars on one of B's floors. It stays dark until you have flown a full orbit of
-// planet A (which only works flat across the hoop, timed as the double spin brings that direction round). Then its
-// screen shows its own view, fed back: the universe, with the console in it, with the universe in it, and so on down.
+// The console stands among four pillars on one of B's floors. Its screen shows its own view, fed back: the universe,
+// with the console in it, with the universe in it, and so on down.
 // Using it opens its dials: the strength and the law of gravity, the hoop's length, time, and you. It shows the
 // world's real source, and can always put the true laws back.
 import { G } from './game.js';
@@ -80,7 +79,7 @@ export function bItems(cam, t, alpha = 1) {
 }
 
 // ---------- the orbit ----------
-// A full turn round planet A in flight, staying clear of the ground and within its reach, opens the console.
+// A full turn round planet A in flight, staying clear of the ground and within its reach, chimes (flags.orbited).
 const orbit = { last: null, swept: 0 };
 export function trackOrbit(flight, t) {
   if (!flight.active) { orbit.last = null; orbit.swept = 0; return; }
@@ -98,7 +97,6 @@ export function nearConsole(p) {
   return vec4.len(vec4.sub(p.pos, bworld.console.pos)) < 2.6;
 }
 export function openConsole() {
-  if (!G.flags.orbited) { G.audio?.emit('clack', [0, 0, 0, 0], 0.3); return false; }   // dark: nothing yet
   if (!G.flags.console) { G.flags.console = true; G.audio?.cue('console'); }
   $('console').hidden = false;
   if (!$('console-src').textContent && consoleFirst.show) consoleFirst.show();
@@ -107,8 +105,8 @@ export function openConsole() {
   return true;
 }
 export function closeConsole() { $('console').hidden = true; }
-G.screenOn = false;
-export function updateConsole() { G.screenOn = !!G.flags.orbited; if (G.infinite) objects.pouch = Math.max(objects.pouch, 9); }
+G.screenOn = true;                                 // (open to whoever reaches it: no orbit needed)
+export function updateConsole() { if (G.infinite) objects.pouch = Math.max(objects.pouch, 9); }
 
 const consoleFirst = { show: null };
 // The dials (in symbols, not words: this is the end of a wordless trail).

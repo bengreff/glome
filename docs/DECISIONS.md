@@ -368,3 +368,17 @@ The owner played v1.5: "They are all bad. they don't work, janky, etc. I think w
 - **The lighthouse:** next session.
 
 Run eight's plan is at the top of HANDOFF.md. The puzzles go; the physics they brought stays.
+
+## Run eight decisions (13 October): playable without puzzles
+
+From the interview: playable means the loop works start to finish (stones → launcher → flight → B → console) and the sandbox feels solid. No launcher gating, a speed lever to 72 m/s; a 900 s day with tides on; the guide goes stones → launcher; the console opens on landing. Segments with check-ins, then autonomous to v1.6.
+
+### Segment one: the puzzles scrapped
+
+- **Gone:** the closed room, the mirror key and its mould and house, the knot gate, the fold, the four rings and the pillar (`room.js`, `knot.js`, `fold.js`, `keys.js`, `artifacts.js`), their playthroughs, gates and dev scripts. The two stones each vault gave go with them. Stones now come from caches (two finds in nine are stones), the pedestals at every ruin and cairn (nooks.js), and the three near where you arrive.
+- **Kept:** compound bodies, hinges with stops and catches (bodies.js), ropes (rope.js), stepping up, stepped platforms, holding things on a rail (the sliders). The cave stays as a place, with its lantern and its way out.
+- **The world is laid out a little differently.** Nothing is held clear for the four sites any more, so rocks and trees may stand there, and the lines of cairns from where you arrive now lead only toward the launcher, so the finds are made differently. An older save still loads: its moved finds are dropped in favour of the world's own (as for any save whose finds were made differently), rings and keys in it are skipped, and the puzzles' saved records are ignored.
+- **The launcher has one speed, with no tiers:** 43 m/s for now (segment three adds the lever, up to 72). The pad glows faintly, and brighter while you stand on it. The space map's launch prediction now follows the barrel (it followed your gaze, which was wrong once the barrel came in).
+- **The guide:** with an empty pouch, the nearest whole impulse stone on A that isn't under water (cue F when it's within reach); holding a stone, nothing (the cue under the dot says G); with a stone in the pouch, the launcher's pad (cue Space on it). On B, its own marks show the console and the pad.
+- **The console opens to whoever reaches it.** A full orbit of A still chimes and sets `flags.orbited`, but opens nothing.
+- **The radar's places layer:** cave, ruins, launcher (the artifact marks are gone).

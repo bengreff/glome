@@ -1,1 +1,0 @@
-[{"eval":"1","wait":4000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/pt_room_dbg.js","snap":"end"},{"eval":"JSON.stringify({e: __glome.G.errors||0, last: __glome.G.lastError||null})"}]

@@ -3,10 +3,10 @@ const { g, p, d, O, w, V, len, nz, gt, place, look } = PT;
 const L = d.launcher, C = d.cosmos, out = {};
 const SM = await import(document.querySelector('script[type=importmap]').textContent.match(/"\.\/js\/spacemap\.js": "([^"]+)"/)[1]);
 const up = nz(L.site), T = [[-up[1],up[0],up[3],-up[2]],[-up[2],-up[3],up[0],up[1]],[-up[3],up[2],-up[1],up[0]]];
-// carry parts I–III to the pad (teleported: the carrying is not the puzzle here)
-w.bodies.filter(b => b.kind === 'part' && b.tier <= 3).forEach(b => L.seat(b));
+// the launcher at 53 m/s (an orbit wants about that)
+L.speed = 53;
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0]; p.settleFrame(); await gt(1);
-out.tier = L.tier;
+out.speed = L.speed;
 // wait for a moment when a launch flat across the hoop exists, and aim with the map's own prediction
 const sweep = (pts) => { let s = 0, last = null; for (const q of pts) { const r = nz(V.sub(q.x, C.orbitOf('A', q.t).c)); if (last) s += Math.acos(Math.max(-1, Math.min(1, V.dot(r, last)))); last = r; } return s; };
 // wait for a moment when a launch flat across the hoop exists, and aim with the map's own prediction, made at the
@@ -19,7 +19,7 @@ for (; waited < 400 && !found; waited += 6) {
     const az = Math.random() * 2 * Math.PI, b = Math.random() * Math.PI, e = 0.02 + 0.3 * Math.random();
     const h = nz(V.add(V.sc(T[0], Math.cos(az) * Math.sin(b)), V.add(V.sc(T[1], Math.sin(az) * Math.sin(b)), V.sc(T[2], Math.cos(b)))));
     const dir = nz(V.add(V.sc(h, Math.cos(e)), V.sc(up, Math.sin(e))));
-    const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dir, d.TIERS[3]), t), t);
+    const r = SM.predict(C.toInertial(p.pos, t), C.velToInertial(p.pos, V.sc(dir, L.speed), t), t);
     // bounded, a turn and more, and with room to spare at its low point (the orbit is marginal by nature: a path
     // that skims the hills is lost to the smallest difference between the map's steps and flight's: paths whose low point
     // cleared the hills by under 60 m were lost about half the time)

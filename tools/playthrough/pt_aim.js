@@ -1,7 +1,7 @@
 (async () => {
 // The launcher's aim, as a player sets it: stand at the sliders' stand, take a knob (F) and move your hand along its
-// rail (turning to look along it); the barrel turns with it, and stays where you leave it. Then seat ring I, stand
-// on the pad and jump: you go the way the barrel points.
+// rail (turning to look along it); the barrel turns with it, and stays where you leave it. Then stand on the pad
+// and jump: you go the way the barrel points, at the launcher's speed.
 const { g, p, d, O, w, V, len, nz, gt } = PT, L = d.launcher, A = L.aim, out = {};
 const so4 = await import(document.querySelector('script[type=importmap]').textContent.match(/"\.\/js\/so4\.js": "([^"]+)"/)[1]);
 const R4 = so4.rot, up = nz(L.site), sdir = A.knobs[0].slider.dir, fdir = R4.apply(A.R, [1, 0, 0, 0]);
@@ -19,10 +19,8 @@ d.actions.fDown = true; await gt(0.05); d.actions.fUp = true; await gt(0.5);    
 out.released = O.held === null;
 out.aim = { before: aim0, after: A.angles.map(x => +(x * 57.3).toFixed(1)) };
 await gt(2); out.stays = A.angles.map(x => +(x * 57.3).toFixed(1)).join() === out.aim.after.join();
-// seat ring I, stand on the pad and jump: the launch goes along the barrel
-const r1 = w.bodies.find(b => b.kind === 'part' && b.tier === 1); L.seat(r1); await gt(0.5);
+// stand on the pad and jump: the launch goes along the barrel
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0, 0, 0, 0]; p.settleFrame(); await gt(0.6);
-out.tier = L.tier;
 const dirNow = A.dir.slice(), n0 = g.G.flags.launches || 0;
 out.onPad = L.onPad;
 g.keys.add('Space'); await gt(0.05); g.keys.delete('Space'); await gt(0.1);

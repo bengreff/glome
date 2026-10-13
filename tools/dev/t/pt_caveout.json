@@ -1,1 +1,1 @@
-[{"eval":"1","wait":4000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"/Users/ben/glome/tools/playthrough/pt_room.js"},{"file":"/Users/ben/glome/tools/playthrough/pt_caveout.js","snap":"out"},{"eval":"JSON.stringify({e: __glome.G.errors||0, last: __glome.G.lastError||null})"}]
+[{"eval":"1","wait":14000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"/Users/ben/glome/tools/playthrough/pt_caveout.js","snap":"out"},{"eval":"JSON.stringify({e: __glome.G.errors||0, last: __glome.G.lastError||null})"}]

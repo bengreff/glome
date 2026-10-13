@@ -165,7 +165,7 @@ function cluster(kind, n, hf, keepOut) {
 const slopeAt = (hf, n) => { const T = tangents(n), e = 2; let s = 0; for (const t of T) s += ((hf.heightAt(off(n, t, e)) - hf.heightAt(off(n, t, -e))) / (2 * e)) ** 2; return Math.sqrt(s); };
 // The planet's rocks, clustered by kind on the ground that suits each: outcrops on slopes and heights, crystals in the
 // highlands, smooth stones by rivers and shores, scree at the foot of steep ground, and erratic blocks anywhere dry.
-// A few of each near where you arrive. keepOut(n, r) says where none may stand (the start, the artifacts, paths).
+// A few of each near where you arrive. keepOut(n, r) says where none may stand (the start, the launcher, paths).
 export function makeRocks(hf, home, keepOut, near) {
   seed = 31337;                                               // (the launcher's sockets are already in)
   const gauss = () => rnd() + rnd() + rnd() + rnd() - 2;

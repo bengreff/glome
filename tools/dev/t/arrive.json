@@ -1,1 +1,0 @@
-[{"eval":"1","wait":12000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"eval":"window.__arrive = 'knot'; 1"},{"file":"t/arrive.js","snap":"knot"},{"eval":"location.reload(); 1","wait":14000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"eval":"window.__arrive = 'fold'; 1"},{"file":"t/arrive.js","snap":"fold"}]
