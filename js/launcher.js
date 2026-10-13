@@ -74,19 +74,19 @@ export function buildLauncher(hf) {
   };
   // the aim: a post 3.2 m from the pad's centre on the side away from the pillar, the barrel on a ball at its top;
   // and the sliders' stand beside it, toward the pad (gimbal.js). Each stands on its own ground (the summit falls away).
-  const R = squareOn(s.p);
+  const R = squareOn(s.p), fs = vec4.dot(R4.apply(R, [1, 0, 0, 0]), T[0]) > 0 ? 1 : -1;   // (+f away from the pillar: it stands along −T[0])
   const ground = (f, sd) => { const q = vec4.norm(vec4.add(vec4.scale(s.p, PLANET_R), R4.apply(R, [f, sd, 0, 0]))); return vec4.scale(q, PLANET_R + hf.heightAt(q)); };
-  const up0 = s.p, P0 = ground(3.2, 0), top = vec4.add(P0, vec4.scale(up0, 1.45));
+  const up0 = s.p, P0 = ground(3.2 * fs, 0), top = vec4.add(P0, vec4.scale(up0, 1.45));
   const fixedBox = (c, e, rot = R) => { const b = makeBody({ shape: 'compound', parts: [{ shape: 'box', c: [0, 0, 0, 0], e }], mass: 1e9, mu: 0.5, pos: c, kind: 'aim' }); b.pos = c; b.rot = rot; b.kinematic = b.fixed = b.hidden = true; objects.world.add(b); return b; };
   const showAim = (c, e, shape, mat, rot = R) => { const p = makeProp({ c, rot, e, shape, mat }); p.kind = 'socket'; p.visual = true; addRock(p); return p; };
   fixedBox(vec4.add(P0, vec4.scale(up0, 0.65)), [0.12, 0.12, 0.12, 0.65]); showAim(vec4.add(P0, vec4.scale(up0, 0.65)), [0.12, 0.12, 0.12, 0.65], SHAPE.box, MAT.basalt);
   showAim(top, [0.14, 0.14, 0.14, 0.14], SHAPE.ball, MAT.metal);
   const barrel = makeBody({ shape: 'compound', parts: [{ shape: 'box', c: [0.35, 0, 0, 0], e: [0.55, 0.07, 0.07, 0.07] }], mass: 1e9, mu: 0.5, pos: top, kind: 'barrel' });
   barrel.kinematic = barrel.fixed = true; barrel.mat = 1; barrel.glow = 0.05; objects.world.add(barrel);
-  const S0 = ground(2.0, 1.7), stand = vec4.add(S0, vec4.scale(up0, 0.45));
+  const S0 = ground(2.0 * fs, 1.7), stand = vec4.add(S0, vec4.scale(up0, 0.45));
   fixedBox(stand, [0.42, 0.55, 0.3, 0.45]); showAim(stand, [0.42, 0.55, 0.3, 0.45], SHAPE.box, MAT.basalt);
   const sdir = R4.apply(R, [0, 1, 0, 0]), knobs = [-0.25, 0, 0.25].map((df, k) => {
-    const mid = vec4.add(vec4.add(S0, vec4.scale(up0, 0.93)), R4.apply(R, [df, 0, 0, 0])), a = vec4.sub(mid, vec4.scale(sdir, GIMBAL.rail / 2));
+    const mid = vec4.add(vec4.add(S0, vec4.scale(up0, 0.93)), R4.apply(R, [df * fs, 0, 0, 0])), a = vec4.sub(mid, vec4.scale(sdir, GIMBAL.rail / 2));
     showAim(mid, [0.02, GIMBAL.rail / 2, 0.02, 0.02], SHAPE.box, MAT.metal);
     const b = makeBody({ shape: 'glome', size: 0.06, mass: 1, pos: a, kind: 'knob' });
     Object.assign(b, { kinematic: true, mat: 1, glow: 0.05, keep: true, mounted: true, slider: { k, a: vec4.add(a, vec4.scale(up0, 0.06)), dir: sdir, len: GIMBAL.rail, x: placeOf(k, GIMBAL.start[k]) } });
@@ -104,7 +104,7 @@ export function setAim(angles) {
 // The barrel follows the sliders.
 function aimFromKnobs() {
   const A = launcher.aim;
-  A.knobs.forEach(b => { const S = b.slider; b.pos = vec4.add(S.a, vec4.scale(S.dir, S.x * S.len)); b.prevPos = b.pos.slice(); });
+  A.knobs.forEach(b => { const S = b.slider; b.pos = vec4.add(S.a, vec4.scale(S.dir, S.x * S.len)); b.prevPos = b.pos.slice(); b.prevRot = b.rot; });
   A.angles = A.knobs.map((b, k) => angleAt(k, b.slider.x));
   A.dir = vec4.norm(R4.apply(A.R, aim(A.angles)));
   const rot = R4.compose(A.R, barrelRot(A.angles));

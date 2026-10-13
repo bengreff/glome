@@ -49,3 +49,7 @@ Run seven, segment six: the closed room replaces the cave as artifact I. `pt_roo
 arrive, squares up, walks at the room (its front wall stops you), steps round through ana past the walls' reach,
 over the floor and back in (solved), takes ring I and leaves through ana with it (the way then points to the pillar).
 `pt_caveout` starts in the cave's chamber, facing as you came in, and follows the way out to the surface.
+
+Run seven, segment seven: the launcher's aim. `pt_aim` takes the elevation slider's knob, slides it as a hand does
+(walking along the rail), lets go, and checks the barrel turned with it and stays; then seats ring I and jumps from
+the pad: the launch goes along the barrel. `pt_orbit` and `pt_landB` set the barrel to the direction they find.

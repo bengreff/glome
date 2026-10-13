@@ -14,7 +14,7 @@ const knob = A.knobs[2]; stand(V.sub(knob.pos, V.sc(fdir, 1.0)), knob.pos); awai
 d.actions.fDown = true; await gt(0.3); out.took = O.held === knob;
 // slide it toward one end: walk along the rail (s) for a moment, as your hand carries it
 const key = V.dot(p.R, sdir) < 0 ? 'KeyD' : 'KeyA';
-g.keys.add(key); await gt(0.4); g.keys.delete(key); await gt(0.3);
+g.keys.add(key); await gt(0.12); g.keys.delete(key); await gt(0.3);
 d.actions.fDown = true; await gt(0.05); d.actions.fUp = true; await gt(0.5);     // (let go)
 out.released = O.held === null;
 out.aim = { before: aim0, after: A.angles.map(x => +(x * 57.3).toFixed(1)) };
@@ -23,8 +23,10 @@ await gt(2); out.stays = A.angles.map(x => +(x * 57.3).toFixed(1)).join() === ou
 const r1 = w.bodies.find(b => b.kind === 'part' && b.tier === 1); L.seat(r1); await gt(0.5);
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0, 0, 0, 0]; p.settleFrame(); await gt(0.6);
 out.tier = L.tier;
-const dirNow = A.dir.slice();
+const dirNow = A.dir.slice(), n0 = g.G.flags.launches || 0;
+out.onPad = L.onPad;
 g.keys.add('Space'); await gt(0.05); g.keys.delete('Space'); await gt(0.1);
+out.launched = (g.G.flags.launches || 0) > n0;
 const v = d.flight.active ? null : p.vel;
 out.launch = v ? +(Math.acos(Math.min(1, V.dot(nz(v), dirNow))) * 57.3).toFixed(1) : 'in flight';
 out.speed = v ? +len(v).toFixed(1) : null;

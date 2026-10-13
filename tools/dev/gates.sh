@@ -9,7 +9,7 @@ echo "== smoke"; "$D/run.sh" smoke 90 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== settle (start, inwood, herd, down, outcrop)"; "$D/run.sh" sv2 400 --gpu 2>&1 | grep -v '^eval: 1$\|^status\|tour ready'
 echo "== persistence"; "$D/run.sh" persist 150 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== finds persistence"; "$D/run.sh" fp 150 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
-echo "== playthroughs"; for n in room caveout mirror knot fold; do printf "%s: " $n; "$D/run.sh" pt_$n 150 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .; done
+echo "== playthroughs"; for n in room caveout mirror knot fold aim; do printf "%s: " $n; "$D/run.sh" pt_$n 150 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .; done
 printf "orbit: "; "$D/run.sh" pt_orbit 700 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 printf "landB: "; "$D/run.sh" pt_landB 800 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 echo "== load"; sysctl -n vm.loadavg
