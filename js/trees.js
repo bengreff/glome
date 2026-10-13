@@ -261,14 +261,18 @@ export function treeFrame(cam, sun, W, H, fov) {
     Gd.set([(sx / (fov * aspect) * 0.5 + 0.5) * W, (sy / fov * 0.5 + 0.5) * H, rr / fov * 0.5 * H + 3, R], 12 * i);
   };
   // the pieces since `first`, in chunks of a few (a branch and its twigs lie together), each with its bounding ball;
-  // leafy: a chunk of clumps of leaves only (stored as 3D balls in the slice, their 4D centres second)
+  // leafy: a chunk of clumps of leaves only (stored as 3D balls in the slice, their 4D centres second); 'skin': a
+  // creature's pieces, one group, blended into one surface by the shader (each piece holds the group's first piece and
+  // count, for its shading)
   const group = (first, leafy = false) => {
-    for (let s0 = first; s0 < nc && ng < MAXTG; s0 += CHUNK) {
-      const s1 = Math.min(nc, s0 + CHUNK), c = [0, 0, 0, 0], ends = leafy ? [4] : [0, 4];
+    const skin = leafy === 'skin', chunk = skin ? 16 : CHUNK;
+    if (skin) for (let j = first; j < nc; j++) { D[12 * j + 10] = first; D[12 * j + 11] = nc - first; }
+    for (let s0 = first; s0 < nc && ng < MAXTG; s0 += chunk) {
+      const s1 = Math.min(nc, s0 + chunk), c = [0, 0, 0, 0], ends = leafy === true ? [4] : [0, 4];
       for (let j = s0; j < s1; j++) for (const e of ends) for (let q = 0; q < 4; q++) c[q] += D[12 * j + e + q] / (ends.length * (s1 - s0));
       let R = 0;
       for (let j = s0; j < s1; j++) for (const e of ends) { const o = 12 * j + e; R = Math.max(R, Math.hypot(D[o] - c[0], D[o + 1] - c[1], D[o + 2] - c[2], D[o + 3] - c[3]) + D[12 * j + 8]); }
-      Gd.set(c, 12 * ng + 4); Gd[12 * ng + 8] = s0; Gd[12 * ng + 9] = s1 - s0; Gd[12 * ng + 10] = leafy ? 1 : 0; Gd[12 * ng + 11] = 0;
+      Gd.set(c, 12 * ng + 4); Gd[12 * ng + 8] = s0; Gd[12 * ng + 9] = s1 - s0; Gd[12 * ng + 10] = skin ? 2 : leafy ? 1 : 0; Gd[12 * ng + 11] = 0;
       circle(c, R, ng); ng++;
     }
   };
@@ -281,13 +285,14 @@ export function treeFrame(cam, sun, W, H, fov) {
     let R = 0; for (const p of x) R = Math.max(R, vec4.len(vec4.sub(p, c)) + r.r);
     if (vec4.len(vec4.sub(c, eye)) < 150 + R && Math.abs(vec4.dot(vec4.sub(c, eye), A)) < R) extras.push({ caps: (r.E || x.slice(1).map((_, i) => [i, i + 1])).map(([a, b]) => [x[a], x[b], r.r, 2]), c, R });
   }
-  for (const L of legs.caps) extras.push(L);                   // { caps: [[a, b, r, kind]], c, R } per walker
+  for (const L of legs.caps) extras.push(L);                   // { caps: [[a, b, r, kind]], c, R, skin } per creature
   const tmp = new Float32Array(10);
   for (const e of extras) {
     if (ng >= MAXTG) break;
     const first = nc;
+    if (e.skin && nc + e.caps.length > MAXTC) break;
     for (const [a, b, r, kind] of e.caps) { if (nc >= MAXTC) break; tmp.set(a, 0); tmp.set(b, 4); tmp[8] = r; tmp[9] = kind; emit(tmp, 0, 1); }
-    group(first);
+    group(first, e.skin ? 'skin' : false);
   }
   // the flora near you (flora.js): the clusters your slice cuts, nearest first, a group to a plant (so its circle on
   // the screen is small), within a share of the budget
