@@ -20,6 +20,7 @@ import { objects, spawn, KINDS } from './objects.js';
 import { makeProp, addRock, SHAPE, MAT } from './props.js';
 import { mouldParts, MOULD, cellCentre, RING } from './keys.js';
 import { reachAlong, bodyOf, spawnAt } from './objects.js';
+import { seated } from './launcher.js';
 import { gateParts, gateBuild, GATE } from './knot.js';
 import { foldParts, foldBuild, CHEST } from './fold.js';
 import { roomParts, inRoom, ROOM } from './room.js';
@@ -61,17 +62,17 @@ function fixedCompound(parts, o, R, kind) {
   objects.world.add(b);
   return b;
 }
-// A place near n for a built artifact: dry within 9 m (no water above the ground: waterAt is the water's surface
+// A place near n for a built artifact: dry within 7 m (no water above the ground: waterAt is the water's surface
 // height, where there is water), between 1.5 and 24 m up, and as level as can be found within 7 m; the nearest one
-// level to tol (0.8 m), or failing that the levellest dry one within 250 m.
-function siteNear(n, tol = 0.8) {
+// level to tol (1 m: the platform's steps take up the rest), or failing that the levellest dry one within 250 m.
+function siteNear(n, tol = 1.0) {
   const hf = G.player.hf;
   const score = q => { const T = tangents(q); let lo = Infinity, hi = -Infinity;
-    for (const d of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0, 0.7], [0, -0.7, -0.7], [0.6, -0.6, 0.6], [-0.6, 0.6, -0.6]]) for (const r of [3.5, 7, 9]) {
+    for (const d of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0, 0.7], [0, -0.7, -0.7], [0.6, -0.6, 0.6], [-0.6, 0.6, -0.6]]) for (const r of [3.5, 7]) {
       const dir = [0, 1, 2, 3].map(i => d[0] * T[0][i] + d[1] * T[1][i] + d[2] * T[2][i]), l = Math.hypot(...dir);
       const p = l < 1e-9 ? q : off(q, vec4.scale(dir, 1 / l), r * l), h = hf.heightAt(p);
       if (hf.waterAt(p) > h - 0.05 || h < 1.5 || h > 24) return Infinity;
-      if (r < 8) { lo = Math.min(lo, h); hi = Math.max(hi, h); }
+      lo = Math.min(lo, h); hi = Math.max(hi, h);
     }
     return hi - lo; };
   let best = n, bs = score(n);
@@ -117,7 +118,7 @@ export function buildArtifacts() {
   // I. the closed room (room.js): on open, level, dry ground near where part I was put (14 m from where you arrive,
   // toward the summit), a stone platform a little over the highest ground under it, the room on it, ring I inside
   {
-    const p = partOf(1), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const p = partOf(1), n = siteNear(vec4.norm(p.pos)), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
     const at = (o, c) => vec4.add(o, R4.apply(R, c));
     const P = roomParts(), { foot, parts: plat } = platformAt(n, R, P.platform[0]);
     fixedCompound([...plat, ...P.walls, ...P.bars], foot, R, 'room');
@@ -178,7 +179,7 @@ export function buildArtifacts() {
   // III. the knot gate (knot.js): on open, level, dry ground near where part III was put, a stone platform a little
   // over the highest ground under it, with the house on it, the leaf in its doorway and the pillar and peg in front
   {
-    const p = partOf(3), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const p = partOf(3), n = siteNear(vec4.norm(p.pos)), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
     const at = (o, c) => vec4.add(o, R4.apply(R, c));
     const all = gateParts(), { foot, parts: plat } = platformAt(n, R, all[0]), parts = all.slice(1);
     fixedCompound([...plat, ...parts], foot, R, 'gatehouse');
@@ -196,7 +197,7 @@ export function buildArtifacts() {
   // there is dry ground), a stone platform a little over the highest ground under it, the cross lying on it and the
   // chest at its foot (−f), ring IV inside under the lid
   {
-    const p = partOf(4), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const p = partOf(4), n = siteNear(vec4.norm(p.pos)), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
     const at = (o, c) => vec4.add(o, R4.apply(R, c));
     const P = foldParts(), { foot, parts: plat } = platformAt(n, R, P.platform[0]);
     fixedCompound([...plat, ...P.chest], foot, R, 'foldsite');
@@ -211,6 +212,10 @@ export function buildArtifacts() {
       // solved when every hinge is within 4° of its stop: six cells up round the middle, the last over them
       check() { return fd.angles().every(x => x > 1.5); } });
   }
+  // where each part is kept (and the mirror's key lies), for a save made before the artifacts were rebuilt
+  for (const a of artifacts) if (a.part) a.home = { pos: a.part.pos.slice(), rot: a.part.rot };
+  const key = objects.world.bodies.find(b => b.tag === 'key2'), mir = artifacts.find(a => a.id === 'mirror');
+  if (key && mir) mir.keyHome = { pos: key.pos.slice(), rot: key.rot };
   G.artifacts = artifacts;
 }
 
@@ -245,9 +250,19 @@ export function updateArtifacts() {
 }
 // After a load: vaults of solved artifacts are gone, and the parts in the others are held fast again.
 export function syncArtifacts() {
+  if (G.flags.solved_antipode && !G.flags.solved_fold) G.flags.solved_fold = true;     // (a save from before the fold replaced the antipode)
   for (const a of artifacts) {
     if (a.part) a.part = objects.world.bodies.find(b => b.kind === 'part' && b.tier === a.part.tier) || a.part;
+    const done = G.flags['solved_' + a.id] || (a.id === 'room' && G.flags.part1);
+    // a save from before the artifacts were rebuilt keeps an unsolved one's ring where its old vault was: back inside
+    if (!done && a.part && a.home && !a.part.held && !seated(a.part) && vec4.len(vec4.sub(a.part.pos, a.home.pos)) > 1) {
+      a.part.pos = a.home.pos.slice(); a.part.prevPos = a.part.pos.slice(); a.part.rot = a.home.rot; a.part.vel = [0, 0, 0, 0]; a.part.omega = [0, 0, 0, 0, 0, 0];
+    }
+    if (a.id === 'mirror' && !done && a.keyHome) {
+      const k = objects.world.bodies.find(b => b.tag === 'key2');
+      if (k && !k.held && vec4.len(vec4.sub(k.pos, a.keyHome.pos)) > 30) { k.pos = a.keyHome.pos.slice(); k.prevPos = k.pos.slice(); k.rot = a.keyHome.rot; k.vel = [0, 0, 0, 0]; k.omega = [0, 0, 0, 0, 0, 0]; k.sleeping = false; }
+    }
     if (G.flags['solved_' + a.id]) open(a, true);
-    else freeze(a.part);
+    else if (a.id !== 'room') freeze(a.part);
   }
 }

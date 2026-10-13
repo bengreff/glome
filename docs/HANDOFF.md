@@ -1,4 +1,4 @@
-# Glome: handoff (written 12 October 2026, after v1.3)
+# Glome: handoff (written 12 October 2026, after v1.3; run seven's status added at its end, after v1.4)
 
 ## 0. How the next session starts: an interview
 
@@ -6,7 +6,7 @@ Before writing any code, interview the owner. Many questions need answers (secti
 
 ## 1. Where things stand
 
-- **Live:** v1.3 at https://bengreff.github.io/glome/ (repo `~/glome`, tags v0.0 to v1.3). The itch.io zip is `dist/glome-v1.3.zip`, built by `tools/package.sh`; uploading it is the owner's job.
+- **Live:** v1.4 and after at https://bengreff.github.io/glome/ (repo `~/glome`, tags v0.0 to v1.4). The itch.io zip is `dist/glome-v1.4.zip`, built by `tools/package.sh`; uploading it is the owner's job.
 - **Reports:** `docs/NIGHT_REPORT.md` has a section per run (three to six); every choice and its reason is in `docs/DECISIONS.md`.
 - **Since v1.0:**
   - **v1.1, the way:** one goal at a time. A column of light in your slice, a diamond mark, and key-cap cues: E/Q with a distance to step through ana, and F, Z C or Space for what to do. Walkers look like animals, the radar is decluttered with stalks, and fixed stone is dark.
@@ -74,6 +74,13 @@ Before writing any code, interview the owner. Many questions need answers (secti
 
 That is about four hours of segments. At a check-in, ask whether to continue autonomously after the owner leaves.
 
+**Run seven's status (end of the night, 12 October):**
+- **Segments 1–7 are done and live.** v1.4 is tagged after segment 6, when all four puzzles were rebuilt; the itch zip is `dist/glome-v1.4.zip`. Segment 7 (the barrel and sliders) and a gamepad binding came after the tag.
+- **Segment 8, creature concepts:** a page of three concepts, `tools/concepts/creatures.html` (serve the repo and open `/tools/concepts/creatures.html`), with a contact sheet in NIGHT_REPORT. The owner picks; nothing in the game has changed.
+- **Segment 9, tides:** computed, not built. The true equilibrium tide is ±5 m at a place, every 2.5 minutes. A decision for the owner (NIGHT_REPORT, "Two decisions for you").
+- **Segment 10, the hoop lighthouse:** a proposal in NIGHT_REPORT, not built. It needs the planet's copies drawn with their towers.
+- **The next session starts** by asking the owner those decisions, what they found playing v1.4, and about Windows.
+
 (Section 3 above is the owner's original list; 3a supersedes it where they differ.)
 
 ## 4. Interview questions (a draft: add, cut, reorder)
@@ -126,23 +133,7 @@ That is about four hours of segments. At a check-in, ask whether to continue aut
 - `creatures.js`, `flora.js`, `trees.js`, `props.js` (rocks), `radar.js`.
 - `render.js` and `shaders.js`; see `programsReady` for the background compile.
 
-**Impulse stones today:**
-- Some lie in caches, and two appear beside each vault when it opens.
-- F on one stows it in the pouch at once. The only cue is the general F under the dot.
-- G throws one from the pouch (80 m/s, with recoil). The pouch shows as dots under the radar.
-- None are ever made again.
-
-**The launcher today:**
-- A pad on the summit with four metal sockets flush in its top, at the corners of a tetrahedron in the ground's three directions. Your slice shows some of them at a time.
-- A socket lights, with a chime, when a part lies within 3.6 m of the pad's centre. Parts aren't tied to particular sockets.
-- The tier is the highest k such that parts I to k are all present.
-
-**The mirror puzzle (`artifacts.js`, II):**
-- A vault: a dark 1 m block sunk in the ground, with part II inside.
-- A metal socket 3.2 m away, sunk in the ground.
-- A pillar 1.4 m from the socket, with the model on top: the key as it must sit.
-- The key, 2.4 m from the socket on the other side, lying as the model's mirror image.
-- Solved when the key lies within 1 m of the socket with its first two axes within about 37° of the model's.
+**Run seven changed the stones, the launcher and every puzzle** (the "today" notes that stood here described v1.3): see DECISIONS.md, "Run seven decisions" and its segments. The new modules: `keys.js` (rings, pillar, mirror key and mould), `nooks.js` (stones regrowing), `knot.js` (gate, rope, hinge), `fold.js` (the tesseract's net), `room.js` (the closed room), `gimbal.js` (the launcher's aim). Hinges, stops and catches are in `bodies.js`; the rope's ties to bodies and substeps in `rope.js`.
 
 **Budgets:** the settle gate is 60 fps at 50% resolution or more on the M2 Pro. v1.3 settles at 55–60%, and the main thread's frame work is about 3.8 ms.
 

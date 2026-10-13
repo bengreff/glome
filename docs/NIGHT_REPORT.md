@@ -268,3 +268,56 @@ You played v1.2: it would not load on Windows and froze the browser; the creatur
 
 1. **Try it on Windows** and tell me what the loading screen says if it still stops: it now shows each step, and how long the shaders take to compile. If a shader fails, it shows the error instead of freezing; a copy of that text would let me fix it.
 2. **itch.io:** upload `dist/glome-v1.3.zip` in place of v1.2.
+
+## Run seven (12 October): four puzzles rebuilt, keys you can see, stones that come back (v1.4)
+
+You played v1.3: you got the first key from the cave, but had no idea what the second puzzle wanted (you stacked its key on the model). You asked for keys you can recognise, impulse stones that come back, a cue to stow one, clear places on the launcher, and better creatures. We did an interview first (the answers are HANDOFF.md §3a). You were here for the first segments, then left me to carry on.
+
+### What changed
+
+1. **Keys are brass rings**, the only brass in the world. They are threaded onto a pillar beside the launch pad: a thin spindle with four balls, smaller going up. Let a ring go over the spindle and it drops past every ball smaller than its hole and rests on the one that fits. Its ball lights, and the tier is the rings resting, counted from the bottom. Taking a ring makes its ball pulse and the guide point to the pillar.
+2. **Impulse stones come back.** Every ruin and cairn has a pedestal where a stone forms over three minutes. F takes a stone into your hand like anything else. G puts it in the pouch, or takes one out. The pouch holds nine, shown under the radar.
+3. **The four puzzles are rebuilt as structures,** on level, dry ground. The guide shows only where they are, never what to do.
+   - **I. The closed room**, 14 m from where you arrive. You can see ring I on a plinth through a grille. In your slice the room is walled on every side, roof included, but its walls reach only a metre toward ana. Step round them through ana and back: you're inside.
+   - **II. The mirror key.** A mould on a plinth, half its cells solid, and a brass key that is the empty half's mirror image. As found it jams. Turned half a turn through ana in your hands (R and right-drag sideways), it slides home and the house beside it opens.
+   - **III. The knot gate.** A heavy leaf in a doorway, hung by its foot and leaning in. A rope from its top runs to a loop over a capped peg. In 3D the loop is captive. In 4D the peg is as thin toward ana as across, so a short step through ana while holding the loop lifts it off, and the leaf falls in.
+   - **IV. The fold** (replaces the antipode). Dalí's cross of eight cells, a tesseract's net, lies flat. Lift the six plates round the middle on their hinges (two of them are toward ana: turn to see them), turn the last over as a roof, and they close into a tesseract. A chest opens on ring IV.
+4. **Aiming the launch.** The launcher throws you along a barrel on a gimbal beside the pad, not along your gaze. Three sliders on a stand set it: round, toward ana or kata, and up.
+5. **Physics** (the details are in DECISIONS.md):
+   - Bodies built of boxes, balls and capsules, with full 4D inertia.
+   - Hinges that leave one plane of turning, with stops and catches.
+   - A rope that holds a heavy body.
+   - Contacts that can't create energy.
+   - Box contacts that see the true gap at a corner.
+   - Stepping up onto low edges.
+6. **Hands.**
+   - R and the mouse turn what you hold, including through ana. On a gamepad, click the right stick and turn it with that stick.
+   - Things on a hinge or a rail are held by the point you took.
+   - The doorways were too low to walk through (1.9 m, and you are 2.05 m tall); they are now 2.2 m.
+
+### What I measured for you
+
+- **The star is right as you see it**: one sun, or a short-lived row, fading in and out as your slice sweeps past the copies along the hoop.
+- **Drift in a jump is real.** About 20 cm, mostly from A's own copies pulling sideways (0.4 m/s² at the median), plus a little Coriolis.
+- **Seeing yourself round the hoop happens about 30 times an hour, for about 17 s each time.**
+- **Tides** (below, a decision for you).
+
+### Two decisions for you
+
+**1. Tides.** I computed the equilibrium tide with the game's own gravity (A's copies round the hoop, the star, B, and the spin's centrifugal pull), integrated over the sea's surface:
+- **Across the planet at any moment:** the sea's surface would stand 11–12 m higher in some places than in others.
+- **At any one place:** the sea would rise and fall about 9.5 m (between 4 and 12 m) over 600 s, two of A's 300-second days. That's a tide every two and a half minutes.
+- **On gentle shores**, the water's edge would move faster than you walk.
+- **On the real sea it would be wilder still.** The forcing turns in two and a half minutes, about as long as a wave takes to cross the sea: shallow water a few metres to 15 m deep carries a wave at roughly 9–15 m/s, so 100–180 s round the planet. The water would slosh rather than settle into the equilibrium shape, and showing that would need a simulation of its own.
+
+It would reshape the beaches, the raft's shore and the islands joined through ana, and some low places would flood twice every five minutes. Realism says build it; it changes the world enough that I'd rather you chose:
+- (a) the true tide;
+- (b) the true tide, with the planet's day made slower so the tides come every few minutes rather than every two and a half;
+- (c) no tide.
+
+**2. The hoop lighthouse puzzle** (your idea from the interview). Here is a proposal; it isn't built.
+- **The tower.** A lit tower stands where the hoop's direction often lies level.
+- **Seeing yourself.** When the hoop lies level there, look along it and you see the tower's own light on the rim of the planet's copy in the sky, 800 m away, blinking as the planet turns.
+- **The beam.** The tower fires a beam you aim with sliders, like the launcher's barrel. Aimed exactly along the hoop, the beam goes round the universe and comes back from behind, into a detector on the tower's back. Because the hoop's direction turns with the planet, you aim where it will be and wait for the moment. Often that's partly toward ana: the detector lights only if you aimed through ana too.
+- **What it needs:** the planet's copies would have to be drawn with their towers (today they are only ground and sea).
+- **The "waves as gradients" idea.** In four space dimensions a pulse of light leaves a fading tail behind its front, but at light's speed the tail is far too short to see. Sound would show it, but there is no air between the copies. So I'd leave that out unless you have another use for it.
