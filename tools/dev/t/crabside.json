@@ -1,0 +1,1 @@
+[{"eval":"1","wait":15000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/crabshot.js","wait":500},{"file":"t/crabside.js","wait":300,"snap":"q34"},{"file":"t/crabshot2.js","wait":600,"snap":"q34ana"},{"file":"t/crabwalk.js","snap":"walking"}]

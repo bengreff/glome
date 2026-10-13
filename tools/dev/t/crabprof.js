@@ -1,0 +1,1 @@
+(() => { const g = __glome; return JSON.stringify({ prof: g.prof && Object.fromEntries(Object.entries(g.prof).filter(([k, v]) => typeof v === 'number').map(([k, v]) => [k, +v.toFixed(2)])), e: g.G.errors || 0, last: g.G.lastError || null }); })()

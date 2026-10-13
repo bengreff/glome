@@ -1,0 +1,1 @@
+[{"eval":"1","wait":15000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/crabshot.js","wait":3000,"snap":"benchview"},{"eval":"window.B_BITS = { base: 0, noTrees: 32 }; 1"},{"file":"t/bench.js"}]
