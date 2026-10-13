@@ -1,0 +1,1 @@
+[{"eval":"1","wait":3000},{"eval":"window.__at(0); 1","wait":800,"snap":"a0"},{"eval":"window.__at(30); 1","wait":800,"snap":"a30"},{"eval":"window.__at(45); 1","wait":800,"snap":"a45"},{"eval":"window.__at(90); 1","wait":800,"snap":"a90"}]

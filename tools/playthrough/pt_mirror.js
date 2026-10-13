@@ -59,7 +59,7 @@ out.turned = { solved: !!g.G.flags.solved_mirror, door: !!w.bodies.find(b => b.t
 const part = m.part;
 standAt(V.sub(m.house, V.sc(s_, 2.8))); await gt(0.4); await faceDir(nz(horiz(V.sub(part.pos, p.pos)))); p.pitch = 0;
 let near = 9; keys.add('KeyW');
-for (let i = 0; i < 60; i++) { await gt(0.1); near = len(horiz(V.sub(part.pos, p.pos))); if (near < 1.0) break; }
+for (let i = 0; i < 60; i++) { await gt(0.1); near = len(horiz(V.sub(part.pos, p.pos))); if (near < 1.3) break; }   // (short of it: a ring on the floor is low enough to step onto, and what you stand on you cannot lift)
 keys.delete('KeyW'); await gt(0.3);
 out.reached = +near.toFixed(2);
 p.pitch = Math.asin(V.dot(nz(V.sub(part.pos, p.camera().eye)), up)); await gt(0.2); d.actions.fDown = true; await gt(0.4);

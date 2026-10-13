@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creature concepts</title>
+<style>
+  :root { --bg: #11161d; --ink: #dfe6ee; --dim: #8a97a6; --acc: #52dcc8; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "IBM Plex Sans", system-ui, sans-serif; }
+  header { padding: 18px 20px 6px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 6px; font-weight: 600; }
+  p { margin: 0 0 8px; color: var(--dim); max-width: 860px; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; padding: 10px 20px 20px; max-width: 1180px; margin: 0 auto; }
+  figure { margin: 0; background: #0b0f14; border: 1px solid #222b36; border-radius: 6px; overflow: hidden; }
+  canvas { display: block; width: 100%; aspect-ratio: 4 / 3; }
+  figcaption { padding: 8px 12px 12px; }
+  figcaption b { color: var(--acc); }
+  .bar { display: flex; gap: 14px; align-items: center; padding: 0 20px 6px; max-width: 1180px; margin: 0 auto; color: var(--dim); flex-wrap: wrap; }
+  input[type=range] { width: 260px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Creature concepts: one smooth skin each</h1>
+  <p>Each creature is a single continuous 4D surface: a body, a head and legs blended into one skin, with no seams or joints. What you see is your slice of it, as in the game. Turning it through ana (in the plane of its side and ana: the slider, or let it run) shows what a 4D animal looks like as it turns: limbs that lie toward ana swell into view and vanish, and the body's outline changes. Pick one, or parts of several.</p>
+</header>
+<div class="bar">
+  <label>turn through ana <input id="ang" type="range" min="0" max="360" value="0"></label>
+  <label><input id="run" type="checkbox" checked> turning</label>
+  <span id="deg">0°</span>
+</div>
+<main>
+  <figure><canvas id="c0"></canvas><figcaption><b>A. Strider.</b> A long body on eight legs, four at each end, spaced round it through ana: left, right, ana and kata. Square to it, your slice shows four legs and an ordinary-looking beast; turned 45° through ana, all eight are cut to stubs and it seems to float; at 90° it is a beast again, on its other four. The most animal.</figcaption></figure>
+  <figure><canvas id="c1"></canvas><figcaption><b>B. Crab.</b> A round body with six legs, one along each of the ground's three directions, either way. In your slice it walks on four, like a crab seen from above; turn through ana and the other two swing in as two of these swing out. Visibly 4D, a little alien.</figcaption></figure>
+  <figure><canvas id="c2"></canvas><figcaption><b>C. Ringback.</b> A body that is a ring through ana: a fat torus round its own long axis, on four legs, with a head. Square to it, you see a solid back; turned a little, a back split in two; turned a quarter, a hoop. The strangest, and nothing in 3D could be shaped like it.</figcaption></figure>
+</main>
+<script>
+const FRAG = `#version 300 es
+precision highp float;
+uniform vec2 uRes; uniform float uAng, uCam; uniform int uKind;
+out vec4 col;
+float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+float sdCap(vec4 p, vec4 a, vec4 b, float r) { vec4 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r; }
+float sdEll(vec4 p, vec4 r) { float k0 = length(p / r), k1 = length(p / (r * r)); return k0 * (k0 - 1.0) / k1; }
+// a leg from the hip h, out along the ground direction d (a unit vector in side and ana), down to a foot on the ground
+float leg(vec4 p, vec4 h, vec4 d, float out1, float r) {
+  vec4 knee = h + d * out1 + vec4(0, 0, 0.18, 0), foot = h + d * (out1 * 1.25) - vec4(0, 0, h.z, 0);
+  return smin(sdCap(p, h, knee, r), sdCap(p, knee, foot, r * 0.8), 0.06);
+}
+// coordinates: x forward, y side, z up, w ana (the creature's own frame)
+float creature(vec4 p) {
+  float d;
+  if (uKind == 0) {                      // A. Strider
+    d = sdEll(p - vec4(0, 0, 0.95, 0), vec4(0.75, 0.32, 0.3, 0.32));
+    d = smin(d, sdCap(p, vec4(0.55, 0, 1.05, 0), vec4(0.95, 0, 1.45, 0), 0.13), 0.12);   // neck
+    d = smin(d, sdEll(p - vec4(1.05, 0, 1.5, 0), vec4(0.24, 0.13, 0.13, 0.13)), 0.08);   // head
+    d = smin(d, sdCap(p, vec4(-0.6, 0, 1.0, 0), vec4(-1.05, 0, 0.75, 0), 0.06), 0.1);    // tail
+    for (int i = 0; i < 4; i++) {
+      float a = 1.5708 * float(i); vec4 dir = vec4(0, cos(a), 0, sin(a));
+      d = smin(d, leg(p, vec4(0.45, 0, 0.85, 0) + dir * 0.18, dir, 0.25, 0.07), 0.1);
+      d = smin(d, leg(p, vec4(-0.45, 0, 0.85, 0) + dir * 0.18, dir, 0.25, 0.07), 0.1);
+    }
+  } else if (uKind == 1) {               // B. Crab
+    d = sdEll(p - vec4(0, 0, 0.6, 0), vec4(0.42, 0.42, 0.28, 0.42));
+    d = smin(d, sdEll(p - vec4(0.4, 0, 0.72, 0), vec4(0.14, 0.12, 0.1, 0.12)), 0.1);     // a head, forward
+    for (int i = 0; i < 6; i++) {
+      vec4 dir = i == 0 ? vec4(1, 0, 0, 0) : i == 1 ? vec4(-1, 0, 0, 0) : i == 2 ? vec4(0, 1, 0, 0) : i == 3 ? vec4(0, -1, 0, 0) : i == 4 ? vec4(0, 0, 0, 1) : vec4(0, 0, 0, -1);
+      vec4 h = vec4(0, 0, 0.55, 0) + dir * 0.3, knee = h + dir * 0.35 + vec4(0, 0, 0.25, 0), foot = h + dir * 0.6 - vec4(0, 0, 0.55, 0);
+      d = smin(d, smin(sdCap(p, h, knee, 0.075), sdCap(p, knee, foot, 0.055), 0.05), 0.1);
+    }
+  } else {                                // C. Ringback
+    vec4 q = p - vec4(0, 0, 1.0, 0);
+    float rr = length(vec2(q.z, q.w));               // round its long axis (x), in the plane of up and ana
+    d = sdEll(vec4(q.x, q.y, rr - 0.26, 0), vec4(0.7, 0.22, 0.14, 1.0)) ;
+    d = smin(d, sdEll(p - vec4(0.85, 0, 1.15, 0), vec4(0.22, 0.13, 0.15, 0.13)), 0.12);
+    for (int i = 0; i < 4; i++) {
+      float sx = i < 2 ? 0.45 : -0.45, sy = (i % 2 == 0) ? 1.0 : -1.0;
+      vec4 h = vec4(sx, sy * 0.2, 0.85, 0), dir = vec4(0, sy, 0, 0);
+      d = smin(d, leg(p, h, dir, 0.18, 0.07), 0.1);
+    }
+  }
+  return d;
+}
+float scene(vec3 r, out float which) {
+  // the creature turned through ana by uAng (in the plane of side and ana), cut by the slice w = 0
+  float c = cos(uAng), s = sin(uAng);
+  vec4 p = vec4(r.x, r.y * c, r.z, -r.y * s);
+  float d = creature(p);
+  float g = r.z;
+  which = d < g ? 1.0 : 0.0;
+  return min(d, g);
+}
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+  float ca = uCam;
+  vec3 ro = vec3(3.4 * cos(ca), 3.4 * sin(ca), 1.9), ta = vec3(0.1, 0, 0.75);
+  vec3 fw = normalize(ta - ro), rt = normalize(cross(fw, vec3(0, 0, 1))), up = cross(rt, fw);
+  vec3 rd = normalize(fw * 1.55 + rt * uv.x + up * uv.y);
+  float t = 0.0, w = 0.0; bool hit = false;
+  for (int i = 0; i < 160; i++) { vec3 r = ro + rd * t; float d = scene(r, w); if (d < 0.0008) { hit = true; break; } t += d * 0.8; if (t > 12.0) break; }
+  vec3 sky = mix(vec3(0.62, 0.72, 0.82), vec3(0.32, 0.45, 0.6), uv.y + 0.4);
+  if (!hit) { col = vec4(pow(sky, vec3(1.0 / 2.2)), 1); return; }
+  vec3 r = ro + rd * t; float ww;
+  vec2 e = vec2(0.0015, 0);
+  vec3 n = normalize(vec3(scene(r + e.xyy, ww) - scene(r - e.xyy, ww), scene(r + e.yxy, ww) - scene(r - e.yxy, ww), scene(r + e.yyx, ww) - scene(r - e.yyx, ww)));
+  vec3 L = normalize(vec3(0.5, 0.35, 0.8));
+  float dif = max(0.0, dot(n, L)), sh = 1.0;
+  { float tt = 0.02; for (int i = 0; i < 48; i++) { float hh = scene(r + n * 0.002 + L * tt, ww); sh = min(sh, 10.0 * hh / tt); tt += clamp(hh, 0.02, 0.25); if (sh < 0.01 || tt > 4.0) break; } sh = clamp(sh, 0.0, 1.0); }
+  vec3 alb;
+  if (w > 0.5) {
+    // one skin: a warm hide, darker along the back, a little sheen
+    alb = mix(vec3(0.55, 0.42, 0.32), vec3(0.32, 0.24, 0.2), smoothstep(0.85, 1.2, r.z));
+    float rim = pow(1.0 - max(0.0, dot(n, -rd)), 3.0);
+    vec3 c = alb * (0.25 + 0.85 * dif * sh) + vec3(0.6, 0.7, 0.8) * 0.18 * (0.5 + 0.5 * n.z) + rim * 0.12;
+    c += pow(max(0.0, dot(reflect(-L, n), -rd)), 24.0) * 0.18 * sh;
+    col = vec4(pow(c, vec3(1.0 / 2.2)), 1);
+  } else {
+    float chk = mod(floor(r.x * 2.0) + floor(r.y * 2.0), 2.0);
+    alb = mix(vec3(0.36, 0.45, 0.3), vec3(0.4, 0.5, 0.33), chk);
+    vec3 c = alb * (0.3 + 0.8 * dif * sh);
+    c = mix(c, sky, 1.0 - exp(-0.02 * t * t));
+    col = vec4(pow(c, vec3(1.0 / 2.2)), 1);
+  }
+}`;
+const VERT = `#version 300 es
+in vec2 p; void main() { gl_Position = vec4(p, 0, 1); }`;
+const views = [0, 1, 2].map(k => {
+  const cv = document.getElementById('c' + k), gl = cv.getContext('webgl2', { preserveDrawingBuffer: true });
+  const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(pr);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  return { cv, gl, pr, k };
+});
+const ang = document.getElementById('ang'), run = document.getElementById('run'), deg = document.getElementById('deg');
+let a = 0, last = performance.now();
+function draw(now) {
+  const dt = (now - last) / 1000; last = now;
+  if (run.checked) { a = (a + dt * 20) % 360; ang.value = a; } else a = +ang.value;
+  deg.textContent = Math.round(a) + '°';
+  for (const v of views) {
+    const { cv, gl, pr, k } = v, W = cv.clientWidth * Math.min(2, devicePixelRatio), H = W * 0.75;
+    if (cv.width !== Math.round(W)) { cv.width = Math.round(W); cv.height = Math.round(H); }
+    gl.viewport(0, 0, cv.width, cv.height); gl.useProgram(pr);
+    gl.uniform2f(gl.getUniformLocation(pr, 'uRes'), cv.width, cv.height);
+    gl.uniform1f(gl.getUniformLocation(pr, 'uAng'), a * Math.PI / 180);
+    gl.uniform1f(gl.getUniformLocation(pr, 'uCam'), -0.9);
+    gl.uniform1i(gl.getUniformLocation(pr, 'uKind'), k);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  if (!window.__still) requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+// for the contact sheet: draw once at a given angle
+window.__at = deg_ => { run.checked = false; ang.value = deg_; window.__still = true; draw(performance.now()); };
+</script>
+</body>
+</html>
