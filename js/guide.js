@@ -25,7 +25,7 @@ function inCave() {
   if (vec4.len(p.pos) > PLANET_R + p.hf.heightAt(up) - 0.4) return false;
   return carves.some(c => G.cave.parts.includes(c.name) && segDist(p.pos, c.a, c.b) < c.r + 0.3);
 }
-// goal: { pos (4D), kind, cue: null | 'F' | 'Space' }
+// goal: { pos (4D), kind, cue: null | 'F' | 'Space', near: how close along ana counts as in your slice (default 1.5 m) }
 export function updateGuide() {
   pickGoal();
   // in the cave with somewhere else to go: out the way you came, up the tunnel and out of its mouth's hollow
@@ -53,7 +53,9 @@ function pickGoal() {
   if (held && held.kind === 'stone' && objects.pouch < 9) return;          // (the cue under the dot: G)
   if (objects.pouch === 0) {
     const s = nearestStone(p.pos);
-    if (s) { guide.goal = { pos: s.b.pos, kind: 'stone', cue: G.canTake && s.d < 4 ? 'F' : null }; return; }
+    // (a stone is a 4D ball 9 cm in radius: your slice cuts it only within 9 cm of its centre along ana, and your hand
+    // takes it within 0.3 m; the way across ana is shown, in tenths, until you are that close)
+    if (s) { guide.goal = { pos: s.b.pos, kind: 'stone', near: 0.3, cue: G.canTake && s.d < 4 ? 'F' : null }; return; }
   }
   guide.goal = { pos: launcher.site, kind: 'launch', cue: launcher.onPad ? 'Space' : null };
 }

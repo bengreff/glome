@@ -110,7 +110,7 @@ function anaCue(x, y, a, k, s = 1) {
   octx.fillStyle = col; octx.beginPath(); octx.moveTo(x + w, y - up * c * 0.6); octx.lineTo(x + w + 2 * c, y - up * c * 0.6); octx.lineTo(x + w + c, y + up * c); octx.closePath(); octx.fill();
   w += 2 * c + 5 * k * s;
   octx.font = `600 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'left'; octx.textBaseline = 'middle';
-  const t = `${Math.abs(a) < 10 ? Math.abs(a).toFixed(0) : Math.round(Math.abs(a))} m`;
+  const t = `${Math.abs(a) < 2 ? Math.abs(a).toFixed(1) : Math.round(Math.abs(a))} m`;   // (tenths, close: a stone is 18 cm across)
   octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const tw = octx.measureText(t).width; octx.fillRect(x + w - 3 * k, y - 8 * k * s, tw + 6 * k, 16 * k * s);
   octx.fillStyle = col; octx.fillText(t, x + w, y + 0.5 * k); octx.textBaseline = 'alphabetic';
   return w + tw;
@@ -124,7 +124,7 @@ export function drawGoal(cam) {
   const W = overlay.width, H = overlay.height, k = W / innerWidth, fx = FOV * W / H;
   const d = vec4.sub(g.pos, cam.eye), dist = vec4.len(d);
   const z = vec4.dot(d, cam.F), x = vec4.dot(d, cam.R), y = vec4.dot(d, cam.U), a = vec4.dot(d, cam.A);
-  const inSlice = Math.abs(a) < 1.5, here = Math.hypot(z, x, y) < 6;
+  const inSlice = Math.abs(a) < (g.near || 1.5), here = Math.hypot(z, x, y) < 6;   // (near: how close in ana it must be, for a small thing)
   octx.save();
   if (dist > 2.5) {
     let sx = x / Math.max(z, 1e-3) / fx, sy = y / Math.max(z, 1e-3) / FOV;

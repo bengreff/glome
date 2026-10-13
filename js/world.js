@@ -1,7 +1,7 @@
 // The planet: a 4D ball whose surface is a 3-sphere. Terrain height is a function on that 3-sphere,
 // stored in a "cubed 3-sphere" atlas: 8 cubic charts, one per tesseract cell (±x, ±y, ±z, ±w).
-import { fbm4, ridged4 } from './noise.js?v=20261013103555';
-import { LAWS } from './laws.js?v=20261013103555';
+import { fbm4, ridged4 } from './noise.js?v=20261013112510';
+import { LAWS } from './laws.js?v=20261013112510';
 
 export const PLANET_R = LAWS.R_A;   // metres
 export const SEA = LAWS.SEA;        // sea level, metres above PLANET_R
@@ -20,6 +20,10 @@ const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; retu
 // ---------- the crafted places (fixed for everyone: the planet is the same world for all) ----------
 // The great massif: the most continental land on the planet, found once by search and fixed here.
 export const MASSIF = norm4([-0.68321, 0.71031, -0.15836, 0.06005]);
+// The summit (the massif's highest point, 13 m from its centre) and the level top the launcher stands on: the peak
+// rose to 42.5 m in a point whose sides fall at 50°, so a pad set on it stood 0.7–1.6 m proud of the ground all round.
+// Its top 6 m are taken off, with a soft edge, leaving a level top about 10 m across.
+export const SUMMIT = norm4([-0.67257277, 0.70597950, -0.20564558, 0.08335891]), PLATEAU = 36.5;
 // The archipelago: the deepest open sea about 400 m from the massif.
 export const ARCHI = norm4([0.03776, -0.12244, -0.62311, -0.77157]);
 let seed = 4242;
@@ -65,6 +69,8 @@ function baseHeight(n) {
     const B = Math.exp(-((sM / 88) ** 2));
     const mr = ridged4(x * 4.3 - 3.1, y * 4.3 + 8.2, z * 4.3 + 1.7, w * 4.3 - 5.9, 3);
     h = h * (1 - 0.6 * B) + B * (19 + 15 * mr * mr) + 10 * Math.exp(-((sM / 15) ** 2));
+    const sS = arcM(n, SUMMIT);
+    if (sS < 22) h = smin(h, PLATEAU + 0.025 * sS * sS, 2);      // (no change beyond 22 m: the cut's rim is far above the ground there)
   }
   // the archipelago: open sea with islands, some joined only through ana
   const sA = arcM(n, ARCHI);

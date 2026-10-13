@@ -1,9 +1,9 @@
-// The launcher: a stone pad on the highest summit, where gravity is lightest. Its aim is a barrel on a gimbal beside
+// The launcher: a metal pad on the level top of the highest summit (world.js), where gravity is lightest. Its aim is a barrel on a gimbal beside
 // the pad, set by three sliders (gimbal.js). Stand on the pad and jump: it throws you along the barrel at its speed,
 // anything up to 72 m/s (enough to reach planet B: see DECISIONS.md).
 import { G } from './game.js';
 import { vec4 } from './player.js';
-import { PLANET_R, MASSIF } from './world.js';
+import { PLANET_R, SUMMIT } from './world.js';
 import { tangents } from './env.js';
 import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
@@ -14,23 +14,6 @@ import { GIMBAL, aim, angleAt, placeOf, barrelRot, anglesFor } from './gimbal.js
 export const SPEED_MAX = 72;                          // m/s: the most the launcher gives (lands on B; PHYSICS.md)
 export const launcher = { site: null, n: null, pad: null, speed: 43, onPad: false };
 
-// The summit, found by climbing from the massif's centre in many directions (the same every time).
-export function findSummit(hf) {
-  let best = { h: -1 }, seed = 5;
-  const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296) - 0.5;
-  const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
-  for (let i = 0; i < 40; i++) {
-    const T = tangents(MASSIF), d = vec4.norm([0, 1, 2, 3].map(k => rnd() * T[0][k] + rnd() * T[1][k] + rnd() * T[2][k]));
-    let p = off(MASSIF, d, 60 * Math.abs(rnd())), h = hf.heightAt(p), st = 6;
-    for (let it = 0; it < 300 && st > 0.03; it++) {
-      let mv = false;
-      for (const t of tangents(p)) for (const s of [-1, 1]) { const q = off(p, t, s * st), hq = hf.heightAt(q); if (hq > h) { h = hq; p = q; mv = true; } }
-      if (!mv) st /= 2;
-    }
-    if (h > best.h) best = { p, h };
-  }
-  return best;
-}
 // A rotation that sets a body square on the ground at unit n.
 function squareOn(n) {
   const T = tangents(n), rows = [0, 1, 2, 3].map(r => [T[0][r], T[1][r], T[2][r], n[r]]);
@@ -43,15 +26,15 @@ function squareOn(n) {
   return R4.fromMatrix(rows);
 }
 export function buildLauncher(hf) {
-  const s = findSummit(hf);
+  const s = { p: SUMMIT, h: hf.heightAt(SUMMIT) };
   launcher.n = s.p; launcher.h = s.h;
-  // the pad: a tesseract slab of side 2.4 m, its top face 0.25 m above the summit (a fixed body, metal)
-  const side = 2.4, c = vec4.scale(s.p, PLANET_R + s.h + 0.25 - side / 2);
+  // the pad: a tesseract slab of side 2.4 m, its top face 0.15 m above the ground (a step up), a fixed body, metal
+  const side = 2.4, c = vec4.scale(s.p, PLANET_R + s.h + 0.15 - side / 2);
   const pad = makeBody({ shape: 'tesseract', size: side, mass: 1e9, pos: c, rot: squareOn(s.p), kind: 'launcher' });
   pad.kinematic = true; pad.fixed = true; pad.mat = 1; pad.glow = 0.25;
   objects.world.add(pad);
   launcher.pad = pad;
-  launcher.site = vec4.scale(s.p, PLANET_R + s.h + 0.25);
+  launcher.site = vec4.scale(s.p, PLANET_R + s.h + 0.15);
   const T = tangents(s.p);
   // the aim: a post 3.2 m from the pad's centre (along +T[0]), the barrel on a ball at its top; and the sliders'
   // stand beside it, toward the pad (gimbal.js). Each stands on its own ground (the summit falls away).
