@@ -30,6 +30,26 @@ The owner played run seven's puzzles and answered its decisions. In their words:
 
 **Order:** 1 (scrap), 2 (stones), 3 (launcher), 4 (tides), 5 (crab), then 6. Ask at the start how the session runs (autonomous, or segments with check-ins), and confirm the two open numbers: the launcher's gating and the day's length.
 
+### Run eight: the interview (13 October)
+
+- **Playable means both:** the loop works start to finish (find stones → aim and fire the launcher → fly, using stones in flight → land on B → the console), and the sandbox feels solid (walking, carrying, throwing, stacking, launching). Play it as a new player and fix the jank.
+- **Stones:** the owner didn't really try them. Find the problems by playing.
+- **Launcher:** no gating. The rings and the pillar go; a speed lever runs 0–72 m/s, and two aim levers replace the three sliders.
+- **Day:** `DAY1` = 900 s (a tide about every 7.5 minutes), tides on by default.
+- **Guide:** shows where, never what: the nearest stone while the pouch is empty, then the launcher, then the console once on B.
+- **Console:** opens on landing on B. The orbit is no longer required.
+- **Windows:** still untried by the owner.
+- **How it runs:** segments of 20–40 minutes, each pushed live after a smoke test, with a check-in; when the owner leaves, continue autonomously to a v1.6 tag and a report.
+
+**Segments:**
+1. Scrap the puzzles (room, mirror key and mould, knot, fold, rings and pillar); the guide's new goals; the console open on landing; old saves migrate.
+2. Stones: play the loop as a new player and fix finding, taking (F), stowing and drawing (G), the pouch row, throwing, and use in flight.
+3. The launcher: two aim levers and a speed lever (0–72 m/s).
+4. Tides on, the 900 s day; re-run the flight gates; check the start, the launcher and the raft's beach against high water.
+5. The whole loop as a new player, plus a sandbox-feel pass: fix what's janky.
+6. The crab (concept B) as the walkers' body.
+Then tag v1.6, package the itch zip, and write run eight's report.
+
 
 ## 0. How the next session starts: an interview
 
