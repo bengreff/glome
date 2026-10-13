@@ -1,0 +1,1 @@
+[{"eval":"1","wait":12000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/tideshot.js","snap":"low"},{"file":"t/tideshot2.js","snap":"high"},{"eval":"JSON.stringify({ e: __glome.G.errors || 0, last: (__glome.G.lastError || '').slice(0, 300) })"}]
