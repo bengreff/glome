@@ -12,7 +12,7 @@ export const LAWS = {
   SEA: 0,                  // sea level above R_A (m)
   G_SURF: 16,              // surface gravity of the bare planet, ignoring its images (m/s²); G₄M = G_SURF·R_A³.
                            // Chosen so the summit (42.5 m as walked) measures 9.8 m/s² over the day (PHYSICS.md)
-  DAY1: 300,               // the double spin: one turn in the first plane (s) ...
+  DAY1: 900,               // the double spin: one turn in the first plane (s; a tide at a place about every 7.5 min) ...
   RATIO: PHI,              // ... and the second plane turns φ times faster, so the days never repeat
   ORBIT_A: 2000,           // radius of A's (circular) orbit round the star (m)
 

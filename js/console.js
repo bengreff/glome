@@ -133,7 +133,7 @@ export function bindConsole() {
   $('dial-inf').onchange = () => { G.infinite = $('dial-inf').checked; };
   $('dial-fly').onchange = () => { G.fly = $('dial-fly').checked; };
   $('dial-tide').onchange = () => { G.tides = $('dial-tide').checked; };
-  $('dial-reset').onclick = () => { rebaseSpin(G.state.time, TRUE_LAWS.DAY1); resetLaws(); G.infinite = false; G.fly = false; G.tides = false; syncDials(); };
+  $('dial-reset').onclick = () => { rebaseSpin(G.state.time, TRUE_LAWS.DAY1); resetLaws(); G.infinite = false; G.fly = false; G.tides = true; syncDials(); };
   $('console-close').onclick = closeConsole;
   // the world's real source: every module, fetched from where it is served
   const files = [...document.querySelector('script[type=importmap]').textContent.matchAll(/"\.\/js\/([a-z0-9-]+\.js)"/g)].map(m => m[1]);

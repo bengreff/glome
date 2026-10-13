@@ -13,7 +13,7 @@ import { gazePoint, drawFaced, drawGazeDot, drawBMarks, drawGoal, updateHUD } fr
 import { guide, updateGuide, updateBeam } from './guide.js';
 import { flora, initFlora, updateFlora } from './flora.js';
 import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
-import { LAWS } from './laws.js';
+import { LAWS, TRUE_LAWS } from './laws.js';
 import { accelBodyA } from './cosmos.js';
 import * as saveMod from './save.js';
 import * as cosmos from './cosmos.js';
@@ -34,7 +34,7 @@ import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu
 import { tides, updateTides } from './tides.js';
 import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
-import { spinSave, spinLoad } from './cosmos.js';
+import { spinSave, spinLoad, rebaseSpin } from './cosmos.js';
 import { stepBoats, windAt } from './boats.js';
 import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
@@ -473,16 +473,19 @@ function frameBody(now) {
     }
     buildB();
     bindConsole();
-    hooks.spin = { save: spinSave, load: spinLoad };
+    // (a save from before run eight turns at the old 300 s day: carried on from where it is at the 900 s one)
+    hooks.spin = { save: spinSave, load: s => { spinLoad(s); if (s && s.day === 300) rebaseSpin(state.time, TRUE_LAWS.DAY1); } };
     // a flight in progress: its exact inertial state, so a reload carries on the same arc (rather than re-entering
     // flight from the planet's frame, or not at all when the save caught you under 20 m)
     hooks.flight = { save: () => flight.active ? { x: flight.x.slice(), v: flight.v.slice(), F: flight.F, R: flight.R, A: flight.A, time: flight.time, maxR: flight.maxR } : null,
                      load: f => { if (f && f.x && f.v) Object.assign(flight, { active: true, x: f.x.slice(), v: f.v.slice(), F: f.F, R: f.R, A: f.A, time: f.time || 0, maxR: f.maxR || 0 }); } };
     // the console's laws (only the ones it can change), and its two switches
     const CONSOLE_LAWS = ['G_SCALE', 'GRAV_DIM', 'L', 'TIME_RATE', 'JUMP', 'WALK', 'RUN'];
-    hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly, tides: !!G.tides }),
-                   load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; G.tides = !!s.tides || /[?&]tides\b/.test(location.search); } };
-    if (/[?&]tides\b/.test(location.search)) G.tides = true;      // (tides on from the page's address: ?tides)
+    // (the tide is on unless the console turns it off; saves before run eight held it as off by default, under
+    // another name, and come back with it on; ?notides in the page's address turns it off)
+    G.tides = !/[?&]notides\b/.test(location.search);
+    hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly, tide: !!G.tides }),
+                   load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; if ('tide' in s) G.tides = !!s.tide; if (/[?&]notides\b/.test(location.search)) G.tides = false; } };
     // the launcher's levers, where you left them (a save from v1.5 holds the three sliders' places along their rails)
     if (launcher.aim) hooks.aim = { save: () => ({ angles: launcher.aim.angles.map(v => +v.toFixed(5)), speed: +launcher.speed.toFixed(2) }),
       load: s => {

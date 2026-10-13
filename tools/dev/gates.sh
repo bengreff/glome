@@ -11,6 +11,6 @@ echo "== persistence"; "$D/run.sh" persist 150 --gpu 2>&1 | grep -v '^eval: 1$\|
 echo "== finds persistence"; "$D/run.sh" fp 150 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== stones (a pedestal's stone: take, stow, draw, forming)"; "$D/run.sh" stones 120 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== playthroughs"; for n in caveout aim; do printf "%s: " $n; "$D/run.sh" pt_$n 150 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .; done
-printf "orbit: "; "$D/run.sh" pt_orbit 700 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
+printf "orbit: "; "$D/run.sh" pt_orbit 1500 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 printf "landB: "; "$D/run.sh" pt_landB 800 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 echo "== load"; sysctl -n vm.loadavg
