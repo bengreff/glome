@@ -5,6 +5,7 @@ import { G } from './game.js';
 import { boulders } from './boulders.js';
 import { gpuObj } from './objects.js';
 import { skyUniforms } from './cosmos.js';
+import { tides } from './tides.js';
 import { bUniforms, NORMAL_DATA } from './planetB.js';
 import { carveUniforms } from './landforms.js';
 import { props, MAXP } from './props.js';
@@ -343,6 +344,8 @@ export function setWorld(p, cam, sun) {
   gl.uniform1f(p.u('uN'), N);
   gl.uniform1f(p.u('uPR'), PLANET_R);
   gl.uniform1f(p.u('uSea'), SEA);
+  gl.uniform4f(p.u('uTide'), tides.pref, tides.mean, tides.ig, tides.on && tides.ig > 0 ? 1 : 0);
+  gl.uniformMatrix4fv(p.u('uTideQ'), false, tides.Q);
   gl.uniform4fv(p.u('uEye'), cam.eye);
   gl.uniform4fv(p.u('uF'), cam.F);
   gl.uniform4fv(p.u('uR'), cam.R);

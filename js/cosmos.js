@@ -212,6 +212,13 @@ export function accelBodyA(xb, vb, t, out = [0, 0, 0, 0]) {
   return out;
 }
 
+// The star's and B's pull, less A's own fall toward them (their tide), in A's body frame at body point xb.
+export function tideStarB(xb, t) {
+  const x = toInertial(xb, t), o = orbitOf('A', t), B = orbitOf('B', t).c;
+  const gs = gBall(x, GM.star(), LAWS.STAR_R, E_W), gb = gBall([x[0] - B[0], x[1] - B[1], x[2] - B[2], x[3] - B[3]], GM.B(), LAWS.R_B, E_W);
+  return dirToBody([0, 1, 2, 3].map(i => gs[i] + gb[i] - o.acc[i]), t);
+}
+
 // ---------- the sky, for the renderer ----------
 // Everything the shaders need to draw the hoop sky from A's body frame at time t: the star's main image, the hoop
 // axis, each image's direction and share of the light from A's centre, and the rotation to the inertial frame.

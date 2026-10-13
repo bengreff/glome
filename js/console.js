@@ -125,6 +125,7 @@ function syncDials() {
   $('dial-day').value = LAWS.DAY1;
   $('dial-inf').checked = !!G.infinite;
   $('dial-fly').checked = !!G.fly;
+  $('dial-tide').checked = !!G.tides;
 }
 export function bindConsole() {
   for (const [id, key, parse] of DIALS) $(id).oninput = () => { LAWS[key] = parse($(id).value); if (key === 'WALK') LAWS.RUN = LAWS.WALK * 9.5 / 4.2; };
@@ -133,7 +134,8 @@ export function bindConsole() {
   $('dial-pause').onclick = () => { LAWS.TIME_RATE = LAWS.TIME_RATE > 0 ? 0 : 1; syncDials(); };
   $('dial-inf').onchange = () => { G.infinite = $('dial-inf').checked; };
   $('dial-fly').onchange = () => { G.fly = $('dial-fly').checked; };
-  $('dial-reset').onclick = () => { rebaseSpin(G.state.time, TRUE_LAWS.DAY1); resetLaws(); G.infinite = false; G.fly = false; syncDials(); };
+  $('dial-tide').onchange = () => { G.tides = $('dial-tide').checked; };
+  $('dial-reset').onclick = () => { rebaseSpin(G.state.time, TRUE_LAWS.DAY1); resetLaws(); G.infinite = false; G.fly = false; G.tides = false; syncDials(); };
   $('console-close').onclick = closeConsole;
   // the world's real source: every module, fetched from where it is served
   const files = [...document.querySelector('script[type=importmap]').textContent.matchAll(/"\.\/js\/([a-z0-9-]+\.js)"/g)].map(m => m[1]);

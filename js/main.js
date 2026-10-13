@@ -1,6 +1,6 @@
 // Glome: boot and the frame loop. The parts live in their own modules: render (GL, slice view, resolution,
 // profiler), radar, boulders, input, hud, save, and laws (every physical constant).
-import { HeightField, prefilter } from './world.js';
+import { HeightField, prefilter, seaTide } from './world.js';
 import { Player, vec4 } from './player.js';
 import { G, sunDir } from './game.js';
 import { gl, canvas, overlay, octx, fail, tex, tex3D, N, buildAtlas, makeNoise, vao, dyn, updateDyn, resize, scene,
@@ -30,6 +30,7 @@ import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
 import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
 import { stepGate } from './knot.js';
+import { tides, updateTides } from './tides.js';
 import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
 import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
@@ -244,6 +245,9 @@ function frameBody(now) {
   mark('input');
   const input = fade.t >= 0 ? { fwd: 0, right: 0, ana: 0, jump: false, run: false } : readInput();
   updateBoulders(cameraNow().eye);
+  // the tide (when on): its field for this frame, for the water the physics and the renderer see
+  tides.on = !!G.tides; seaTide.at = tides.on ? n => tides.at(n) : null;
+  if (tides.on) updateTides(state.time);
   // physics runs in fixed steps of 1/120 s (PHYSICS.md), as many as the frame needs
   physAcc += dt * LAWS.TIME_RATE;
   handleActions(cameraNow());
@@ -507,8 +511,9 @@ function frameBody(now) {
                      load: f => { if (f && f.x && f.v) Object.assign(flight, { active: true, x: f.x.slice(), v: f.v.slice(), F: f.F, R: f.R, A: f.A, time: f.time || 0, maxR: f.maxR || 0 }); } };
     // the console's laws (only the ones it can change), and its two switches
     const CONSOLE_LAWS = ['G_SCALE', 'GRAV_DIM', 'L', 'TIME_RATE', 'JUMP', 'WALK', 'RUN'];
-    hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly }),
-                   load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; } };
+    hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly, tides: !!G.tides }),
+                   load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; G.tides = !!s.tides || /[?&]tides\b/.test(location.search); } };
+    if (/[?&]tides\b/.test(location.search)) G.tides = true;      // (tides on from the page's address: ?tides)
     if (G.knot) {
       // the knot gate (built with the artifacts): its rope is drawn with the trees' pieces; the leaf and the rope are
       // saved here (the leaf is rebuilt with the world, not saved with the things you carry)

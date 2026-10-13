@@ -310,10 +310,13 @@ You played v1.3: you got the first key from the cave, but had no idea what the s
 - **On gentle shores**, the water's edge would move faster than you walk.
 - **On the real sea it would be wilder still.** The forcing turns in two and a half minutes, about as long as a wave takes to cross the sea: shallow water a few metres to 15 m deep carries a wave at roughly 9–15 m/s, so 100–180 s round the planet. The water would slosh rather than settle into the equilibrium shape, and showing that would need a simulation of its own.
 
-It would reshape the beaches, the raft's shore and the islands joined through ana, and some low places would flood twice every five minutes. Realism says build it; it changes the world enough that I'd rather you chose:
-- (a) the true tide;
+It would reshape the beaches, the raft's shore and the islands joined through ana, and some low places would flood twice every five minutes. Realism says build it; it changes the world enough that I'd rather you chose.
+
+So I built the equilibrium tide but left it off. To see it, open the game with `?tides` at the end of its address, or turn on ≈ in the console. Then choose:
+- (a) the true tide, always on;
 - (b) the true tide, with the planet's day made slower so the tides come every few minutes rather than every two and a half;
-- (c) no tide.
+- (c) no tide (as it is now);
+- (d) the true tide, and a sea that sloshes (a project of its own).
 
 **2. The hoop lighthouse puzzle** (your idea from the interview). Here is a proposal; it isn't built.
 - **The tower.** A lit tower stands where the hoop's direction often lies level.

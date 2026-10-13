@@ -54,6 +54,18 @@ float bR(int i) { return uBR[i]; }
 uniform vec4 uStar0;        // the star's main image (its centre) in this frame
 uniform vec4 uHoop;         // unit hoop axis in this frame
 uniform float uL, uStarR;
+uniform vec4 uTide;         // the tide (tides.js): (π·GM/2L, the copies' mean potential, 1/g, on)
+uniform mat4 uTideQ;        // the star's and B's part of it, a quadratic in the direction
+// The sea's height above its mean at unit direction n (none with tides off): the potential of A's copies round the
+// hoop (the closed form of a mass and all its images), less its mean, over g; and the star's and B's quadratic part.
+float tideAt(vec4 n) {
+  if (uTide.w < 0.5) return 0.0;
+  vec4 x = n * (uPR + uSea);
+  float w0 = dot(x, uHoop), w = w0 - uL * floor(w0 / uL + 0.5), k = 6.2831853 / uL;
+  float rho = max(1e-3, length(x - w0 * uHoop)), e = exp(-k * rho), q = 1.0 + e * e - 2.0 * e * cos(k * w);
+  return (uTide.x / rho * (1.0 - e * e) / q + uTide.y) * uTide.z + dot(n, uTideQ * n);
+}
+float seaAt(vec4 n) { return uSea + tideAt(n); }
 uniform float uStarI;       // 1 / (the row's summed 1/d³ at A's centre), so A's total sunlight is 1
 const int NIMG = 7;         // images each side (they hold 95% of the light; the rest lie beyond 70°)
 uniform vec4 uStarD[2 * NIMG + 1];   // unit directions to the images from A's centre ...
@@ -119,7 +131,7 @@ float waterAt(vec4 n) {
     sum += w * textureLod(uWaterL, vec3((pos.x + 0.5) / NW, (pos.y + 0.5) / NW, (chart * NW + pos.z + 0.5) / (8.0 * NW)), 0.0).r;
     wsum += w;
   }
-  return max(uSea, sum / wsum);
+  return max(seaAt(n), sum / wsum);
 }
 const float SEAM = 0.04;
 // Same seam blend as HeightField.heightAt on the CPU: what you see is what you walk on.
@@ -870,7 +882,7 @@ vec3 shadeTerrain(vec4 p, vec4 rd, float t, bool withShadow) {
   // (some light finds its way in down the tunnel: a cave is dim, never quite black, and a lantern still matters)
   float caveDark = cave > 0.0 ? mix(1.0, max(0.15, exp(-max(0.0, uPR + heightAt(up) - length(p)) / 2.5)), cave) : 1.0;
   float rocky = max(cave, 1.0 - smoothstep(0.62, 0.82, slope + 0.08 * d1));
-  float sandy = (1.0 - smoothstep(uSea + 0.4, uSea + 2.2 + 0.8 * d1, h)) * (1.0 - cave);
+  float sl = seaAt(up), sandy = (1.0 - smoothstep(sl + 0.4, sl + 2.2 + 0.8 * d1, h)) * (1.0 - cave);
   float snowy = smoothstep(26.0, 31.0, h + 8.0 * (slope - 0.85) + 4.0 * d1) * (1.0 - cave);
   float dirt = smoothstep(-0.42, -0.62, d1 + 0.35 * d2) * (1.0 - rocky) * (1.0 - sandy);
 
@@ -1143,11 +1155,11 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
 // of images is periodic too), so a copy is shaded exactly like the planet itself.
 bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
   tc = 1e9;
-  float Rw = uPR + uSea;
   vec4 oBest = vec4(0.0); bool sea = false;
   for (int k = -2; k <= 2; k++) {
     if (k == 0 || k < uCopyK.x || k > uCopyK.y) continue;    // only copies your slice cuts
     vec4 o = ro - float(k) * uL * uHoop;
+    float Rw = uPR + seaAt(normalize(o - rd * dot(o, rd)));   // (the copy's sea where the ray passes nearest its centre)
     float b = dot(o, rd), c = dot(o, o) - (uPR + SHELL) * (uPR + SHELL);
     if (b > 0.0 || b * b < c) continue;                      // misses the copy's terrain shell
     float t = marchTerrainFar(o, rd);
@@ -1254,7 +1266,7 @@ vec3 shadePlanetB(vec4 p, vec4 n, int face, vec4 c, vec4 rd) {
 // creature), 7 planet B, 8 the sea's surface seen from below. The hit: (distance, kind, index, the ground's distance
 // behind water). The index: a boulder's, object's or prop's slot, a tree's capsule, or B's floor + 128·(its copy + 2).
 vec4 hitAll(vec4 ro, vec4 rd) {
-  float Rw = uPR + uSea;
+  float Rw = uPR + seaAt(normalize(ro));
   float b = dot(ro, rd), c = dot(ro, ro) - Rw * Rw, disc = b * b - c;
   bool under = c < 0.0;
   float tW = -1.0;
@@ -1262,6 +1274,14 @@ vec4 hitAll(vec4 ro, vec4 rd) {
     float s = sqrt(disc);
     if (!under) { if (-b - s > 0.0) tW = -b - s; }
     else tW = -b + s;
+  }
+  // with a tide the sea is a sphere whose radius changes slowly over the planet: take the radius where the ray meets
+  // it, and meet it again (twice: the change over a step is far below a pixel)
+  if (uTide.w > 0.5 && tW > 0.0) for (int it = 0; it < 2; it++) {
+    float Ri = uPR + seaAt(normalize(ro + rd * tW)), ci = dot(ro, ro) - Ri * Ri, di = b * b - ci;
+    if (di <= 0.0) { tW = -1.0; break; }
+    float si = sqrt(di); tW = ci < 0.0 ? -b + si : -b - si;
+    if (tW <= 0.0) { tW = -1.0; break; }
   }
   vec4 nPB, cPB; int fPB;
   float tPB = (uDebug & 8) == 0 ? hitPlanetB(ro, rd, 1e9, nPB, fPB, cPB) : 1e9;
@@ -1327,7 +1347,7 @@ vec4 propNormal(vec4 ro, vec4 rd, int i) {
 }
 vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
   vec4 upE = normalize(ro);
-  float t = H.x, Rw = uPR + uSea;
+  float t = H.x, Rw = uPR + seaAt(normalize(ro));
   int kind = int(H.y + 0.5), idx = int(H.z + 0.5);
   bool under = dot(ro, ro) < Rw * Rw;
   tOut = t;
@@ -1366,7 +1386,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
     else {                                                    // the ground, or a river over its bed
       vec4 nT = normalize(p);
       float hT = length(p) - uPR, wl = (uDebug & 1024) == 0 ? waterAt(nT) : 0.0;
-      if (wl > uSea + 0.05 && wl > hT + 0.03) {
+      if (wl > seaAt(nT) + 0.05 && wl > hT + 0.03) {
         float down = -dot(rd, nT), tw = max(0.02, t - (wl - hT) / max(down, 0.08));
         col = shadeWater(ro + rd * tw, rd, tw, t, ro);
       } else col = shadeTerrain(p, rd, t, true);

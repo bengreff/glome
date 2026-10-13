@@ -5,6 +5,7 @@ import { LAWS } from './laws.js?v=20261012230524';
 
 export const PLANET_R = LAWS.R_A;   // metres
 export const SEA = LAWS.SEA;        // sea level, metres above PLANET_R
+export const seaTide = { at: null }; // the tide's height at a unit direction, when tides are on (tides.js)
 
 const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const FREQ = PLANET_R / 180;   // base feature wavelength ~180 m
@@ -227,7 +228,7 @@ export class HeightField {
   // so the ground is continuous across seams and corners.
   heightAt(n) { return this.blend(n, this.N, this.data); }
   // The water's surface: the sea, or a river 0.5 m above its bed (same lookup, half the resolution).
-  waterAt(n) { return this.water ? Math.max(SEA, this.blend(n, this.N >> 1, this.water)) : SEA; }
+  waterAt(n) { const sea = seaTide.at ? SEA + seaTide.at(n) : SEA; return this.water ? Math.max(sea, this.blend(n, this.N >> 1, this.water)) : sea; }
   blend(n, N, data) {
     const a = n.map(Math.abs), amax = Math.max(a[0], a[1], a[2], a[3]);
     let sum = 0, wsum = 0;
