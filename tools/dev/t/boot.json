@@ -1,0 +1,1 @@
+[{"eval":"1","wait":30000},{"eval":"JSON.stringify({ok: !!window.__glome, boot: window.__glome && __glome.G.boot, err: window.__glome && __glome.G.lastError, loading: document.getElementById(\"loading\") && document.getElementById(\"loading\").textContent})"}]

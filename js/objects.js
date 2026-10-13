@@ -16,7 +16,7 @@ import { LAWS } from './laws.js';
 import { vec4 } from './player.js';
 import { PLANET_R } from './world.js';
 import { World, makeBody, DENSITY, applyImpulse, kEff } from './bodies.js';
-import { RING, ringParts, ringDraw } from './keys.js';
+import { RING, ringParts, ringDraw, KEY, keyParts } from './keys.js';
 import { rot as R4, log as rotLog, qnorm, bivApply } from './so4.js';
 import { tangents } from './env.js';
 import { hoopAxisBody } from './cosmos.js';
@@ -38,7 +38,7 @@ export const KINDS = {
   raft: { shape: 'tesseract', size: 1.3, density: 60, mat: 6 },                  // a hollow crate of planks (171 kg): a uniform cube floats flat
                                                                                    // only below about a fifth of water's density
   sail: { shape: 'tesseract', size: 0.4, density: DENSITY.wood, mat: 2, glow: 0.2 }, // set on a raft, it catches the wind
-  key: { shape: 'tesseract', size: 0.32, density: DENSITY.metal / 4, mat: 4 },     // the mirror key: handed (two marked cells)
+  key: { shape: 'compound', mass: KEY.mass, mat: 8 },                             // the mirror key: four brass cells, handed (keys.js)
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
 export const POUCH_MAX = 9;        // the pouch holds nine
@@ -65,9 +65,10 @@ function groundFrame(n) {
   return R4.fromMatrix(rows);
 }
 // The body of a kind (a key's shape is its tier's ring).
-function bodyOf(kind, pos, rot, extra) {
+export function bodyOf(kind, pos, rot, extra) {
   const K = KINDS[kind];
   if (kind === 'part') { const k = (extra.tier || 1) - 1; return makeBody({ shape: 'compound', parts: ringParts(k), draw: ringDraw(k), mass: K.mass, mu: RING.mu, pos, rot: rot || undefined, kind, ...extra }); }
+  if (kind === 'key') return makeBody({ shape: 'compound', parts: keyParts(), mass: K.mass, mu: KEY.mu, pos, rot: rot || undefined, kind, ...extra });
   return makeBody({ shape: K.shape, size: K.size, density: K.density, mass: K.mass, pos, rot: rot || undefined, kind, ...extra });
 }
 export function spawn(kind, n, { lift = 0, rot = null, extra = {} } = {}) {
@@ -163,7 +164,7 @@ function bodyRot(c) {
   return camRot({ F: f, R: c.R, A: c.A, U: c.up });
 }
 // How far a compound body at attitude rot reaches from its centre along unit direction dir.
-function reachAlong(b, rot, dir) {
+export function reachAlong(b, rot, dir) {
   const M = R4.toRows(rot), ax = [0, 1, 2, 3].map(j => vec4.dot([M[0][j], M[1][j], M[2][j], M[3][j]], dir));
   let r = 0;
   for (const q of b.parts) {
@@ -212,6 +213,38 @@ function holdDrive(b, cam, w, kick) {
   hold.snag = gap > 1.0 && !closing ? hold.snag + dt : gap > 1.0 ? hold.snag : 0;
   hold.gap = gap;
   if (hold.snag > 0.4) { drop(); G.audio?.emit('clack', b.pos, 0.3); }
+}
+// Turning over what you hold, in your hands (R and the mouse): a gesture turns it in one plane of your body's frame,
+// chosen by its first motion: up and down, forward and back (forward and up); left and right, rolling it (right
+// and up); with the right button, up and down tips it through ana (ana and up), left and right turns it through ana
+// (forward and ana) without turning you. Let go of R and it settles to the nearest quarter turn, as a hand squares a
+// thing up. Your hands turn it: the drive brings it round (with its limited torque), and what it meets stops it.
+const tilt = { base: null, plane: null, angle: 0, px: 0, py: 0 };
+const TILT_PLANES = { pitch: [0, 3], roll: [1, 3], anaTip: [2, 3], anaTurn: [0, 2] };   // (body axes: forward 0, right 1, ana 2, up 3)
+export function tiltHeld(dx, dy, alt, sens) {
+  const b = objects.held;
+  if (!b) return;
+  if (!tilt.base) { tilt.base = b.holdRel || null; tilt.plane = null; tilt.angle = 0; tilt.px = tilt.py = 0; }
+  if (!tilt.base) return;
+  if (!tilt.plane) {                                   // the first 6 px of motion choose the plane
+    tilt.px += dx; tilt.py += dy;
+    if (Math.hypot(tilt.px, tilt.py) < 6) return;
+    const vert = Math.abs(tilt.py) > Math.abs(tilt.px);
+    tilt.plane = alt ? (vert ? 'anaTip' : 'anaTurn') : (vert ? 'pitch' : 'roll');
+    dx = tilt.px; dy = tilt.py;
+  }
+  const vert = tilt.plane === 'pitch' || tilt.plane === 'anaTip';
+  tilt.angle += (vert ? -dy : dx) * sens;
+  const [i, j] = TILT_PLANES[tilt.plane];
+  b.holdRel = R4.compose(R4.planeRotation(i, j, tilt.angle), tilt.base);
+}
+export function endTilt() {
+  const b = objects.held;
+  if (b && tilt.base && tilt.plane) {
+    const q = Math.round(tilt.angle / (Math.PI / 2)) * Math.PI / 2, [i, j] = TILT_PLANES[tilt.plane];
+    b.holdRel = R4.compose(R4.planeRotation(i, j, q), tilt.base);
+  }
+  tilt.base = null; tilt.plane = null;
 }
 // Where it is in your view after the step (for drawing it between steps, against your latest turn).
 function holdRecord(b, cam) {

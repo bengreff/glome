@@ -2,8 +2,9 @@
 // with the one accent colour for what responds. Each opens only to a genuinely 4D idea, and holds a launcher part
 // (in a stone vault) and a couple of impulse stones. Solving one marks the next on your radar.
 //   I    the closed room: the cave, whose only way in leaves its chamber toward ana (part I lies inside).
-//   II   the mirror key: the key's socket shows its mirror image. No turn in 3D makes a thing its mirror image;
-//        half a turn through ana does.
+//   II   the mirror key: a mould on a plinth, four of its eight cells solid, and a brass key that is the empty cells'
+//        mirror image. No turn in 3D makes a thing its mirror image; half a turn through ana does, and then the key
+//        slides in, completing the cube, and the house beside it opens.
 //   III  the knot gate: a rope looped round a tall post holds the gate. In 4D no loop can hold on a post.
 //   IV   the antipode: what you leave in the bowl on the summit opens the vault at the planet's opposite point.
 //        (The bowl is carved, in landforms' way: a 4D ball taken out of the summit.)
@@ -17,6 +18,8 @@ import { objects, spawn, KINDS } from './objects.js';
 import { launcher } from './launcher.js';
 import { carves } from './landforms.js';
 import { makeProp, addRock, SHAPE, MAT } from './props.js';
+import { mouldParts, MOULD, cellCentre, RING } from './keys.js';
+import { reachAlong, bodyOf } from './objects.js';
 
 export const artifacts = [];        // { id, name, n (unit position), solved(), vault, part, ... }
 const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
@@ -48,6 +51,53 @@ function block(n, side, { lift = 0, mat = 3, glow = 0, rot = null, tag = null } 
   return b;
 }
 const partOf = k => objects.world.bodies.find(b => b.kind === 'part' && b.tier === k);
+// A rotation from four columns (the body's axes in the world), made proper by turning the third if need be.
+function properRot(cols) {
+  const rows = [0, 1, 2, 3].map(r => cols.map(c => c[r]));
+  const d = (m => { let r = 0; for (let j = 0; j < 4; j++) { const mm = [1, 2, 3].map(i => m[i].filter((_, k) => k !== j)); r += (j % 2 ? -1 : 1) * m[0][j] * (mm[0][0] * (mm[1][1] * mm[2][2] - mm[1][2] * mm[2][1]) - mm[0][1] * (mm[1][0] * mm[2][2] - mm[1][2] * mm[2][0]) + mm[0][2] * (mm[1][0] * mm[2][1] - mm[1][1] * mm[2][0])); } return r; })(rows);
+  if (d < 0) rows.forEach(r => { r[2] = -r[2]; });
+  return R4.fromMatrix(rows);
+}
+// The frame R (its fourth axis up at its own place) carried to unit point q: its first three axes laid onto the
+// ground at q and squared up, q its fourth. Returns the four columns.
+function carry(R, q) {
+  const c = [0, 1, 2].map(j => { const e = [0, 0, 0, 0]; e[j] = 1; return R4.apply(R, e); }), out = [];
+  for (const v of c) { let w = vec4.sub(v, vec4.scale(q, vec4.dot(v, q))); for (const u of out) w = vec4.sub(w, vec4.scale(u, vec4.dot(w, u))); out.push(vec4.norm(w)); }
+  return [...out, q];
+}
+const colsRot = cols => R4.fromMatrix([0, 1, 2, 3].map(r => cols.map(c => c[r])));
+// A fixed body of parts (in a frame with origin o and rotation R), solid but drawn otherwise (as props).
+function fixedCompound(parts, o, R, kind) {
+  const b = makeBody({ shape: 'compound', parts, mass: 1e9, mu: 0.4, pos: o, kind });
+  b.pos = vec4.add(o, R4.apply(R, b.com)); b.rot = R;
+  b.kinematic = b.fixed = b.hidden = true;
+  objects.world.add(b);
+  return b;
+}
+// A place near n for a built artifact: dry within 9 m (no water above the ground: waterAt is the water's surface
+// height, where there is water), between 1.5 and 24 m up, and as level as can be found within 7 m; the nearest one
+// level to 0.8 m, or failing that the levellest dry one within 250 m.
+function siteNear(n) {
+  const hf = G.player.hf;
+  const score = q => { const T = tangents(q); let lo = Infinity, hi = -Infinity;
+    for (const d of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0, 0.7], [0, -0.7, -0.7], [0.6, -0.6, 0.6], [-0.6, 0.6, -0.6]]) for (const r of [3.5, 7, 9]) {
+      const dir = [0, 1, 2, 3].map(i => d[0] * T[0][i] + d[1] * T[1][i] + d[2] * T[2][i]), l = Math.hypot(...dir);
+      const p = l < 1e-9 ? q : off(q, vec4.scale(dir, 1 / l), r * l), h = hf.heightAt(p);
+      if (hf.waterAt(p) > h - 0.05 || h < 1.5 || h > 24) return Infinity;
+      if (r < 8) { lo = Math.min(lo, h); hi = Math.max(hi, h); }
+    }
+    return hi - lo; };
+  let best = n, bs = score(n);
+  if (bs < 0.8) return n;
+  for (let i = 0; i < 5000; i++) {
+    const T = tangents(n), a = i * 2.39996, b = Math.acos(1 - 2 * ((i * 0.618034) % 1)), r = 2 + i * 0.05;
+    const dir = [0, 1, 2, 3].map(k => Math.sin(b) * Math.cos(a) * T[0][k] + Math.sin(b) * Math.sin(a) * T[1][k] + Math.cos(b) * T[2][k]);
+    const q = off(n, vec4.norm(dir), r), sc = score(q);
+    if (sc < 0.8) return q;
+    if (sc < bs) { bs = sc; best = q; }
+  }
+  return best;
+}
 function freeze(b) { if (b) { b.kinematic = true; b.sleeping = true; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; } }
 
 export function buildArtifacts() {
@@ -66,28 +116,50 @@ export function buildArtifacts() {
     }
     artifacts.push({ id: 'room', name: 'the closed room', n: m, solved: () => !!G.flags.part1 });
   }
-  // II. the mirror key, beside part II
+  // II. the mirror key: on open, level, dry ground near where part II was put (by the river's mouth), a plinth with
+  // the mould at chest height, open toward −f; a small stone house 4.2 m to its side (+s) with its door toward it
+  // (part II on its floor); and the key lying 2.4 m to the other side. The house and the mould are fixed bodies
+  // (their solid shapes), drawn as props.
   {
-    const p = partOf(2), n = vec4.norm(p.pos), fr = frameAt(n);
-    const vault = block(n, 1.0, { lift: -0.4, tag: 'vault2' }); freeze(p);
-    const sock = off(n, fr.f, 3.2), sf = frameAt(sock, fr.f);
-    const socket = block(sock, 0.9, { lift: -0.55, mat: 1, tag: 'socket2' });
-    // the model, on a pillar beside the socket: how the key must sit (its target orientation)
-    const target = rotFromCols([sf.f, sf.s, sf.up, sf.a]);
-    const pil = off(sock, sf.s, 1.4);
-    block(pil, 0.5); const model = block(pil, 0.32, { lift: 0.5, mat: 4, rot: target, tag: 'model2' });
-    // the key itself lies nearby as that model's mirror image (its marked cells swapped side for side in your slice):
-    // [f, -s, up, -a] is a proper rotation whose slice is the mirror of the target's
-    const keyN = off(sock, sf.s, -2.4);
-    const key = spawn('key', keyN, { rot: rotFromCols([sf.f, vec4.scale(sf.s, -1), sf.up, vec4.scale(sf.a, -1)]) });
-    key.tag = 'key2';
-    artifacts.push({ id: 'mirror', name: 'the mirror key', n, vault, part: p, sock: vec4.scale(sock, PLANET_R + hf.heightAt(sock) + 0.05), target: [sf.f, sf.s],
+    const p = partOf(2), n = siteNear(vec4.norm(p.pos)), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const at = (o, c) => vec4.add(o, R4.apply(R, c));                    // a point of the site's frame from origin o
+    const foot = vec4.scale(n, PLANET_R + hf.heightAt(n) - 0.08);
+    const mould = fixedCompound(mouldParts(), foot, R, 'mould');
+    const show = (c, e, shape, mat, rot = R) => { const q = makeProp({ c, rot, e, shape, mat }); q.kind = 'ruin'; q.visual = true; addRock(q); return q; };
+    const mp = mouldParts().map(q => show(at(foot, q.c), q.shape === 'glome' ? [q.r, q.r, q.r, q.r] : q.e, q.shape === 'glome' ? SHAPE.ball : SHAPE.box, q.shape === 'glome' ? MAT.metal : MAT.basalt));
+    const balls = mp.filter(q => q.shape === SHAPE.ball);
+    // the house: walls 0.2 m thick round a room 2.2 m each way and 2.2 m high, its door in the wall toward the plinth
+    const hn = off(n, fr.s, 4.2), hc = carry(R, hn), hfoot = vec4.scale(hn, PLANET_R + hf.heightAt(hn) - 0.05);
+    const HR = colsRot([hc[1], vec4.scale(hc[0], -1), hc[2], hn]);     // (its own −f, where the door is, toward the mould)
+    const house = [
+      { c: [-1.2, -0.9, 0, 1.1], e: [0.1, 0.4, 1.3, 1.1] }, { c: [-1.2, 0.9, 0, 1.1], e: [0.1, 0.4, 1.3, 1.1] }, { c: [-1.2, 0, 0, 2.05], e: [0.1, 0.5, 1.3, 0.15] },
+      { c: [1.2, 0, 0, 1.1], e: [0.1, 1.3, 1.3, 1.1] }, { c: [0, 1.2, 0, 1.1], e: [1.1, 0.1, 1.3, 1.1] }, { c: [0, -1.2, 0, 1.1], e: [1.1, 0.1, 1.3, 1.1] },
+      { c: [0, 0, 1.2, 1.1], e: [1.3, 1.3, 0.1, 1.1] }, { c: [0, 0, -1.2, 1.1], e: [1.3, 1.3, 0.1, 1.1] }, { c: [0, 0, 0, 2.3], e: [1.4, 1.4, 1.4, 0.1] },
+    ].map(q => ({ shape: 'box', ...q }));
+    fixedCompound(house, hfoot, HR, 'house');
+    for (const q of house) show(vec4.add(hfoot, R4.apply(HR, q.c)), q.e, SHAPE.box, MAT.basalt, HR);
+    const door = fixedCompound([{ shape: 'box', c: [0, 0, 0, 0], e: [0.08, 0.5, 1.3, 0.95] }], vec4.add(hfoot, R4.apply(HR, [-1.2, 0, 0, 0.95])), HR, 'door');
+    door.hidden = false; door.mat = 3; door.tag = 'vault2';
+    // part II on the house's floor, lying flat
+    p.pos = vec4.add(hfoot, vec4.scale(hn, RING.t + 0.07)); p.rot = HR; p.vel = [0, 0, 0, 0]; freeze(p);
+    // the key, lying 2.4 m off to the side as found: its cells the mould's empty cells mirrored (its three directions
+    // along f, s and up, its thickness along −a)
+    const kn = off(n, fr.s, -2.4), kup = kn, kc = carry(R, kn), kr = colsRot([kc[0], kc[1], kn, vec4.scale(kc[2], -1)]);
+    let key = objects.world.bodies.find(b => b.tag === 'key2');
+    if (!key) { key = bodyOf('key', vec4.scale(kn, PLANET_R), kr, {}); key.mat = 8; key.tag = 'key2'; objects.world.add(key); }
+    key.rot = kr; key.pos = vec4.add(vec4.scale(kn, PLANET_R + hf.heightAt(kn) + 0.05), vec4.scale(kup, reachAlong(key, kr, vec4.scale(kup, -1)))); key.sleeping = false;   // (it settles: it stands on two cells)
+    const free = MOULD.free.map(c => at(foot, cellCentre(c)));
+    artifacts.push({ id: 'mirror', name: 'the mirror key', n, vault: door, part: p, balls, R, foot, house: hfoot, sock: at(foot, [-0.7, 0, 0, MOULD.P0 + 0.4]),
+      // solved when the key rests in the mould, each of its four cells in one of the empty ones (within 15 cm: any
+      // other way of lying there is 40 cm off somewhere)
       check() {
         const k = objects.world.bodies.find(b => b.tag === 'key2');
         if (!k || k.held) return false;
-        const M = R4.toRows(k.rot), kx = [0, 1, 2, 3].map(i => M[i][0]), ky = [0, 1, 2, 3].map(i => M[i][1]);
-        const near = vec4.len(vec4.sub(k.pos, this.sock)) < 1.0;
-        return near && vec4.dot(kx, this.target[0]) > 0.8 && vec4.dot(ky, this.target[1]) > 0.8;
+        const used = new Set();
+        return k.parts.slice(0, 4).every(q => {
+          const c = vec4.add(k.pos, R4.apply(k.rot, q.c)), j = free.findIndex((f, i) => !used.has(i) && vec4.len(vec4.sub(c, f)) < 0.15);
+          if (j < 0) return false; used.add(j); return true;
+        });
       } });
   }
   // III. the knot gate: a tall post; the rope (rope.js) is looped round it and tied to the vault (main.js lays it out)
@@ -129,6 +201,7 @@ export function buildArtifacts() {
 // Open a vault: the block goes, the part inside is free, and two impulse stones lie beside it.
 function open(a, quiet) {
   if (a.vault) objects.world.remove(a.vault);
+  if (a.balls) for (const b of a.balls) b.glow = 0.9;              // (the mirror key's mould: the cube is whole)
   if (a.part && !quiet) { a.part.kinematic = false; a.part.sleeping = false; }
   else if (a.part && !a.part.held) a.part.kinematic = false;              // (a part in your hand stays in your hand)
   if (!quiet) {

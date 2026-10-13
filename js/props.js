@@ -105,6 +105,7 @@ export const rocksAt = q => props.grid.get(cellKey(Math.floor(q[0] / CELL), Math
 export function rockSD(q) {
   let best = { d: Infinity, n: null, p: null };
   for (const p of rocksAt(q)) {
+    if (p.visual) continue;                               // (drawn only: its solid shape is a fixed body's)
     const dd = vec4.sub(q, p.c);
     if (vec4.dot(dd, dd) > (p.R + 1) ** 2) continue;
     const s = propSD(p, q);

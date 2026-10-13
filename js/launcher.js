@@ -62,7 +62,7 @@ export function buildLauncher(hf) {
   body.pos = vec4.add(foot, R4.apply(prot, body.com)); body.rot = prot;
   body.kinematic = body.fixed = body.hidden = true; body.mat = 1;
   objects.world.add(body);
-  const show = (c, e, shape, glow) => { const p = makeProp({ c, rot: prot, e, shape, mat: MAT.metal, glow }); p.kind = 'socket'; addRock(p); return p; };
+  const show = (c, e, shape, glow) => { const p = makeProp({ c, rot: prot, e, shape, mat: MAT.metal, glow }); p.kind = 'socket'; p.visual = true; addRock(p); return p; };
   launcher.pillar = {
     n: pn, foot, up: pn, rot: prot, body,
     spindle: show(vec4.add(foot, vec4.scale(pn, PILLAR.top / 2)), [PILLAR.p, PILLAR.p, PILLAR.p, PILLAR.top / 2], SHAPE.box, 0.04),

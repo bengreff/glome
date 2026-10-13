@@ -22,7 +22,7 @@ import { MASSIF } from './world.js';
 import { quality, updateSky, setFov, hits, sunbuf, programsReady } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
-         drawStone, pouchKey, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
+         drawStone, pouchKey, tiltHeld, endTilt, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, placeParts, updateLauncher, tryLaunch, TIERS } from './launcher.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
@@ -185,7 +185,7 @@ function softReset() {
 }
 
 // ---------- main loop ----------
-let last = performance.now(), lastRaw = last, physAcc = 0;
+let last = performance.now(), lastRaw = last, physAcc = 0, tilting = false;
 const STEP = 1 / 120;
 const accel = (x, v) => accelBodyA(x, v, state.time);
 // One bad frame must never stop the world: errors are recorded (and logged once) and the loop carries on.
@@ -202,12 +202,16 @@ function frameBody(now) {
 
   // look
   const sens = SENS * settings.sens, dy = settings.invert ? -mouse.dy : mouse.dy;
+  if (keys.has('KeyR') && objects.held) { tiltHeld(mouse.dx, dy, mouse.alt, sens * 2.5); tilting = true; }   // (R: the mouse turns what you hold)
+  else {
+  if (tilting) { endTilt(); tilting = false; }
   if (mouse.alt) {
     player.rotate('FA', mouse.dx * sens);
     player.rotate('RA', -dy * sens);
   } else {
     player.rotate('FR', mouse.dx * sens);
     player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch - dy * sens));
+  }
   }
   if (mouse.dx || mouse.dy) { state.facing = null; syncFlightFrame(player); }   // looking around cancels an automatic turn
   mouse.dx = mouse.dy = 0;
