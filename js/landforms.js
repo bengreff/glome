@@ -37,9 +37,20 @@ export function buildLandforms(hf, home, homeA) {
   const I = ISLANDS[5].n, T = [[-I[1], I[0], I[3], -I[2]], [-I[2], -I[3], I[0], I[1]], [-I[3], I[2], -I[1], I[0]]];
   const span = ISLANDS[5].r * 1.6;
   carves.push({ a: vec4.scale(off(I, T[0], -span), PLANET_R + 1.2), b: vec4.scale(off(I, T[0], span), PLANET_R + 1.2), r: 3.4, name: 'arch' });
-  // the overhang: a hollow under the massif's opposite flank, half below the ground
-  const g = off(MASSIF, vec4.scale(f, -1), 34), hg = hf.heightAt(g);
-  carves.push({ a: vec4.scale(g, PLANET_R + hg - 2), b: vec4.scale(g, PLANET_R + hg - 2), r: 8, name: 'overhang' });
+  // the overhang: a rock shelter cut level into the massif's opposite flank, open downhill, its floor a hand below the
+  // ground where it opens, so you walk in and out. (It was a ball half under the ground: a pit whose sides curved
+  // over you at 68° and more, and walked into from above, you could not climb out.)
+  const g = off(MASSIF, vec4.scale(f, -1), 34);
+  let dn = null, lowest = Infinity;                       // downhill there: the lowest ground 6 m off, of 64 ways round
+  { const T3 = [[-g[1], g[0], g[3], -g[2]], [-g[2], -g[3], g[0], g[1]], [-g[3], g[2], -g[1], g[0]]];
+    for (let i = 0; i < 64; i++) {
+      const az = i * 2.39996, el = Math.acos(1 - 2 * ((i * 0.618034 + 0.5) % 1));
+      const d = vec4.norm([0, 1, 2, 3].map(k => Math.sin(el) * Math.cos(az) * T3[0][k] + Math.sin(el) * Math.sin(az) * T3[1][k] + Math.cos(el) * T3[2][k]));
+      const h = hf.heightAt(off(g, d, 6)); if (h < lowest) { lowest = h; dn = d; }
+    } }
+  const RO = 3.2, ohMouth = off(g, dn, 9), floorH = hf.heightAt(ohMouth) - 0.12;
+  carves.push({ a: vec4.scale(off(g, dn, -3), PLANET_R + floorH + RO), b: vec4.scale(ohMouth, PLANET_R + floorH + RO), r: RO, name: 'overhang' });
+  G.overhang = { floor: vec4.scale(g, PLANET_R + floorH), mouth: vec4.scale(ohMouth, PLANET_R + floorH + 0.12) };
 }
 
 // Signed distance to the nearest carved space (positive outside it).

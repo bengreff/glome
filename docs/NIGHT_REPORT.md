@@ -1,10 +1,10 @@
 # Night report
 
-The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), run five on 12 October, which fills the world where you are (v1.2), and run six the same day: Windows, creatures where they live and a cave you can leave (v1.3); their sections are at the end.
+The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), run five on 12 October, which fills the world where you are (v1.2), run six the same day: Windows, creatures where they live and a cave you can leave (v1.3), run seven: four puzzles rebuilt (v1.4, v1.5), and run eight on 13 October: the puzzles scrapped, and the game playable start to finish without them (v1.6); their sections are at the end.
 
 **Play:** https://bengreff.github.io/glome/ · **Hub:** https://bengreff.github.io/ · **Source:** https://github.com/bengreff/glome
 
-Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**; run six, **v1.3**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
+Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**; run six, **v1.3**; run seven, **v1.4** and **v1.5**; run eight, **v1.6**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
 
 ## What to try first
 
@@ -364,3 +364,53 @@ All on the M2 Pro, while another session ran four heavy processes (load about 9)
 4. **The lighthouse:** say if the proposal is the puzzle you meant.
 5. **Windows:** still untested; tell me what happens.
 6. **itch.io:** upload `dist/glome-v1.5.zip`, the night's end: the four puzzles (v1.4), then the barrel, old saves kept working, the gamepad turning and the tides switch.
+
+
+## Run eight (13 October): playable without puzzles (v1.6)
+
+You played v1.5 and said the puzzles were "all bad... janky", asked to scrap them, for levers to aim the launcher with a speed control, and for impulse stones you can be sure to collect. You also chose tides on with a slower day, and the crab. You were here for the first part; we worked in segments, each pushed live once checked.
+
+### What changed
+
+- **The puzzles are gone:** the closed room, the mirror key, the knot gate, the fold, the four rings and the pillar. The physics they brought stays (hinges with stops, compound bodies, ropes). The cave is still there, as a place.
+- **Stones you can actually reach.** A stone is a 4D ball 18 cm across, so your slice cuts it only within 9 cm of its middle along ana. The way's E/Q cue used to stop at 1.5 m, leaving you standing at an invisible stone. It now counts down in tenths of a metre until you are within reach (0.3 m), and F takes it.
+- **A launcher you can stand on.** The summit was a point falling away at 50°, so the pad stood 0.7–1.6 m proud of the ground all round: too high to step onto, from most sides too high to jump. The top 6 m of the summit are taken off in the terrain itself, leaving a level top about 10 m across with the pad a step high.
+- **Levers** (your pick: a panel, not a console in the world). Stand on the pad and four levers appear beside the space map: turn, tip toward ana, raise, and speed, 0 to 72 m/s with nothing to unlock. Press Esc to free the mouse and drag them (or use the wheel over one, or the d-pad); the barrel and the predicted path follow at once.
+- **The way:** the nearest stone while your pouch is empty, then the pad. On B, its marks show the console, which now opens as soon as you reach it (no orbit).
+- **Tides on, with a 900 s day:** high water about every 7.5 minutes. The start (7.6 m up) stays dry: its highest tide in 11 hours of game time was 6.2 m. The raft's beach floods; the raft floats.
+- **Crabs.** Walkers are now concept B: a round shell, a head with two eyes, six legs (one along each of the ground's six directions), all one smooth skin. Each turns square to your slice and stands on four legs in it; step a little through ana and the legs leave your slice while the shell floats.
+
+![The crab at three-quarters, in your slice](crab.jpg)
+
+### How it was checked
+
+A bot played it as a new player with the real keys:
+- from where you arrive to a stone (5 s, three to six taps of E/Q), into the pouch, up to the pad (31 s), and off;
+- the levers worked by mouse, and the launch went along the barrel at the set speed;
+- landing on B 123 m from the console, walking to it by its mark (36 s), and opening it;
+- 150 s of shaking the sandbox: 77 takes, 28 throws, 49 drops and set-downs, jumps and twists through ana with things in hand. Nothing went NaN, nothing was flung, nothing sank into the ground.
+
+- **A trap, found and fixed.** Played again later, the bot walked into the overhang on the massif's far flank and stayed there: it was a pit 6 m deep with sides curving over you. It is now a rock shelter cut level into the hill, open downhill; dropped on its floor, the bot walks out in 7.7 s.
+
+### Gates
+
+On the M2 Pro, part of the time with another session's jobs on four cores:
+- **Unit tests** pass (bodies, so4, rope, audio, creatures, tides).
+- **Smoke:** no errors, boot 4.4 s.
+- **Performance** in the five usual views: 48–59% resolution at 59–60 fps (the view looking down 48%, just under the 50% line, measured under that load). In a herd, crabs cost what walkers did (slice pass 13.3 ms against 13.9).
+- **Persistence:** your things, the finds, the levers (and a v1.5 save's sliders, turned into angles).
+- **Stones:** a pedestal's stone taken, stowed, drawn, regrowing.
+- **Playthroughs:** the stones loop to a launch (pad in 34 s); out of the cave; out of the shelter; the levers; an orbit at 57.7 m/s; B at 72 m/s (75 s, predicted 73); on B, to the console and open; 150 s of the sandbox shaken with nothing NaN, flung or sunk.
+
+### Two numbers for you
+
+1. **Gravity on the pad is 10.6 m/s²**, where the old summit measured 9.8 (Earth). The pad is 6 m lower, and in 4D gravity falls off as 1/r³, so it's about 6% stronger there. The slower spin takes off less, too. For 9.8 again, set G_SURF to 14.8; everything gets about 8% lighter.
+2. **Orbits are rarer at the slow day.** The direction flat across the hoop comes round a third as often, so you may wait several minutes on the pad for an orbit to be possible. An orbit still chimes, but opens nothing now.
+
+### For you
+
+1. **Play v1.6** from a new world: stone, pad, levers, B, console. Tell me where it is still janky.
+2. **The two numbers above.**
+3. **The lighthouse:** with the puzzles gone, is it still wanted, as a puzzle or as a place?
+4. **Windows:** still untested.
+5. **itch.io:** upload `dist/glome-v1.6.zip`.

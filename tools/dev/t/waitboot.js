@@ -1,0 +1,1 @@
+(async () => { const t0 = performance.now(); while (!(window.__glome && __glome.G && __glome.G.boot) && performance.now() - t0 < 90000) await new Promise(r => setTimeout(r, 250)); await new Promise(r => setTimeout(r, 2000)); return JSON.stringify({ booted: !!window.__glome, ms: Math.round(performance.now() - t0) }); })()

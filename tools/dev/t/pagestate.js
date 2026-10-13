@@ -1,0 +1,1 @@
+(() => JSON.stringify({ load: (document.getElementById('load-msg') || {}).textContent, hasG: !!window.__glome, err: (document.getElementById('fail') || document.querySelector('.fail') || {}).textContent || null, title: document.title, body: document.body.innerText.slice(0, 300) }))()

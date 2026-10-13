@@ -12,7 +12,9 @@ echo "== finds persistence"; "$D/run.sh" fp 150 --gpu 2>&1 | grep -v '^eval: 1$\
 echo "== stones (a pedestal's stone: take, stow, draw, forming)"; "$D/run.sh" stones 120 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== sandbox (150 s of taking, throwing, setting down, jumping and twisting with things in hand)"; "$D/run.sh" sandbox 400 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== on B: walk to the console and open it"; "$D/run.sh" bconsole 300 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
-echo "== playthroughs"; for n in stones caveout aim; do printf "%s: " $n; "$D/run.sh" pt_$n 150 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .; done
+echo "== the overhang: dropped on its floor, out of it on foot"; "$D/run.sh" overhang 400 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
+echo "== playthroughs"; printf "stones: "; "$D/run.sh" pt_stones 400 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
+for n in caveout aim; do printf "%s: " $n; "$D/run.sh" pt_$n 150 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .; done
 printf "orbit: "; "$D/run.sh" pt_orbit 1500 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 printf "landB: "; "$D/run.sh" pt_landB 800 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 echo "== load"; sysctl -n vm.loadavg

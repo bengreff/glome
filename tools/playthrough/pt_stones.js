@@ -24,15 +24,34 @@ for (let i = 0; i < 400 && O.pouch === 0; i++) {
 }
 out.stone = { pouch: O.pouch, secs: +(g.state.time - t0).toFixed(1), anaTaps: taps, walks: steps, log: log.slice(-6).join(' ') };
 if (!O.pouch) return JSON.stringify(out);
-// 2. to the launcher's pad
-const t1 = g.state.time; let stuck = 0, last = p.pos.slice();
-for (let i = 0; i < 600 && !d.launcher.onPad; i++) {
+// 2. to the launcher's pad: toward its column; with no headway for a few seconds (a steep face), go round as a
+// player would (a few steps sideways, or through ana) and try again
+const t1 = g.state.time; let best = 1e9, since = 0, detours = 0, sd = 3;
+const rnd = () => ((sd = (Math.imul(sd, 1103515245) + 12345) >>> 0) / 4294967296);
+while (!d.launcher.onPad && g.state.time - t1 < 240) {
   if (!d.guide.goal || d.guide.goal.kind !== 'launch') { await gt(0.3); continue; }
+  const dist = len(V.sub(d.launcher.site, p.pos));
+  if (dist < best - 1) { best = dist; since = 0; } else since++;
   faceGoal(); const r = rel();
+  // (a boulder or a rock in the way: climb it, holding Space as you walk on; failing that, go round it, keeping to
+  // one side, a little further each time)
+  if (since > 6) { detours++; since = 0;
+    if (detours % 2) { key('KeyW'); key('Space'); await gt(2.5); key('Space', true); key('KeyW', true); }
+    else { const side = detours % 4 === 2 ? 'KeyA' : 'KeyD'; key(side); key('KeyW'); await gt(1.5 + 0.5 * detours); key('KeyW', true); key(side, true); }
+    continue; }
   if (Math.abs(r.a) > 1.2 && Math.hypot(r.f, r.r) < 30) await hold(r.a > 0 ? 'KeyE' : 'KeyQ', Math.min(1.5, Math.abs(r.a) / 4.2));
-  else { key('KeyW'); if (stuck > 2) key('Space'); await gt(0.5); key('Space', true); }
-  if (len(V.sub(p.pos, last)) < 0.5) stuck++; else stuck = 0; last = p.pos.slice();
-  if (stuck > 12) { out.stuckAt = (len(V.sub(d.launcher.site, p.pos))).toFixed(0) + ' m from the pad'; break; }
+  else { key('KeyW'); if (since > 2) key('Space'); await gt(0.5); key('Space', true); }
+}
+out.detours = detours;
+if (!d.launcher.onPad) {                       // what stopped it: the rocks within 4 m, and the ground's rise ahead
+  const map = JSON.parse(document.querySelector('script[type=importmap]').textContent).imports, PR = await import(map['./js/props.js']);
+  out.rocks = PR.rocksAt(p.pos).filter(q => len(V.sub(q.c, p.pos)) < q.R + 4).map(q => ({ kind: q.kind, R: +q.R.toFixed(2), d: +len(V.sub(q.c, p.pos)).toFixed(2) }));
+  const u = p.up(), ah = [1, 2, 3].map(m => { const n = nz(V.add(V.sc(u, 250), V.sc(p.F, m))); return +(p.hf.heightAt(n) - p.hf.heightAt(u)).toFixed(2); });
+  out.riseAhead = ah; out.h = +(len(p.pos) - 250).toFixed(1); out.padDist = +len(V.sub(d.launcher.site, p.pos)).toFixed(1);
+  out.ground = +p.hf.heightAt(u).toFixed(1); out.pos = p.pos.map(v => +v.toFixed(2)); out.grounded = p.grounded; out.supported = !!p.supported;
+  out.boulders = g.boulders.all.filter(b => len(V.sub(b.c, p.pos)) < b.r + 4).map(b => ({ r: +b.r.toFixed(2), d: +len(V.sub(b.c, p.pos)).toFixed(2) }));
+  const LF = await import(map['./js/landforms.js']); out.carve = +LF.carveSD(p.pos).d.toFixed(2); out.nearCarve = LF.carves.map(c => c.name + ':' + Math.min(len(V.sub(c.a, p.pos)), len(V.sub(c.b, p.pos))).toFixed(0)).join(' ');
+  const c = p.camera(), dd = V.sub(d.launcher.site, c.eye); out.goalRel = [c.F, c.R, c.U, c.A].map(e => +V.dot(dd, e).toFixed(1));
 }
 key('KeyW', true);
 out.pad = { onPad: d.launcher.onPad, secs: +(g.state.time - t1).toFixed(1), cue: d.guide.goal && d.guide.goal.cue };

@@ -30,11 +30,10 @@ The owner played run seven's puzzles and answered its decisions. In their words:
 
 **Order:** 1 (scrap), 2 (stones), 3 (launcher), 4 (tides), 5 (crab), then 6. Ask at the start how the session runs (autonomous, or segments with check-ins), and confirm the two open numbers: the launcher's gating and the day's length.
 
-### Run eight: status (13 October, early afternoon)
+### Run eight: status (13 October, done: v1.6)
 
-- **Live:** segments 1–5 (puzzles scrapped; stones reachable and the summit levelled for the pad; the lever panel; tides on with the 900 s day; loop and sandbox checked). Not yet tagged v1.6.
-- **Segment 6, the crab:** written but untested, on branch `crab` (worktree `.wt/crab`, commit "WIP crab"). Walkers become six-legged crabs drawn as one blended skin (trees.js skin groups; shaders.js `skinSD`, the skin search in `hitTrees`, shading by its gradient). Next: serve and look (`URL=http://127.0.0.1:8650/.wt/crab/ tools/dev/run.sh …`), fix, measure cost, merge.
-- **Settle gate pending:** the last run gave 30 fps in every view, with the Mac on battery at 5% and four other long jobs (`s0long`) on four cores. Re-run on mains power with the machine quiet.
+- **All six segments are live and tagged v1.6:** puzzles scrapped; stones reachable; the summit levelled for the pad; the lever panel; tides on with the 900 s day; the loop and sandbox checked; crabs as one skin. Also fixed on the way: the overhang was an inescapable pit, now a rock shelter. Report: "Run eight" in NIGHT_REPORT; reasons in DECISIONS.
+- **Open for the owner:** gravity on the pad 10.6 against 9.8 (G_SURF 14.8 to restore); the lighthouse (still wanted, puzzle or place?); Windows; upload `dist/glome-v1.6.zip`.
 
 ### Run eight: the interview (13 October)
 
