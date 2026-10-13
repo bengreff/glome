@@ -1,0 +1,1 @@
+[{"eval":"1","wait":12000},{"eval":"JSON.stringify({ home: __glome.G.home.pos, launcher: __glome.dbg.launcher.n, sites: __glome.dbg.artifacts.map(a => ({ id: a.id, n: a.n })) })"}]

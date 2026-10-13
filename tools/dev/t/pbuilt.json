@@ -1,0 +1,1 @@
+[{"eval":"1","wait":12000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/pbuilt1.js","wait":1500},{"eval":"location.reload(); 1","wait":18000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/pbuilt2.js"}]
