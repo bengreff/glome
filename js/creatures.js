@@ -26,7 +26,7 @@ import { fbm4 } from './noise.js';
 
 export const creatures = { list: [], cells: new Map(), at: null, hf: null, keep: () => false, fixed: [], clock: 0, nextId: 1 };
 const CELL = 16, RANGE = 64, LEASH = 14, NEAR = 45;
-const WALKER = { k: 1.2, height: 0.6 * 1.2, stride: 0.45 * 1.2, legR: 0.075 * 1.2 };   // (k: its size, against the concept's)
+const WALKER = { k: 1.2, height: 0.6 * 1.2, stride: 0.45 * 1.2, legR: 0.09 * 1.2 };   // (k: its size, against the concept's)
 const ROLLER = { a: 0.48 };
 const proj = (v, n) => vec4.sub(v, vec4.scale(n, vec4.dot(v, n)));
 const along = (n, d, m) => vec4.norm(vec4.add(vec4.scale(n, Math.cos(m / PLANET_R)), vec4.scale(d, Math.sin(m / PLANET_R))));
@@ -258,7 +258,7 @@ export function creatureDraw(eye, A, hf, dt = 0) {
       if (d < 45 && caps.length < 12) {
         const sk = { caps: [], c: vec4.scale(n, g + 0.45 * K), R: 1.25 * K, skin: true, glow: alarm };
         caps.push(sk);
-        sk.caps.push([ctr, vec4.add(ctr, vec4.scale(up, 0.28 * K)), 0.42 * K, 10]);   // the body: flattened along up
+        sk.caps.push([ctr, vec4.add(ctr, vec4.scale(up, 0.3 * K)), 0.46 * K, 10]);   // the body: flattened along up
         sk.caps.push([head, head, 0.13 * K, 11]);
         const sp = vec4.len(c.v) > 0.05 ? 1 : 0, dirs = [f, vec4.scale(f, -1), s, vec4.scale(s, -1), an, vec4.scale(an, -1)];
         dirs.forEach((D, i) => {
@@ -270,10 +270,10 @@ export function creatureDraw(eye, A, hf, dt = 0) {
           const knee = vec4.add(hip, vec4.add(vec4.scale(D, 0.35 * K), vec4.scale(up, 0.25 * K)));
           const fn = vec4.norm(vec4.add(vec4.add(vec4.scale(n, g), vec4.scale(D, 0.9 * K)), vec4.scale(f, off * WALKER.stride)));
           const foot = vec4.scale(fn, PLANET_R + hf.heightAt(fn) + (swing ? Math.sin(Math.PI * u) * 0.12 * K * sp : 0) + 0.03);
-          sk.caps.push([hip, knee, WALKER.legR, 11], [knee, foot, WALKER.legR * 0.75, 11]);
+          sk.caps.push([hip, knee, WALKER.legR, 11], [knee, foot, WALKER.legR * 0.78, 11]);
         });
       } else {
-        items.push(bodyProp(ctr, rot, [0.42 * K, 0.42 * K, 0.42 * K, 0.28 * K], SHAPE.ball, MAT.hide, alarm));
+        items.push(bodyProp(ctr, rot, [0.46 * K, 0.46 * K, 0.46 * K, 0.3 * K], SHAPE.ball, MAT.hide, alarm));
         items.push(bodyProp(head, rot, [0.13 * K, 0.13 * K, 0.13 * K, 0.13 * K], SHAPE.ball, MAT.hide, alarm));
       }
     } else {

@@ -666,13 +666,23 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf, out i
     if (b * b < c || (b > 0.0 && c > 0.0) || -b - sqrt(b * b - c) > best) continue;   // missed, or behind what is already hit
     vec4 sp = texelFetch(uTGTex, ivec2(3 * g + 2, 0), 0);
     int s0 = int(sp.x + 0.5), cnt = int(sp.y + 0.5);
-    if (sp.z > 1.5) {                                        // a creature's skin: step along the ray through its ball
-      float sq = sqrt(b * b - c), tt = max(-b - sq, 0.0), tEnd = min(-b + sq, best);
-      for (int i = 0; i < 48; i++) {
+    if (sp.z > 1.5) {                                        // a creature's skin
+      // where the ray first comes within reach of it: the nearest of its pieces, each grown by what the blend can add
+      // (a smooth union lies within k/4 of the pieces' union); then step along the ray from there
+      float tt = 1e9;
+      for (int i = 0; i < 16; i++) {
+        if (i >= cnt) break;
+        int j = s0 + i;
+        vec4 pa = treeT(j, 0), pb = treeT(j, 1), q = treeT(j, 2);
+        float te = capIntersect(ro, rd, pa, q.y < 10.5 ? pa : pb, q.x + 0.03);   // (the body: its ball, radius across)
+        if (te > 0.0) tt = min(tt, te);
+      }
+      float tEnd = min(-b + sqrt(b * b - c), best);
+      for (int i = 0; i < 32; i++) {
         if (tt > tEnd) break;
         float dd = skinSD(ro + rd * tt, s0, cnt);
         if (dd < 0.002 + 0.0006 * tt) { best = tt; leaf = 10.0; cap = s0; break; }
-        tt += max(dd * 0.9, 0.003);
+        tt += max(dd * 0.9, 0.004);
       }
       continue;
     }
