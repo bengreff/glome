@@ -26,6 +26,7 @@ if (!found) return JSON.stringify(out);
 out.waited = waited; out.predicted = found.eta;
 p.pos = V.add(L.site, V.sc(up, 0.05)); p.vel = [0,0,0,0];
 const u = p.up(), hz = nz(V.sub(found.dir, V.sc(u, V.dot(found.dir, u)))); p.F = hz; p.settleFrame(); p.pitch = Math.asin(V.dot(found.dir, u));
+L.aimAt(found.dir); await gt(0.05);                    // (the barrel, set by its sliders: scripted here, the aiming is not the test)
 const t0 = g.state.time;
 g.keys.add('Space'); await gt(0.05); g.keys.delete('Space');
 while (g.state.time - t0 < 320 && p.onB == null) await gt(2);

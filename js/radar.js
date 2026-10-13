@@ -379,7 +379,7 @@ export function drawRadarOverlay(r, sun) {
   if (sh.things && RB <= 330 && G.objects) {
     const caches = new Set();
     for (const b of G.objects.world.bodies) {
-      if (b.held || b.fixed) continue;
+      if (b.held || b.fixed || b.keep) continue;              // (not what is built in: a gate's leaf, the fold's plates, the sliders' knobs)
       const still = b.find && b.spawnPos && vec4.len(vec4.sub(b.pos, b.spawnPos)) < 0.5;
       if (still && b.find === 'cairn') continue;              // a cairn untouched is not a thing to carry
       if (still && b.find === 'cache') { caches.add(b.cache); continue; }

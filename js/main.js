@@ -532,6 +532,8 @@ function frameBody(now) {
           for (const j of fd.joints) { j.accP = [0, 0, 0, 0]; j.accA = [0, 0, 0, 0, 0, 0]; j.accL = 0; }
         } };
     }
+    if (launcher.aim) hooks.aim = { save: () => launcher.aim.knobs.map(b => +b.slider.x.toFixed(4)),   // the launcher's sliders, where you left them
+      load: xs => { if (Array.isArray(xs) && xs.length === 3) launcher.aim.knobs.forEach((b, k) => { b.slider.x = Math.max(0, Math.min(1, +xs[k] || 0)); }); } };
     G.objects = objects;
     G.home = { pos: player.pos.slice(), F: player.F, R: player.R, A: player.A };
     // start in the morning: sun about 20° up and rising

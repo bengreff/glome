@@ -62,7 +62,7 @@ export function foldBuild(w, foot, R) {
   const mk = (rot, hingeAt, parts = plate()) => {
     const b = makeBody({ shape: 'compound', parts, density, mu: 0.5, pos: hingeAt, kind: 'cell' });
     b.rot = rot; b.pos = add(hingeAt, R4.apply(rot, b.com));
-    Object.assign(b, { mat: 1, glow: 0, keep: true, hinged: true });
+    Object.assign(b, { mat: 1, glow: 0, keep: true, hinged: true, mounted: true });
     w.add(b); b.sleeping = true; return b;
   };
   for (const [k, sg] of ARMS) {

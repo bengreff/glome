@@ -112,7 +112,7 @@ export function stepObjects(cam, kick, w = objects.world, far = 150, gone = 1500
   }
   if (h) holdDrive(h, cam, w, kick);
   w.step();
-  if (h && !h.hinged) holdRecord(h, cam);
+  if (h && !h.mounted) holdRecord(h, cam);
   soundImpacts(w);
 }
 // What a body sounds like when it strikes something: a glome rings (its overtones a 3-sphere's, audio.js), metal
@@ -207,7 +207,19 @@ function hingedDrive(b, cam, w, kick) {
   hold.snag = gap > 1.0 ? hold.snag + dt : 0;
   if (hold.snag > 0.4) { drop(); G.audio?.emit('clack', P, 0.3); }
 }
+// A slider's knob: it follows your hand along its rail (at most 1.5 m/s, as a hand slides a heavy knob), and stays
+// where you leave it. Drawn a metre from it, your hand lets go.
+function sliderDrive(b, cam, w) {
+  const S = b.slider, o = hold.off, dt = w.dt;
+  const T = [cam.F, cam.R, cam.U, cam.A].reduce((q, e, k) => vec4.add(q, vec4.scale(e, o[k])), cam.eye);
+  const want = Math.max(0, Math.min(1, vec4.dot(vec4.sub(T, S.a), S.dir) / S.len)), step = 1.5 * dt / S.len;
+  S.x += Math.max(-step, Math.min(step, want - S.x));
+  b.pos = vec4.add(S.a, vec4.scale(S.dir, S.x * S.len)); b.vel = [0, 0, 0, 0];
+  hold.snag = vec4.len(vec4.sub(T, b.pos)) > 1.0 ? hold.snag + dt : 0;
+  if (hold.snag > 0.4) { drop(); G.audio?.emit('clack', b.pos, 0.3); }
+}
 function holdDrive(b, cam, w, kick) {
+  if (b.slider) return sliderDrive(b, cam, w);
   if (b.hinged) { b.sleeping = false; b.sleepT = 0; return hingedDrive(b, cam, w, kick); }
   const T = handTarget(b, cam), L = hold.last, dt = w.dt;
   b.sleeping = false; b.sleepT = 0;
@@ -247,7 +259,7 @@ const tilt = { base: null, plane: null, angle: 0, px: 0, py: 0 };
 const TILT_PLANES = { pitch: [0, 3], roll: [1, 3], anaTip: [2, 3], anaTurn: [0, 2] };   // (body axes: forward 0, right 1, ana 2, up 3)
 export function tiltHeld(dx, dy, alt, sens) {
   const b = objects.held;
-  if (!b || b.hinged) return;
+  if (!b || b.mounted) return;
   if (!tilt.base) { tilt.base = b.holdRel || null; tilt.plane = null; tilt.angle = 0; tilt.px = tilt.py = 0; }
   if (!tilt.base) return;
   if (!tilt.plane) {                                   // the first 6 px of motion choose the plane
@@ -280,7 +292,7 @@ function holdRecord(b, cam) {
 export function carryHeld(cam) {
   const b = objects.held;
   if (!b) return;
-  if (b.hinged) { drop(); return; }               // (a thing on a hinge stays on it)
+  if (b.mounted) { drop(); return; }              // (a thing on a hinge or a rail stays on it)
   const T = handTarget(b, cam);
   b.pos = T.pos.slice(); b.rot = T.rot; b.omega = [0, 0, 0, 0, 0, 0];
   hold.last = T; hold.snapped = true; hold.rel = hold.relPrev = null;
@@ -312,10 +324,10 @@ export function pickUp(b, cam) {
   G.audio?.emit('clack', b.pos, 0.4);
 }
 function takeHold(b, cam) {
-  objects.held = b; b.held = true; b.kinematic = false; b.sleeping = false; b.sleepT = 0;
+  objects.held = b; b.held = true; b.kinematic = !!b.slider; b.sleeping = false; b.sleepT = 0;   // (a slider's knob stays on its rail)
   b.holdRel = R4.compose(R4.inverse(bodyRot(cam)), b.rot);  // its attitude to your body, kept while you hold it
   hold.snag = 0; hold.gap = null; hold.snapped = false; hold.rel = hold.relPrev = null;
-  if (b.hinged) {                                  // a thing on a hinge: held by the point you took, where you took it
+  if (b.mounted) {                                 // a thing on a hinge or a rail: held by the point you took, where you took it
     const P = objects.lookPoint || b.pos, d = vec4.sub(P, cam.eye);
     hold.point = R4.applyInv(b.rot, vec4.sub(P, b.pos)); hold.off = [cam.F, cam.R, cam.U, cam.A].map(e => vec4.dot(d, e));
     hold.last = null; return;
@@ -323,8 +335,8 @@ function takeHold(b, cam) {
   hold.last = handTarget(b, cam);
 }
 function release(b, vel) {
-  b.held = false; b.kinematic = false; b.sleeping = false; b.sleepT = 0;
-  if (vel) b.vel = vel.slice();
+  b.held = false; b.kinematic = !!b.slider; b.sleeping = false; b.sleepT = 0;
+  if (vel && !b.slider) b.vel = vel.slice();
   objects.held = null; hold.last = null; hold.rel = hold.relPrev = null;
 }
 export function drop() {                          // let go: it keeps the motion it has
@@ -335,7 +347,7 @@ export function drop() {                          // let go: it keeps the motion
 export function throwHeld(cam, charge, kickPlayer) {
   const b = objects.held;
   if (!b) return null;
-  if (b.hinged) { drop(); return null; }
+  if (b.mounted) { drop(); return null; }
   const mp = LAWS.PLAYER_M, mo = b.m;
   const u = b.kind === 'stone' ? STONE_SPEED : Math.min(THROW_VMAX, (0.15 + 0.85 * charge) * THROW_MAX / mo);   // speed relative to you
   const dir = cam.F;
@@ -373,7 +385,7 @@ export function spawnAt(kind, pos, inB = false, tier = null) {
 // Where the held object would come to rest if you let it go here: simulate a copy of the nearby world forward.
 export function computeGhost(cam) {
   const b = objects.held;
-  if (!b || b.hinged) { objects.ghost = null; return; }
+  if (!b || b.mounted) { objects.ghost = null; return; }
   const w = worldOf(b).clone();
   w.bodies = w.bodies.filter(o => vec4.len(vec4.sub(o.pos, b.pos)) < 12);
   const g = w.bodies.find(o => o.id === b.id);
@@ -441,7 +453,7 @@ function lerpRot(A, B, t) {
   return { l: qnorm(A.l.map((x, i) => s * x * (1 - t) + B.l[i] * t)), r: qnorm(A.r.map((x, i) => s * x * (1 - t) + B.r[i] * t)) };
 }
 function drawPose(b, cam, alpha) {
-  if (b.held && hold.rel && !b.hinged) {
+  if (b.held && hold.rel && !b.mounted) {
     const C = camRot(cam), r0 = hold.relPrev || hold.rel, r1 = hold.rel;
     return { pos: vec4.add(cam.eye, R4.apply(C, lerp4(r0.p, r1.p, alpha))), rot: R4.compose(C, lerpRot(r0.R, r1.R, alpha)) };
   }
