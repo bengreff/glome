@@ -1,12 +1,43 @@
-# Glome: handoff (written 12 October 2026, after v1.3; run seven's status added at its end, after v1.4)
+# Glome: handoff (written 12 October 2026, after v1.3; run seven's status added after v1.5; run eight's plan from the owner, 13 October, at the top)
+
+## Run eight: start here (the owner's verdict on run seven, 13 October)
+
+The owner played run seven's puzzles and answered its decisions. In their words:
+> 1) On with slower day. 2) Crab 3) next session. 4) They are all bad. they don't work, janky, etc. I think we should scrap the puzzles. Instead, improve the launcher control UI (ideally levers to aim plus a velocity scalar) and make sure impulse stones are collectible.
+
+**The plan:**
+1. **Scrap the puzzles.** All four go: the closed room, the mirror key, the knot gate and the fold.
+   - Remove their structures, the rings kept inside them, their guide goals, their playthroughs and their gates.
+   - Modules to retire: `room.js`, `knot.js`, `fold.js`, the mould and mirror key in `keys.js`, and the builders in `artifacts.js`.
+   - Keep the physics they brought, which is useful elsewhere: compound bodies, hinges with stops and catches, ropes tied to bodies, stepping up, stepped platforms, and holding things on a hinge or a rail.
+   - The cave stays, as a place.
+2. **Make sure impulse stones are collectible.** Play the whole loop as a new player and fix whatever stops it:
+   - finding stones: in caches, and forming on the pedestals at ruins and cairns (the two that appeared beside each vault go with the puzzles);
+   - taking one (F), stowing it (G), the pouch row under the radar, drawing one back out (G with empty hands), and throwing it.
+   - The owner didn't say what failed; ask, or find it by playing.
+3. **The launcher's controls: levers to aim, plus a velocity scalar.**
+   - Today it is a barrel on a gimbal, set by three sliders, with the speed fixed by the tier (the rings on the pillar).
+   - Replace the sliders with levers you grab and pull, and add a control for the speed.
+   - **Open:** with the puzzles gone, nothing gives you the rings any more. Recommendation: no gating, the speed lever ranging up to tier IV's 72 m/s, and the rings and pillar removed. Confirm with the owner.
+4. **Tides on, with a slower day.**
+   - Turn the tide (`tides.js`) on by default, and slow the planet's day so the tides come every few minutes rather than every 2.5. Today `DAY1` is 300 s; 900 s would give a tide about every 7.5 minutes. Confirm the number.
+   - The day length is a law: it changes the sun's pace, the spin's Coriolis and centrifugal pulls, the windows for seeing yourself round the hoop, and the flight predictions. Re-run the flight gates.
+   - Check the start, the launcher and the raft's beach against high water (up to about +9 m at the two points facing the copies along the hoop).
+5. **Creatures: the crab** (concept B in `docs/creature-concepts.png`; live in `tools/concepts/creatures.html`).
+   - A round body with six legs, one along each of the ground's six directions (±f, ±s, ±a), all one smooth skin.
+   - It becomes the walkers' body: drawn as a smooth blended surface, with a gait for six legs; the herds behave as now.
+6. **The hoop lighthouse: next session** (the proposal is in NIGHT_REPORT, run seven). Since the puzzles are scrapped, ask whether it is still wanted, as a puzzle or just as a place.
+
+**Order:** 1 (scrap), 2 (stones), 3 (launcher), 4 (tides), 5 (crab), then 6. Ask at the start how the session runs (autonomous, or segments with check-ins), and confirm the two open numbers: the launcher's gating and the day's length.
+
 
 ## 0. How the next session starts: an interview
 
-Before writing any code, interview the owner. Many questions need answers (section 4). Ask them in batches of at most four, each with concrete options and a recommendation, and follow up where an answer opens new questions. Then write the plan into section 3 of this file, confirm it with the owner, and only then build. The owner also decides in the interview how the session runs (autonomous to a release, as runs three to six were, or in steps with check-ins).
+(Run eight: the owner has set the plan above. Confirm its open questions, then build.) Before writing any code, interview the owner. Many questions need answers (section 4). Ask them in batches of at most four, each with concrete options and a recommendation, and follow up where an answer opens new questions. Then write the plan into section 3 of this file, confirm it with the owner, and only then build. The owner also decides in the interview how the session runs (autonomous to a release, as runs three to six were, or in steps with check-ins).
 
 ## 1. Where things stand
 
-- **Live:** v1.4 and after at https://bengreff.github.io/glome/ (repo `~/glome`, tags v0.0 to v1.4). The itch.io zip is `dist/glome-v1.4.zip`, built by `tools/package.sh`; uploading it is the owner's job.
+- **Live:** v1.5 at https://bengreff.github.io/glome/ (repo `~/glome`, tags v0.0 to v1.5). The itch.io zip is `dist/glome-v1.5.zip`, built by `tools/package.sh`; uploading it is the owner's job.
 - **Reports:** `docs/NIGHT_REPORT.md` has a section per run (three to six); every choice and its reason is in `docs/DECISIONS.md`.
 - **Since v1.0:**
   - **v1.1, the way:** one goal at a time. A column of light in your slice, a diamond mark, and key-cap cues: E/Q with a distance to step through ana, and F, Z C or Space for what to do. Walkers look like animals, the radar is decluttered with stalks, and fixed stone is dark.

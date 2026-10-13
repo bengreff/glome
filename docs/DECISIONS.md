@@ -359,3 +359,12 @@ What I measured, for the three questions you asked (scripts in the session's scr
 - **The sea is drawn as a sphere whose radius changes slowly over the planet.** Each ray meets the sphere at the radius under the eye, then twice more at the radius where it met. The change over that step is far below a pixel.
 - **It costs about 4 µs a frame.** The copies' mean doesn't depend on where the hoop lies, so it's worked out once; the star's and B's part is updated twice a second. The tide at a point is a microsecond.
 - **The real sea would slosh,** since the forcing turns about as fast as a wave crosses it. That would need a sea that moves (shallow-water dynamics over the planet), a project of its own.
+
+## The owner's verdict on run seven (13 October)
+
+The owner played v1.5: "They are all bad. they don't work, janky, etc. I think we should scrap the puzzles. Instead, improve the launcher control UI (ideally levers to aim plus a velocity scalar) and make sure impulse stones are collectible." On run seven's open decisions:
+- **Tides:** on, with a slower day.
+- **Creatures:** the crab.
+- **The lighthouse:** next session.
+
+Run eight's plan is at the top of HANDOFF.md. The puzzles go; the physics they brought stays.
