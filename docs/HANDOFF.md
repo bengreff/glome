@@ -75,9 +75,9 @@ Before writing any code, interview the owner. Many questions need answers (secti
 That is about four hours of segments. At a check-in, ask whether to continue autonomously after the owner leaves.
 
 **Run seven's status (end of the night, 12 October):**
-- **Segments 1–7 are done and live.** v1.4 is tagged after segment 6, when all four puzzles were rebuilt; the itch zip is `dist/glome-v1.4.zip`. Segment 7 (the barrel and sliders) and a gamepad binding came after the tag.
+- **Segments 1–7 are done and live.** v1.4 is tagged after segment 6, when all four puzzles were rebuilt. v1.5 is tagged at the night's end, after the barrel and sliders, the old-save fix, the gamepad binding and the tides switch; the itch zip is `dist/glome-v1.5.zip`.
 - **Segment 8, creature concepts:** a page of three concepts, `tools/concepts/creatures.html` (serve the repo and open `/tools/concepts/creatures.html`), with a contact sheet in NIGHT_REPORT. The owner picks; nothing in the game has changed.
-- **Segment 9, tides:** computed, not built. The true equilibrium tide is ±5 m at a place, every 2.5 minutes. A decision for the owner (NIGHT_REPORT, "Two decisions for you").
+- **Segment 9, tides:** the equilibrium tide is built but off by default (≈ in the console, or `?tides` in the address). At a place it is ±5 m every 2.5 minutes. Whether it should be on, on with a slower day, or a sloshing sea is a decision for the owner (NIGHT_REPORT, "Two decisions for you").
 - **Segment 10, the hoop lighthouse:** a proposal in NIGHT_REPORT, not built. It needs the planet's copies drawn with their towers.
 - **The next session starts** by asking the owner those decisions, what they found playing v1.4, and about Windows.
 

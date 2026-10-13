@@ -269,7 +269,7 @@ You played v1.2: it would not load on Windows and froze the browser; the creatur
 1. **Try it on Windows** and tell me what the loading screen says if it still stops: it now shows each step, and how long the shaders take to compile. If a shader fails, it shows the error instead of freezing; a copy of that text would let me fix it.
 2. **itch.io:** upload `dist/glome-v1.3.zip` in place of v1.2.
 
-## Run seven (12 October): four puzzles rebuilt, keys you can see, stones that come back (v1.4)
+## Run seven (12 October): four puzzles rebuilt, keys you can see, stones that come back (v1.4, v1.5)
 
 You played v1.3: you got the first key from the cave, but had no idea what the second puzzle wanted (you stacked its key on the model). You asked for keys you can recognise, impulse stones that come back, a cue to stow one, clear places on the launcher, and better creatures. We did an interview first (the answers are HANDOFF.md §3a). You were here for the first segments, then left me to carry on.
 
@@ -336,3 +336,31 @@ You asked for creatures that are elegant and complete: one smooth skin each, ani
 - **C. Ringback:** a body that is a ring through ana. Square to it, your slice cuts the ring twice: two backs, one over the other. A quarter turn shows the whole ring, a hollow tube, with its legs gone into ana.
 
 To see them turning, serve the repo (`tools/serve.sh`) and open http://127.0.0.1:8650/tools/concepts/creatures.html (a slider sets the turn). Tell me which, or which parts of each, and I'll build it with walking legs and the herds' behaviour.
+
+### Gates
+
+All on the M2 Pro, while another session ran four heavy processes (load about 9):
+- **Unit tests** pass. New ones cover: hinges (a slab turns in its plane only and lands flat; a hinged pair keeps its momentum), hinge stops (a plate rests past upright), and tides (the tide's potential has the game's gravity as its slope, to 6·10⁻¹¹).
+- **Smoke:** no errors, boot 4.4 s.
+- **Performance** in the five usual views: 53–62% resolution at 57–60 fps, with tides off or on. At the new sites: 55–59% at 58–60 fps; physics is 1.7 ms a frame at the knot gate with the rope in hand, 0.2 ms at the fold.
+- **Persistence:** your things, the finds, and a new check of the built things (the gate's leaf, the fold's plates, the sliders) all come back after a reload. A save from v1.3 has its rings put back inside the rebuilt artifacts.
+- **Playthroughs:**
+  - the room: in round its walls through ana, out with ring I;
+  - the cave: out of it by the cues;
+  - the mirror: jams as found, goes home turned through ana, and ring II is taken;
+  - the knot gate: lifting and sliding the loop fail, a step through ana frees it, and ring III is taken;
+  - the fold: all seven plates up, closed, ring IV taken;
+  - the aim: the barrel follows a slider and the launch goes along it;
+  - tier III orbits, and tier IV lands on B (67 s, as predicted).
+- **Two flaky searches.** Each scripted flight searches randomly for a launch. Twice in five runs that search came up empty or picked a long flight that missed; both passed on rerun. The flight to B now insists on a short flight.
+- **A chaos test:** random hands and feet for 40 s at each new site. No errors, nothing flung, every hinge together.
+- **Every site is reachable on foot** (checked by a path search).
+
+### For you
+
+1. **Play the four puzzles.** They are structures now, and the guide only shows where they are. II needs R and right-drag sideways (turning what you hold through ana). Tell me where you got stuck.
+2. **Tides:** try them with `?tides`, then choose (a)–(d) above.
+3. **Creatures:** pick from A, B or C (or parts of each).
+4. **The lighthouse:** say if the proposal is the puzzle you meant.
+5. **Windows:** still untested; tell me what happens.
+6. **itch.io:** upload `dist/glome-v1.5.zip`, the night's end: the four puzzles (v1.4), then the barrel, old saves kept working, the gamepad turning and the tides switch.
