@@ -1,1 +1,1 @@
-[{"eval":"1","wait":6000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"/Users/ben/glome/tools/playthrough/pt_aim.js","wait":500,"snap":"end"}]
+[{"eval":"1","wait":14000},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/padshot.js","wait":1500,"snap":"pad"},{"file":"/Users/ben/glome/tools/playthrough/pt_aim.js"}]

@@ -1,6 +1,7 @@
-// The launcher: a metal pad on the level top of the highest summit (world.js), where gravity is lightest. Its aim is a barrel on a gimbal beside
-// the pad, set by three sliders (gimbal.js). Stand on the pad and jump: it throws you along the barrel at its speed,
-// anything up to 72 m/s (enough to reach planet B: see DECISIONS.md).
+// The launcher: a metal pad on the level top of the highest summit (world.js), where gravity is lightest. Its aim is a
+// barrel on a gimbal on a post beside the pad (gimbal.js). Standing on the pad, four levers beside the space map set
+// the barrel's three angles and the speed, up to 72 m/s, enough to reach planet B (levers.js). Jump: it throws you
+// along the barrel at that speed.
 import { G } from './game.js';
 import { vec4 } from './player.js';
 import { PLANET_R, SUMMIT } from './world.js';
@@ -9,7 +10,7 @@ import { rot as R4 } from './so4.js';
 import { makeBody } from './bodies.js';
 import { objects } from './objects.js';
 import { makeProp, addRock, SHAPE, MAT } from './props.js';
-import { GIMBAL, aim, angleAt, placeOf, barrelRot, anglesFor } from './gimbal.js';
+import { GIMBAL, aim, barrelRot, anglesFor } from './gimbal.js';
 
 export const SPEED_MAX = 72;                          // m/s: the most the launcher gives (lands on B; PHYSICS.md)
 export const launcher = { site: null, n: null, pad: null, speed: 43, onPad: false };
@@ -36,8 +37,7 @@ export function buildLauncher(hf) {
   launcher.pad = pad;
   launcher.site = vec4.scale(s.p, PLANET_R + s.h + 0.15);
   const T = tangents(s.p);
-  // the aim: a post 3.2 m from the pad's centre (along +T[0]), the barrel on a ball at its top; and the sliders'
-  // stand beside it, toward the pad (gimbal.js). Each stands on its own ground (the summit falls away).
+  // the aim: a post 3.2 m from the pad's centre (along +T[0]), the barrel on a ball at its top (gimbal.js)
   const R = squareOn(s.p), fs = vec4.dot(R4.apply(R, [1, 0, 0, 0]), T[0]) > 0 ? 1 : -1;
   const ground = (f, sd) => { const q = vec4.norm(vec4.add(vec4.scale(s.p, PLANET_R), R4.apply(R, [f, sd, 0, 0]))); return vec4.scale(q, PLANET_R + hf.heightAt(q)); };
   const up0 = s.p, P0 = ground(3.2 * fs, 0), top = vec4.add(P0, vec4.scale(up0, 1.45));
@@ -47,39 +47,23 @@ export function buildLauncher(hf) {
   showAim(top, [0.14, 0.14, 0.14, 0.14], SHAPE.ball, MAT.metal);
   const barrel = makeBody({ shape: 'compound', parts: [{ shape: 'box', c: [0.35, 0, 0, 0], e: [0.55, 0.07, 0.07, 0.07] }], mass: 1e9, mu: 0.5, pos: top, kind: 'barrel' });
   barrel.kinematic = barrel.fixed = true; barrel.mat = 1; barrel.glow = 0.05; objects.world.add(barrel);
-  const S0 = ground(2.0 * fs, 1.7), stand = vec4.add(S0, vec4.scale(up0, 0.45));
-  fixedBox(stand, [0.42, 0.55, 0.3, 0.45]); showAim(stand, [0.42, 0.55, 0.3, 0.45], SHAPE.box, MAT.basalt);
-  const sdir = R4.apply(R, [0, 1, 0, 0]), knobs = [-0.25, 0, 0.25].map((df, k) => {
-    const mid = vec4.add(vec4.add(S0, vec4.scale(up0, 0.93)), R4.apply(R, [df * fs, 0, 0, 0])), a = vec4.sub(mid, vec4.scale(sdir, GIMBAL.rail / 2));
-    showAim(mid, [0.02, GIMBAL.rail / 2, 0.02, 0.02], SHAPE.box, MAT.metal);
-    const b = makeBody({ shape: 'glome', size: 0.06, mass: 1, pos: a, kind: 'knob' });
-    Object.assign(b, { kinematic: true, mat: 1, glow: 0.05, keep: true, mounted: true, slider: { k, a: vec4.add(a, vec4.scale(up0, 0.06)), dir: sdir, len: GIMBAL.rail, x: placeOf(k, GIMBAL.start[k]) } });
-    objects.world.add(b); b.sleeping = true; return b;
-  });
-  launcher.aim = { R, top, barrel, knobs, angles: GIMBAL.start.slice(), dir: vec4.norm(R4.apply(R, aim(GIMBAL.start))) };
+  launcher.aim = { R, top, barrel, angles: GIMBAL.start.slice(), dir: vec4.norm(R4.apply(R, aim(GIMBAL.start))) };
   setAim(GIMBAL.start);
 }
-// Point the barrel (and set the sliders) to the angles [turn, toward ana, up].
+// Point the barrel to the angles [turn, toward ana, up] (each held within its range).
 export function setAim(angles) {
   const A = launcher.aim; if (!A) return;
-  A.knobs.forEach((b, k) => { b.slider.x = Math.max(0, Math.min(1, placeOf(k, angles[k]))); });
-  aimFromKnobs();
-}
-// The barrel follows the sliders.
-function aimFromKnobs() {
-  const A = launcher.aim;
-  A.knobs.forEach(b => { const S = b.slider; b.pos = vec4.add(S.a, vec4.scale(S.dir, S.x * S.len)); b.prevPos = b.pos.slice(); b.prevRot = b.rot; });
-  A.angles = A.knobs.map((b, k) => angleAt(k, b.slider.x));
+  A.angles = angles.map((v, k) => Math.max(GIMBAL.range[k][0], Math.min(GIMBAL.range[k][1], +v || 0)));
   A.dir = vec4.norm(R4.apply(A.R, aim(A.angles)));
   const rot = R4.compose(A.R, barrelRot(A.angles));
   A.barrel.rot = rot; A.barrel.pos = vec4.add(A.top, R4.apply(rot, A.barrel.com)); A.barrel.prevPos = A.barrel.pos.slice(); A.barrel.prevRot = rot;
 }
+export const setSpeed = v => { launcher.speed = Math.max(0, Math.min(SPEED_MAX, +v || 0)); };
 // For the scripted flights: aim along a world direction.
 export const aimAt = dir => setAim(anglesFor(R4.applyInv(launcher.aim.R, dir)));
-// Each step: the barrel follows the sliders; are you standing on the pad (your feet on its top face, within its square)?
+// Each step: are you standing on the pad (your feet on its top face, within its square)?
 export function updateLauncher(p) {
   if (!launcher.pad) return;
-  if (launcher.aim) aimFromKnobs();
   const d = vec4.sub(p.pos, launcher.site), up = vec4.norm(launcher.site);
   const hgt = vec4.dot(d, up), lat = vec4.len(vec4.sub(d, vec4.scale(up, hgt)));
   launcher.onPad = Math.abs(hgt) < 0.4 && lat < 1.2;
@@ -97,4 +81,4 @@ export function tryLaunch(p, cam, jump) {
   G.flags.launches = (G.flags.launches || 0) + 1;
   return true;
 }
-launcher.setAim = setAim; launcher.aimAt = aimAt;     // (for the scripted playthroughs)
+launcher.setAim = setAim; launcher.setSpeed = setSpeed; launcher.aimAt = aimAt;     // (for the scripted playthroughs)

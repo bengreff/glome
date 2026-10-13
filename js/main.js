@@ -24,7 +24,9 @@ import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
          drawStone, pouchKey, tiltHeld, endTilt, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
-import { launcher, buildLauncher, updateLauncher, tryLaunch } from './launcher.js';
+import { launcher, buildLauncher, updateLauncher, tryLaunch, setAim, setSpeed } from './launcher.js';
+import { GIMBAL } from './gimbal.js';
+import { levers, drawLevers, nudgeLever } from './levers.js';
 import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
 import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
@@ -220,6 +222,7 @@ function frameBody(now) {
     state.facing = null; syncFlightFrame(player);
   }
   if (pad.zoom) zoomRadar(pad.zoom * 1.3 * dt);
+  if (pad.lever && levers.shown) nudgeLever(levers.sel, pad.lever * 50 * dt);      // (the d-pad on the pad: a lever's range in 3.6 s)
   const turnKeys = (keys.has('KeyC') ? 1 : 0) - (keys.has('KeyZ') ? 1 : 0);
   if (turnKeys) { player.rotate('FA', turnKeys * 1.2 * dt); syncFlightFrame(player); }
   if (state.facing && player.turnToward(headingTo(state.facing).dir, 2.2 * dt)) { state.faced = { n: state.facing, what: state.facingWhat, until: G.simT + 5 }; state.facing = null; }
@@ -322,10 +325,14 @@ function frameBody(now) {
   if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); }
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
   if (spaceMode && !state.radar.hidden && !state.bare) {
-    updateSpaceMap({ flight, launch: onLauncher ? vec4.scale(launcher.aim.dir, launcher.speed) : null, onB: player.onB });   // (along the barrel)
+    updateSpaceMap({ flight, launch: onLauncher && launcher.speed > 0 ? vec4.scale(launcher.aim.dir, launcher.speed) : null, onB: player.onB });   // (along the barrel)
     radar.rect = radarRect();
     drawSpaceMap(radar.rect, state.radar.yaw, state.radar.el);
   }
+  // on the pad: the launcher's levers, beside the map (levers.js)
+  levers.shown = onLauncher && player.onB == null && !state.bare;
+  if (levers.shown) drawLevers(radarRect()); else { levers.drag = -1; levers.box = null; }
+  G.panelRect = levers.box;                                  // (the way's mark keeps clear of it: hud.js)
   mark('overlay');
   updateHUD(dt, cam, sun);
   updateSound(dt, cam);
@@ -476,8 +483,12 @@ function frameBody(now) {
     hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly, tides: !!G.tides }),
                    load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; G.tides = !!s.tides || /[?&]tides\b/.test(location.search); } };
     if (/[?&]tides\b/.test(location.search)) G.tides = true;      // (tides on from the page's address: ?tides)
-    if (launcher.aim) hooks.aim = { save: () => launcher.aim.knobs.map(b => +b.slider.x.toFixed(4)),   // the launcher's sliders, where you left them
-      load: xs => { if (Array.isArray(xs) && xs.length === 3) launcher.aim.knobs.forEach((b, k) => { b.slider.x = Math.max(0, Math.min(1, +xs[k] || 0)); }); } };
+    // the launcher's levers, where you left them (a save from v1.5 holds the three sliders' places along their rails)
+    if (launcher.aim) hooks.aim = { save: () => ({ angles: launcher.aim.angles.map(v => +v.toFixed(5)), speed: +launcher.speed.toFixed(2) }),
+      load: s => {
+        if (Array.isArray(s) && s.length === 3) setAim(s.map((x, k) => GIMBAL.range[k][0] + (GIMBAL.range[k][1] - GIMBAL.range[k][0]) * Math.max(0, Math.min(1, +x || 0))));
+        else if (s && Array.isArray(s.angles)) { setAim(s.angles); setSpeed(s.speed); }
+      } };
     G.objects = objects;
     G.home = { pos: player.pos.slice(), F: player.F, R: player.R, A: player.A };
     // start in the morning: sun about 20° up and rising

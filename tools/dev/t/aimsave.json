@@ -1,0 +1,1 @@
+[{"eval":"1","wait":14000},{"file":"t/aimsave1.js"},{"eval":"location.reload(); 1","wait":20000},{"file":"t/aimsave2.js"},{"eval":"location.reload(); 1","wait":20000},{"file":"t/aimsave3.js"}]

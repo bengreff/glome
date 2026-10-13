@@ -92,7 +92,7 @@ export function drawBMarks() {
 }
 
 // A key, drawn as the help panel draws one: a small dark cap with its letter. Returns its width.
-function keyCap(x, y, label, col, k, s = 1) {
+export function keyCap(x, y, label, col, k, s = 1) {
   octx.font = `600 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`;
   const w = Math.max(18 * k * s, octx.measureText(label).width + 10 * k * s), h = 18 * k * s;
   octx.fillStyle = 'rgba(11, 14, 20, 0.78)'; octx.strokeStyle = col; octx.lineWidth = 1.3 * k;
@@ -133,6 +133,8 @@ export function drawGoal(cam) {
     let X = (sx * 0.5 + 0.5) * W, Y = (0.5 - sy * 0.5) * H;
     const r = 9 * k, pulse = 1 + 0.12 * Math.sin(performance.now() / 260), rr = radar.rect;
     if (rr && X > rr.x - 40 * k && Y > rr.y - 40 * k) X = rr.x - 40 * k;   // (never under the radar)
+    const pr = G.panelRect;                                   // (nor the launcher's levers)
+    if (pr && X > pr.x - 40 * k && Y > pr.y - 40 * k) X = pr.x - 40 * k;
     Y = Math.min(Y, H - 80 * k);                              // (nor on the hint along the bottom)
     octx.lineWidth = 2.2 * k; octx.strokeStyle = 'rgba(5, 10, 16, 0.6)';
     const dia = R => { octx.beginPath(); octx.moveTo(X, Y - R); octx.lineTo(X + R, Y); octx.lineTo(X, Y + R); octx.lineTo(X - R, Y); octx.closePath(); };
@@ -153,7 +155,8 @@ export function drawGoal(cam) {
     octx.fillStyle = GOAL; octx.fillText(t, X - r - 12 * k, Y + 4 * k);
     if (!inSlice && !here) {                                 // beside it, on whichever side has room
       octx.globalAlpha = 0; const cw = anaCue(0, -100, a, k); octx.globalAlpha = 1;
-      anaCue(X + r + 8 * k + cw < W - 8 * k ? X + r + 8 * k : X - r - 16 * k - tw - cw, Y, a, k);
+      const edge = pr && Y > pr.y - 40 * k ? pr.x - 8 * k : rr && Y > rr.y - 40 * k ? rr.x - 8 * k : W - 8 * k;   // (clear of the levers and radar)
+      anaCue(X + r + 8 * k + cw < edge ? X + r + 8 * k : X - r - 16 * k - tw - cw, Y, a, k);
     }
   }
   // under the dot: the way across ana once you stand at the goal's place in your slice, else what to do there
