@@ -1,8 +1,10 @@
 // Creatures: geometric bodies with real 4D body plans, living all over the grassland.
 //
-// Walkers: a long tawny body and a head with two eyes, on eight legs, which hang from the corners of its bottom cell.
-// Those eight corners form two tetrahedra, and a tetrahedron of feet is the smallest stable stance on 3D ground, so a
-// walker walks on two alternating tetrapods, the way a six-legged insect alternates tripods.
+// Walkers (crabs, since run eight): a round body flattened top to bottom, a small head with two eyes, and six legs, one
+// along each of the ground's six directions (forward and back, to either side, toward ana and kata), all one smooth
+// skin (drawn as one surface: the trees' pieces blended, trees.js and shaders.js). Square to your slice it stands on
+// four; turned through ana its side pair shrinks to stubs as the ana pair comes in. It walks a pair at a time, each
+// pair swinging in turn while the other four stand.
 // Rollers: duocylinders, rolling by turning in two planes at once (a way of moving with no 3D counterpart). They roll
 // loops about their home, and they play: a ball rolling nearby, they chase and knock on.
 // Where: like the plants (flora.js), they are found where you are. Herds are spread evenly over the 3-sphere by a
@@ -24,7 +26,7 @@ import { fbm4 } from './noise.js';
 
 export const creatures = { list: [], cells: new Map(), at: null, hf: null, keep: () => false, fixed: [], clock: 0, nextId: 1 };
 const CELL = 16, RANGE = 64, LEASH = 14, NEAR = 45;
-const WALKER = { k: 1.4, height: 0.8 * 1.4, stride: 0.5 * 1.4, legR: 0.07 * 1.4 };   // (k: its size, against the first walkers')
+const WALKER = { k: 1.2, height: 0.6 * 1.2, stride: 0.45 * 1.2, legR: 0.075 * 1.2 };   // (k: its size, against the concept's)
 const ROLLER = { a: 0.48 };
 const proj = (v, n) => vec4.sub(v, vec4.scale(n, vec4.dot(v, n)));
 const along = (n, d, m) => vec4.norm(vec4.add(vec4.scale(n, Math.cos(m / PLANET_R)), vec4.scale(d, Math.sin(m / PLANET_R))));
@@ -172,9 +174,9 @@ export function stepCreatures(dt, hf) {
     for (let q = 0; q < 4; q++) h[q] -= hn * n[q];
     const hl = Math.hypot(h[0], h[1], h[2], h[3]) || 1; for (let q = 0; q < 4; q++) h[q] /= hl;
     const ph0 = c.phase;
-    c.phase = (c.phase + dt * sp / (2 * WALKER.stride)) % 1;
-    // a walker's tetrapod lands twice a stride: a tick, if you are near enough to hear it
-    if (c.near && c.kind === 'walker' && G.audio && p && p.onB == null && (Math.floor(ph0 * 2) !== Math.floor(c.phase * 2) || c.phase < ph0)) {
+    c.phase = (c.phase + dt * sp / (1.5 * WALKER.stride)) % 1;      // (a pair's stance, two thirds of a cycle, is a stride)
+    // a pair of feet lands three times a cycle: a tick, if you are near enough to hear it
+    if (c.near && c.kind === 'walker' && G.audio && p && p.onB == null && (Math.floor(ph0 * 3) !== Math.floor(c.phase * 3) || c.phase < ph0)) {
       const pos = vec4.scale(c.n, PLANET_R + hf.heightAt(c.n)), dd = vec4.len(vec4.sub(pos, p.pos));
       if (dd < 18) G.audio.emit('tick', pos, 0.5 + 0.3 * Math.random());
     }
@@ -229,13 +231,12 @@ export function creatureDraw(eye, A, hf, dt = 0) {
     let s = proj(proj(c.side || T[0], f), up); if (vec4.len(s) < 0.2) s = proj(proj(T[1], f), up); s = vec4.norm(s);
     const a0 = proj(proj(proj(T[2], f), up), s), an0 = vec4.norm(vec4.len(a0) < 1e-6 ? proj(proj(proj(T[0], f), up), s) : a0);
     if (c.kind === 'walker' && d < 40 && dt > 0) {
-      // the roll that shows itself: v, the sideways direction most toward ana, and w across it, in your slice;
-      // s at 45° between them
+      // the roll that shows itself: v, the sideways direction most toward ana, and w across it, in your slice; its
+      // side pair along w (square to your slice: four legs stand in it), its ana pair along v
       const v0 = vec4.add(vec4.scale(s, vec4.dot(A, s)), vec4.scale(an0, vec4.dot(A, an0))), lv = vec4.len(v0);
       if (lv > 1e-3) {
         const v = vec4.scale(v0, 1 / lv), w = vec4.add(vec4.scale(s, -vec4.dot(an0, v)), vec4.scale(an0, vec4.dot(s, v)));
-        let want = null, best = -2;                             // of the four such rolls, the nearest
-        for (const [x, y] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const q = vec4.norm(vec4.add(vec4.scale(w, x), vec4.scale(v, y))), dq = vec4.dot(q, s); if (dq > best) { best = dq; want = q; } }
+        const want = vec4.dot(w, s) >= 0 ? w : vec4.scale(w, -1);  // (of the two such rolls, the nearer)
         const k = Math.min(1, dt * 1.5);
         s = vec4.norm(vec4.add(vec4.scale(s, 1 - k), vec4.scale(want, k)));
       }
@@ -243,34 +244,38 @@ export function creatureDraw(eye, A, hf, dt = 0) {
     c.side = s;
     let an = proj(proj(proj(an0, f), up), s); an = vec4.norm(vec4.len(an) < 1e-6 ? an0 : an);
     if (c.kind === 'walker') {
-      const ctr = vec4.scale(n, g + WALKER.height), wv = vec4.norm(vec4.add(s, an)), rot = frameRot([f, s, an, up]);
-      const K = WALKER.k;
-      items.push(bodyProp(ctr, rot, [0.5 * K, 0.3 * K, 0.3 * K, 0.27 * K], SHAPE.ball, MAT.hide, 0.6 * c.alarm));
-      const head = vec4.add(ctr, vec4.add(vec4.scale(f, 0.52 * K), vec4.scale(up, 0.2 * K)));
-      items.push(bodyProp(head, rot, [0.2 * K, 0.18 * K, 0.18 * K, 0.18 * K], SHAPE.ball, MAT.hide, 0.6 * c.alarm));
-      if (d < 35 && detailed < 10) {                          // eyes, for the nearer ones
+      const K = WALKER.k, ctr = vec4.scale(n, g + WALKER.height), rot = frameRot([f, s, an, up]), alarm = 0.6 * c.alarm;
+      const head = vec4.add(ctr, vec4.add(vec4.scale(f, 0.4 * K), vec4.scale(up, 0.12 * K)));
+      if (d < 35 && detailed < 10) {                          // eyes, for the nearer ones: on the head's front, either side
         detailed++;
         for (const sg of [-1, 1]) {
-          const e = vec4.add(head, vec4.add(vec4.add(vec4.scale(f, 0.13 * K), vec4.scale(up, 0.06 * K)), vec4.scale(wv, 0.1 * K * sg)));
-          items.push(bodyProp(e, rot, [0.07 * K, 0.07 * K, 0.07 * K, 0.07 * K], SHAPE.ball, MAT.eye, 0));
-          items.push(bodyProp(vec4.add(e, vec4.scale(f, 0.05 * K)), rot, [0.038 * K, 0.038 * K, 0.038 * K, 0.038 * K], SHAPE.ball, MAT.pupil, 0));
+          const e = vec4.add(head, vec4.add(vec4.add(vec4.scale(f, 0.09 * K), vec4.scale(up, 0.08 * K)), vec4.scale(s, 0.07 * K * sg)));
+          items.push(bodyProp(e, rot, [0.055 * K, 0.055 * K, 0.055 * K, 0.055 * K], SHAPE.ball, MAT.eye, 0));
+          items.push(bodyProp(vec4.add(e, vec4.scale(f, 0.04 * K)), rot, [0.03 * K, 0.03 * K, 0.03 * K, 0.03 * K], SHAPE.ball, MAT.pupil, 0));
         }
       }
-      // legs are thin: drawn only for the nearest few walkers (they share one bounding ball in the shader)
-      const lg = { caps: [], c: vec4.scale(n, g + 0.45 * K), R: 1.8 * K };
-      if (d < 45 && caps.length < 12) { caps.push(lg); for (let i = 0; i < 8; i++) {
-        const cx = i & 1 ? 1 : -1, cy = i & 2 ? 1 : -1, cz = i & 4 ? 1 : -1, tetA = cx * cy * cz > 0;
-        const hip = vec4.add(ctr, vec4.add(vec4.scale(up, -0.12 * K), vec4.add(vec4.add(vec4.scale(f, cx * 0.3 * K), vec4.scale(s, cy * 0.15 * K)), vec4.scale(an, cz * 0.15 * K))));
-        const out = vec4.add(vec4.add(vec4.scale(f, cx * 0.5 * K), vec4.scale(s, cy * 0.26 * K)), vec4.scale(an, cz * 0.26 * K));   // feet a little outside the hips
-        // the gait: a tetrapod swings while the other stands; standing feet keep still on the ground
-        const ph = (c.phase + (tetA ? 0 : 0.5)) % 1, swing = ph < 0.5;
-        const off = swing ? -0.5 + 2 * ph : 0.5 - 2 * (ph - 0.5), sp = vec4.len(c.v) > 0.05 ? 1 : 0;
-        let foot = vec4.add(vec4.add(vec4.scale(n, g), out), vec4.scale(f, off * WALKER.stride * sp));
-        const fn = vec4.norm(foot);
-        foot = vec4.scale(fn, PLANET_R + hf.heightAt(fn) + (swing ? Math.sin(Math.PI * 2 * ph) * 0.14 * K * sp : 0) + 0.02);
-        const knee = vec4.add(vec4.scale(vec4.add(hip, foot), 0.5), vec4.add(vec4.scale(up, 0.04 * K), vec4.scale(f, cx * 0.12 * K)));
-        lg.caps.push([hip, knee, WALKER.legR, 3], [knee, foot, WALKER.legR * 0.8, 3]);
-      } }
+      // one skin (body, head and legs blended), for the nearest few; further off, the body and head alone, as props
+      if (d < 45 && caps.length < 12) {
+        const sk = { caps: [], c: vec4.scale(n, g + 0.45 * K), R: 1.25 * K, skin: true, glow: alarm };
+        caps.push(sk);
+        sk.caps.push([ctr, vec4.add(ctr, vec4.scale(up, 0.28 * K)), 0.42 * K, 10]);   // the body: flattened along up
+        sk.caps.push([head, head, 0.13 * K, 11]);
+        const sp = vec4.len(c.v) > 0.05 ? 1 : 0, dirs = [f, vec4.scale(f, -1), s, vec4.scale(s, -1), an, vec4.scale(an, -1)];
+        dirs.forEach((D, i) => {
+          // the gait: the pairs (forward and back, the sides, ana and kata) swing in turn, a third of a cycle each;
+          // a standing foot keeps still on the ground while the body goes on
+          const ph = (c.phase + Math.floor(i / 2) / 3) % 1, swing = ph < 1 / 3, u = swing ? 3 * ph : 1.5 * (ph - 1 / 3);
+          const off = (swing ? -0.5 + u : 0.5 - u) * sp;
+          const hip = vec4.add(ctr, vec4.add(vec4.scale(D, 0.3 * K), vec4.scale(up, -0.05 * K)));
+          const knee = vec4.add(hip, vec4.add(vec4.scale(D, 0.35 * K), vec4.scale(up, 0.25 * K)));
+          const fn = vec4.norm(vec4.add(vec4.add(vec4.scale(n, g), vec4.scale(D, 0.9 * K)), vec4.scale(f, off * WALKER.stride)));
+          const foot = vec4.scale(fn, PLANET_R + hf.heightAt(fn) + (swing ? Math.sin(Math.PI * u) * 0.12 * K * sp : 0) + 0.03);
+          sk.caps.push([hip, knee, WALKER.legR, 11], [knee, foot, WALKER.legR * 0.75, 11]);
+        });
+      } else {
+        items.push(bodyProp(ctr, rot, [0.42 * K, 0.42 * K, 0.42 * K, 0.28 * K], SHAPE.ball, MAT.hide, alarm));
+        items.push(bodyProp(head, rot, [0.13 * K, 0.13 * K, 0.13 * K, 0.13 * K], SHAPE.ball, MAT.hide, alarm));
+      }
     } else {
       const a = ROLLER.a, ctr = vec4.scale(n, g + a * Math.SQRT2);
       const e0 = vec4.scale(vec4.sub(f, up), Math.SQRT1_2), e2 = vec4.scale(vec4.add(f, up), -Math.SQRT1_2);
