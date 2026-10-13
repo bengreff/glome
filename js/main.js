@@ -29,7 +29,7 @@ import { smap, updateSpaceMap, drawSpaceMap } from './spacemap.js';
 import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
 import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
-import { Rope } from './rope.js';
+import { stepGate } from './knot.js';
 import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
 import { artifacts, buildArtifacts, updateArtifacts, syncArtifacts } from './artifacts.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
@@ -106,6 +106,13 @@ const hold = { fT: -1, mT: -1, ghostT: 0 };
 // A change of your velocity given in A's frame (the frame objects live in): in flight it goes to the inertial state,
 // on B into B's frame (whose axes are inertial).
 const kickPlayer = dv => { const p = G.player; if (flight.active) kick(dv); else if (p.onB != null) p.vel = vec4.add(p.vel, dirToInertial(dv, state.time)); else p.vel = vec4.add(p.vel, dv); };
+// The rope where you look at it (within reach, and within 12 cm of your gaze in all four directions): its particle.
+function ropeAt(cam) {
+  if (!G.rope || G.player.onB != null) return -1;
+  let best = -1, bd = 0.12;
+  G.rope.x.forEach((q, i) => { const d = vec4.sub(q, cam.eye), t = vec4.dot(d, cam.F); if (t > 0 && t < 3.2) { const m = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))); if (m < bd) { bd = m; best = i; } } });
+  return best;
+}
 function handleActions(cam) {
   const now = G.simT, p = G.player;
   // things are handled in the frame of the world they are in: on B, B's (your own frame there)
@@ -118,10 +125,9 @@ function handleActions(cam) {
     else {
       const b = lookedAt(camW);
       if (b) pickUp(b, camW);
-      else if (ropeSlot.obj) {                             // or take hold of the rope where you look at it
-        let best = -1, bd = 0.35;
-        ropeSlot.obj.x.forEach((q, i) => { const d = vec4.sub(q, cam.eye), t = vec4.dot(d, cam.F); if (t > 0 && t < 3.2) { const m = vec4.len(vec4.sub(d, vec4.scale(cam.F, t))); if (m < bd) { bd = m; best = i; } } });
-        if (best >= 0) G.ropeHeld = best;
+      else {                                               // or take hold of the rope, where it is (your hand keeps it there, as you turn and go)
+        const i = ropeAt(cam);
+        if (i >= 0) { const d = vec4.sub(G.rope.x[i], cam.eye); G.ropeHeld = i; G.ropeOff = [cam.F, cam.R, cam.U, cam.A].map(e => vec4.dot(d, e)); G.audio?.emit('clack', G.rope.x[i], 0.25); }
       }
     }
   }
@@ -264,12 +270,11 @@ function frameBody(now) {
     if (objects.held && !!objects.held.inB !== (player.onB != null)) moveHeld(player.onB != null);   // landing on B or leaving it: what you hold comes too
     stepObjects(cameraNow(), kickPlayer);
     if (player.onB != null) stepObjects(player.camera(), dv => { player.vel = vec4.add(player.vel, dv); }, objects.worldB, 150, 900);
-    if (ropeSlot.obj) {
-      const R = ropeSlot.obj;
-      R.pins.clear();
-      if (G.knotAnchor && !G.flags.solved_knot) R.pins.set(0, G.knotAnchor);   // tied to the gate until it opens
-      if (G.ropeHeld != null) { const c = cameraNow(); R.pins.set(G.ropeHeld, vec4.add(vec4.add(c.eye, vec4.scale(c.F, 0.8)), vec4.scale(c.U, -0.3))); }
-      if (G.ropeHeld != null || vec4.len(vec4.sub(R.x[0], cameraNow().eye)) < 120) R.step(STEP);
+    if (G.knot && !onB) {                                  // the knot gate's rope, held where your hand is
+      const c = cameraNow(), o = G.ropeOff || [0.8, 0, -0.3, 0];
+      const hand = G.ropeHeld != null ? { i: G.ropeHeld, p: [c.F, c.R, c.U, c.A].reduce((q, e, k) => vec4.add(q, vec4.scale(e, o[k])), c.eye) } : null;
+      stepGate(G.knot, STEP, c.eye, hand);
+      if (hand && G.rope.strain() > 0.08) G.ropeHeld = null;   // pulled hard (by the leaf, or caught on something), it slips from your hand
     }
     state.time += STEP;
   }
@@ -325,7 +330,7 @@ function frameBody(now) {
   mark('present');
   radar.gaze = gazePoint(cam);
   // what the dot rests on: something you could take (or the console, on B), and how hard you strain at what you hold
-  G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
+  G.canTake = !objects.held && G.ropeHeld == null && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || ropeAt(cam) >= 0 || nearConsole(player));
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
   if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); }
@@ -454,7 +459,6 @@ function frameBody(now) {
       for (const a of G.artifacts || []) keep.push([a.n, 9]);
       if (G.cave) keep.push([vec4.norm(G.cave.mouth), 10]);
       if (G.raftHome) keep.push([G.raftHome, 8]);
-      if (G.knotPost) keep.push([vec4.norm(G.knotPost.a), 8]);
       const keepOut = (n, r) => keep.some(([q, m]) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 < m + r)
         || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < r + 2;
       await step('Setting down rocks…', 'objects');
@@ -488,7 +492,7 @@ function frameBody(now) {
       await step('Building the ruins…', 'woods');
       G.findsMade = makeFinds(hf, home, [...(G.artifacts || []).map(a => a.n), launcher.n], keepOut);
       // the flora: grown near you as you go; none on the pad, in the cave's mouth or the bowl, or on an artifact's place
-      const clearOf = [[launcher.n, 6], ...(G.artifacts || []).map(a => [a.n, 3]), ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
+      const clearOf = [[launcher.n, 6], ...(G.artifacts || []).map(a => [a.n, a.clear || 3]), ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
       const clear = n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2;
       initFlora(hf, clear); creatures.keep = clear;               // (and no herd's home there either)
       G.genCount = finds.gen;
@@ -504,22 +508,20 @@ function frameBody(now) {
     const CONSOLE_LAWS = ['G_SCALE', 'GRAV_DIM', 'L', 'TIME_RATE', 'JUMP', 'WALK', 'RUN'];
     hooks.laws = { save: () => ({ ...Object.fromEntries(CONSOLE_LAWS.map(k => [k, LAWS[k]])), infinite: !!G.infinite, fly: !!G.fly }),
                    load: s => { for (const k of CONSOLE_LAWS) if (k in s) LAWS[k] = s[k]; G.infinite = !!s.infinite; G.fly = !!s.fly; } };
-    {
-      // the knot gate's rope: tied to the vault, led to the tall post, looped once round it, and back
-      const post = G.knotPost, anchor = G.knotAnchor, pts = [];
-      const pn = vec4.norm(post.a), up = pn, toPost = vec4.norm(vec4.sub(vec4.sub(post.a, anchor), vec4.scale(up, vec4.dot(vec4.sub(post.a, anchor), up))));
-      const T = tangents(pn), side = vec4.norm(vec4.sub(vec4.sub(T[1], vec4.scale(toPost, vec4.dot(T[1], toPost))), vec4.scale(up, vec4.dot(T[1], up))));
-      const at = (base, f, s2, h) => vec4.add(vec4.add(vec4.add(base, vec4.scale(toPost, f)), vec4.scale(side, s2)), vec4.scale(up, h));
-      const ring = vec4.add(post.a, vec4.scale(up, 0.6));
-      const dist = vec4.len(vec4.sub(vec4.sub(post.a, anchor), vec4.scale(up, vec4.dot(vec4.sub(post.a, anchor), up))));
-      for (let i = 0; i < 10; i++) pts.push(at(anchor, (dist - 0.5) * i / 10, 0, 0.6 * i / 10 - 0.0));
-      for (let i = 0; i <= 14; i++) { const a = Math.PI + 2 * Math.PI * i / 14; pts.push(at(ring, 0.5 * Math.cos(a), 0.5 * Math.sin(a), 0)); }
-      for (let i = 1; i <= 6; i++) pts.push(at(ring, -0.5 - 0.3 * i, 0.4, -0.1 * i));
-      const postSD = q => { const ab = vec4.sub(post.b, post.a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(q, post.a), ab) / vec4.dot(ab, ab))), d = vec4.sub(q, vec4.add(post.a, vec4.scale(ab, t))), l = vec4.len(d); return { d: l - post.r, n: vec4.scale(d, 1 / Math.max(l, 1e-9)) }; };
-      const env = q => { const a = terrainSD(q), b = postSD(q); return b.d < a.d ? b : a; };
-      ropeSlot.obj = G.rope = new Rope(pts, { radius: 0.035, accel: x => accel(x, [0, 0, 0, 0]), env, damping: 0.995 });
-      ropeSlot.obj.iterations = 8;
-      hooks.rope = { save: () => ({ x: ropeSlot.obj.x.map(v => v.map(q => Math.round(q * 1e4) / 1e4)) }), load: r => { if (r && r.x && r.x.length === ropeSlot.obj.x.length) { ropeSlot.obj.x = r.x; ropeSlot.obj.v = r.x.map(() => [0, 0, 0, 0]); } } };
+    if (G.knot) {
+      // the knot gate (built with the artifacts): its rope is drawn with the trees' pieces; the leaf and the rope are
+      // saved here (the leaf is rebuilt with the world, not saved with the things you carry)
+      const k = G.knot, r5 = v => Math.round(v * 1e5) / 1e5;
+      ropeSlot.obj = k.rope;
+      hooks.knot = {
+        save: () => ({ x: k.rope.x.map(v => v.map(r5)), leaf: { pos: k.leaf.pos.map(r5), rot: { l: k.leaf.rot.l.map(r5), r: k.leaf.rot.r.map(r5) } }, asleep: !!k.asleep }),
+        load: s => {
+          if (!s || !s.x || s.x.length !== k.rope.x.length || !s.leaf) return;
+          k.rope.x = s.x.map(v => v.slice()); k.rope.v = s.x.map(() => [0, 0, 0, 0]); k.rope.prevX = null;
+          k.leaf.pos = s.leaf.pos.slice(); k.leaf.prevPos = k.leaf.pos.slice(); k.leaf.rot = s.leaf.rot; k.leaf.prevRot = k.leaf.rot;
+          k.leaf.vel = [0, 0, 0, 0]; k.leaf.omega = [0, 0, 0, 0, 0, 0]; k.asleep = !!s.asleep; k.leaf.sleeping = k.asleep; k.lastAngle = null;
+          k.joint.accP = [0, 0, 0, 0]; k.joint.accA = [0, 0, 0, 0, 0, 0];
+        } };
     }
     G.objects = objects;
     G.home = { pos: player.pos.slice(), F: player.F, R: player.R, A: player.A };

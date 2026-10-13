@@ -5,7 +5,8 @@
 //   II   the mirror key: a mould on a plinth, four of its eight cells solid, and a brass key that is the empty cells'
 //        mirror image. No turn in 3D makes a thing its mirror image; half a turn through ana does, and then the key
 //        slides in, completing the cube, and the house beside it opens.
-//   III  the knot gate: a rope looped round a tall post holds the gate. In 4D no loop can hold on a post.
+//   III  the knot gate (knot.js): a heavy leaf hung by its foot, leaning in, held shut by a rope whose loop hangs
+//        over a peg with a knob on its end. In 3D the loop is captive; in 4D it lifts off the peg through ana.
 //   IV   the antipode: what you leave in the bowl on the summit opens the vault at the planet's opposite point.
 //        (The bowl is carved, in landforms' way: a 4D ball taken out of the summit.)
 import { G } from './game.js';
@@ -19,7 +20,9 @@ import { launcher } from './launcher.js';
 import { carves } from './landforms.js';
 import { makeProp, addRock, SHAPE, MAT } from './props.js';
 import { mouldParts, MOULD, cellCentre, RING } from './keys.js';
-import { reachAlong, bodyOf } from './objects.js';
+import { reachAlong, bodyOf, spawnAt } from './objects.js';
+import { gateParts, gateBuild, GATE } from './knot.js';
+import { terrainSD } from './env.js';
 
 export const artifacts = [];        // { id, name, n (unit position), solved(), vault, part, ... }
 const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / PLANET_R)), vec4.scale(t, Math.sin(m / PLANET_R))));
@@ -76,8 +79,8 @@ function fixedCompound(parts, o, R, kind) {
 }
 // A place near n for a built artifact: dry within 9 m (no water above the ground: waterAt is the water's surface
 // height, where there is water), between 1.5 and 24 m up, and as level as can be found within 7 m; the nearest one
-// level to 0.8 m, or failing that the levellest dry one within 250 m.
-function siteNear(n) {
+// level to tol (0.8 m), or failing that the levellest dry one within 250 m.
+function siteNear(n, tol = 0.8) {
   const hf = G.player.hf;
   const score = q => { const T = tangents(q); let lo = Infinity, hi = -Infinity;
     for (const d of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], [0.7, 0.7, 0], [-0.7, 0, 0.7], [0, -0.7, -0.7], [0.6, -0.6, 0.6], [-0.6, 0.6, -0.6]]) for (const r of [3.5, 7, 9]) {
@@ -88,15 +91,20 @@ function siteNear(n) {
     }
     return hi - lo; };
   let best = n, bs = score(n);
-  if (bs < 0.8) return n;
+  if (bs < tol) return n;
   for (let i = 0; i < 5000; i++) {
     const T = tangents(n), a = i * 2.39996, b = Math.acos(1 - 2 * ((i * 0.618034) % 1)), r = 2 + i * 0.05;
     const dir = [0, 1, 2, 3].map(k => Math.sin(b) * Math.cos(a) * T[0][k] + Math.sin(b) * Math.sin(a) * T[1][k] + Math.cos(b) * T[2][k]);
     const q = off(n, vec4.norm(dir), r), sc = score(q);
-    if (sc < 0.8) return q;
+    if (sc < tol) return q;
     if (sc < bs) { bs = sc; best = q; }
   }
   return best;
+}
+// A part of a built thing drawn as a prop (its solid shape is a fixed body): a box or a ball.
+function showPart(c, q, mat, rot) {
+  const g = q.shape === 'glome', p = makeProp({ c, rot, e: g ? [q.r, q.r, q.r, q.r] : q.e, shape: g ? SHAPE.ball : SHAPE.box, mat });
+  p.kind = 'ruin'; p.visual = true; addRock(p); return p;
 }
 function freeze(b) { if (b) { b.kinematic = true; b.sleeping = true; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; } }
 
@@ -125,20 +133,20 @@ export function buildArtifacts() {
     const at = (o, c) => vec4.add(o, R4.apply(R, c));                    // a point of the site's frame from origin o
     const foot = vec4.scale(n, PLANET_R + hf.heightAt(n) - 0.08);
     const mould = fixedCompound(mouldParts(), foot, R, 'mould');
-    const show = (c, e, shape, mat, rot = R) => { const q = makeProp({ c, rot, e, shape, mat }); q.kind = 'ruin'; q.visual = true; addRock(q); return q; };
-    const mp = mouldParts().map(q => show(at(foot, q.c), q.shape === 'glome' ? [q.r, q.r, q.r, q.r] : q.e, q.shape === 'glome' ? SHAPE.ball : SHAPE.box, q.shape === 'glome' ? MAT.metal : MAT.basalt));
+    const mp = mouldParts().map(q => showPart(at(foot, q.c), q, q.shape === 'glome' ? MAT.metal : MAT.basalt, R));
     const balls = mp.filter(q => q.shape === SHAPE.ball);
-    // the house: walls 0.2 m thick round a room 2.2 m each way and 2.2 m high, its door in the wall toward the plinth
+    // the house: walls 0.2 m thick round a room 2.2 m each way and 2.5 m high, its door (2.2 m high: you are 2.05 m
+    // tall) in the wall toward the plinth
     const hn = off(n, fr.s, 4.2), hc = carry(R, hn), hfoot = vec4.scale(hn, PLANET_R + hf.heightAt(hn) - 0.05);
     const HR = colsRot([hc[1], vec4.scale(hc[0], -1), hc[2], hn]);     // (its own −f, where the door is, toward the mould)
     const house = [
-      { c: [-1.2, -0.9, 0, 1.1], e: [0.1, 0.4, 1.3, 1.1] }, { c: [-1.2, 0.9, 0, 1.1], e: [0.1, 0.4, 1.3, 1.1] }, { c: [-1.2, 0, 0, 2.05], e: [0.1, 0.5, 1.3, 0.15] },
-      { c: [1.2, 0, 0, 1.1], e: [0.1, 1.3, 1.3, 1.1] }, { c: [0, 1.2, 0, 1.1], e: [1.1, 0.1, 1.3, 1.1] }, { c: [0, -1.2, 0, 1.1], e: [1.1, 0.1, 1.3, 1.1] },
-      { c: [0, 0, 1.2, 1.1], e: [1.3, 1.3, 0.1, 1.1] }, { c: [0, 0, -1.2, 1.1], e: [1.3, 1.3, 0.1, 1.1] }, { c: [0, 0, 0, 2.3], e: [1.4, 1.4, 1.4, 0.1] },
+      { c: [-1.2, -0.9, 0, 1.25], e: [0.1, 0.4, 1.3, 1.25] }, { c: [-1.2, 0.9, 0, 1.25], e: [0.1, 0.4, 1.3, 1.25] }, { c: [-1.2, 0, 0, 2.35], e: [0.1, 0.5, 1.3, 0.15] },
+      { c: [1.2, 0, 0, 1.25], e: [0.1, 1.3, 1.3, 1.25] }, { c: [0, 1.2, 0, 1.25], e: [1.1, 0.1, 1.3, 1.25] }, { c: [0, -1.2, 0, 1.25], e: [1.1, 0.1, 1.3, 1.25] },
+      { c: [0, 0, 1.2, 1.25], e: [1.3, 1.3, 0.1, 1.25] }, { c: [0, 0, -1.2, 1.25], e: [1.3, 1.3, 0.1, 1.25] }, { c: [0, 0, 0, 2.6], e: [1.4, 1.4, 1.4, 0.1] },
     ].map(q => ({ shape: 'box', ...q }));
     fixedCompound(house, hfoot, HR, 'house');
-    for (const q of house) show(vec4.add(hfoot, R4.apply(HR, q.c)), q.e, SHAPE.box, MAT.basalt, HR);
-    const door = fixedCompound([{ shape: 'box', c: [0, 0, 0, 0], e: [0.08, 0.5, 1.3, 0.95] }], vec4.add(hfoot, R4.apply(HR, [-1.2, 0, 0, 0.95])), HR, 'door');
+    for (const q of house) showPart(vec4.add(hfoot, R4.apply(HR, q.c)), q, MAT.basalt, HR);
+    const door = fixedCompound([{ shape: 'box', c: [0, 0, 0, 0], e: [0.08, 0.5, 1.3, 1.1] }], vec4.add(hfoot, R4.apply(HR, [-1.2, 0, 0, 1.1])), HR, 'door');
     door.hidden = false; door.mat = 3; door.tag = 'vault2';
     // part II on the house's floor, lying flat
     p.pos = vec4.add(hfoot, vec4.scale(hn, RING.t + 0.07)); p.rot = HR; p.vel = [0, 0, 0, 0]; freeze(p);
@@ -149,7 +157,7 @@ export function buildArtifacts() {
     if (!key) { key = bodyOf('key', vec4.scale(kn, PLANET_R), kr, {}); key.mat = 8; key.tag = 'key2'; objects.world.add(key); }
     key.rot = kr; key.pos = vec4.add(vec4.scale(kn, PLANET_R + hf.heightAt(kn) + 0.05), vec4.scale(kup, reachAlong(key, kr, vec4.scale(kup, -1)))); key.sleeping = false;   // (it settles: it stands on two cells)
     const free = MOULD.free.map(c => at(foot, cellCentre(c)));
-    artifacts.push({ id: 'mirror', name: 'the mirror key', n, vault: door, part: p, balls, R, foot, house: hfoot, sock: at(foot, [-0.7, 0, 0, MOULD.P0 + 0.4]),
+    artifacts.push({ id: 'mirror', name: 'the mirror key', n, vault: door, part: p, balls, R, foot, clear: 6, house: hfoot, sock: at(foot, [-0.7, 0, 0, MOULD.P0 + 0.4]),
       // solved when the key rests in the mould, each of its four cells in one of the empty ones (within 15 cm: any
       // other way of lying there is 40 cm off somewhere)
       check() {
@@ -162,22 +170,23 @@ export function buildArtifacts() {
         });
       } });
   }
-  // III. the knot gate: a tall post; the rope (rope.js) is looped round it and tied to the vault (main.js lays it out)
+  // III. the knot gate (knot.js): on open, level, dry ground near where part III was put, a stone platform a little
+  // over the highest ground under it, with the house on it, the leaf in its doorway and the pillar and peg in front
   {
-    const p = partOf(3), n = vec4.norm(p.pos), fr = frameAt(n);
-    const vault = block(n, 1.0, { lift: -0.4, tag: 'vault3' }); freeze(p);
-    const postN = off(n, fr.f, 2.6);
-    for (let k = 0; k < 6; k++) block(postN, 0.4, { lift: 0.4 * k, mat: k === 5 ? 2 : 0, glow: k === 5 ? 0.2 : 0 });
-    const hp = hf.heightAt(postN);
-    G.knotPost = { a: vec4.scale(postN, PLANET_R + hp), b: vec4.scale(postN, PLANET_R + hp + 2.4), r: 0.29 };
-    G.knotAnchor = vec4.add(vault.pos, vec4.scale(n, 0.3));
-    artifacts.push({ id: 'knot', name: 'the knot gate', n, vault, part: p,
-      check() {
-        const R = G.rope; if (!R) return false;
-        const { a, b } = G.knotPost, ab = vec4.sub(b, a);
-        // off the post: no part of the rope within a metre of its axis (and not because you are holding it there)
-        return R.x.every(q => { const t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(q, a), ab) / vec4.dot(ab, ab))); return vec4.len(vec4.sub(q, vec4.add(a, vec4.scale(ab, t)))) > 1.0; });
-      } });
+    const p = partOf(3), n = siteNear(vec4.norm(p.pos), 0.5), fr = frameAt(n), R = properRot([fr.f, fr.s, fr.a, n]);
+    const at = (o, c) => vec4.add(o, R4.apply(R, c));
+    let top = -Infinity;
+    for (const x of [-3.8, -1.9, 0, 1.9, 3.8]) for (const y of [-1.6, 0, 1.6]) for (const z of [-1.6, 0, 1.6]) top = Math.max(top, hf.heightAt(vec4.norm(at(vec4.scale(n, PLANET_R), [x, y, z, 0]))));
+    const foot = vec4.scale(n, PLANET_R + top + 0.04), parts = gateParts();
+    fixedCompound(parts, foot, R, 'gatehouse');
+    parts.forEach((q, i) => showPart(at(foot, q.c), q, i === 0 ? MAT.worked : i >= parts.length - 2 ? MAT.metal : MAT.basalt, R));
+    const k = G.knot = gateBuild(objects.world, foot, R, terrainSD);
+    G.rope = k.rope;
+    p.pos = vec4.add(at(foot, GATE.part), vec4.scale(n, RING.t + 0.005)); p.rot = R; p.vel = [0, 0, 0, 0]; freeze(p);
+    artifacts.push({ id: 'knot', name: 'the knot gate', n, vault: null, part: p, clear: 5, loop: k.rope.loop,
+      stoneAt: [at(foot, [-1.2, 1.1, 0, 0.12]), at(foot, [-1.2, -1.1, 0, 0.12])],
+      // solved when the leaf has swung in past 46° (it falls flat on the floor)
+      check() { return k.angle() > 0.8; } });
   }
   // IV. the antipode: the bowl on the summit (four posts round a hollow) and the vault at the opposite point
   {
@@ -206,7 +215,8 @@ function open(a, quiet) {
   else if (a.part && !a.part.held) a.part.kinematic = false;              // (a part in your hand stays in your hand)
   if (!quiet) {
     const n = a.n, fr = frameAt(n);
-    for (const sg of [-1, 1]) spawn('stone', off(n, fr.s, sg * 1.3));
+    if (a.stoneAt) for (const q of a.stoneAt) spawnAt('stone', q);
+    else for (const sg of [-1, 1]) spawn('stone', off(n, fr.s, sg * 1.3));
     G.audio?.emit('chime', a.vault ? a.vault.pos : vec4.scale(n, PLANET_R), 1.0);
   }
 }

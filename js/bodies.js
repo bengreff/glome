@@ -13,7 +13,7 @@
 // - An impulse J at offset r changes L by wedge(J, r) (checked: the energy change equals J·v).
 // - Friction acts in the 3D tangent space of the contact normal: the tangential impulse is a vector there,
 //   clamped in length to μ times the normal impulse.
-import { rot as R4, wedge, bivApply, step as rotStep } from './so4.js';
+import { rot as R4, wedge, bivApply, step as rotStep, log as rotLog } from './so4.js';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]];
@@ -122,6 +122,61 @@ export const kEff = (b, r, n) => {
 // is caught at the surface instead of found already deep in what it hit (the step is 1/120 s).
 const reach = b => (!b || b.kinematic || b.sleeping) ? 0 : (len(b.vel) + Math.sqrt(b.omega.reduce((s, x) => s + x * x, 0)) * b.bound) / 120;
 const margin = (a, b) => 0.02 + reach(a) + reach(b);
+// ---------- hinges ----------
+// A hinge in 4D holds a body to another (or to the world) at a point, and leaves it one plane of turning out of six:
+// a door turns in the plane of its swing, about its hinge edge's whole plane (in 4D the edge a door hangs by is 2D).
+// So it holds four conditions on the point and five on the turning. Both are solved as blocks (the point's 4×4, the
+// turning's 5×5) inside the sequential impulses, warm started, with a fifth of any drift taken back each step.
+// ca, cb: the hinge's point from a's centre in a's frame (in the world if a is null) and from b's centre in b's;
+// Fa, Fb: the hinge's frame in a's frame (the world's) and b's; plane [i, j] (i < j): its plane of turning, in that
+// frame. j.angle is the turn from the frames' meeting, axis i toward j.
+export function hinge({ a = null, b, ca, cb, Fa, Fb = R4.identity(), plane }) {
+  return { a, b, ca, cb, Fa, Fb, plane, angle: 0, accP: [0, 0, 0, 0], accA: [0, 0, 0, 0, 0, 0] };
+}
+const E4 = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+const dot6 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3] + a[4] * b[4] + a[5] * b[5];
+function invN(M) {                                   // Gauss–Jordan with partial pivoting (small symmetric blocks)
+  const n = M.length, A = M.map((r, i) => [...r, ...Array.from({ length: n }, (_, k) => (k === i ? 1 : 0))]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]];
+    const d = A[c][c] || 1e-12; for (let k = 0; k < 2 * n; k++) A[c][k] /= d;
+    for (let r = 0; r < n; r++) if (r !== c && A[r][c]) { const f = A[r][c]; for (let k = 0; k < 2 * n; k++) A[r][k] -= f * A[c][k]; }
+  }
+  return A.map(r => r.slice(n));
+}
+const mulN = (M, v) => M.map(r => r.reduce((s, x, k) => s + x * v[k], 0));
+// the change of velocity at offset r of body o per unit impulse J there
+const respond = (o, r, J) => (!o || o.kinematic || o.invM === 0) ? [0, 0, 0, 0] : add(scale(J, o.invM), bivApply(invIApply(o, wedge(J, r)), r));
+const invIOf = (o, H) => (!o || o.kinematic || o.invM === 0) ? [0, 0, 0, 0, 0, 0] : invIApply(o, H);
+function angImpulse(o, H) { if (!o || o.kinematic || o.invM === 0) return; const dw = invIApply(o, H); for (let i = 0; i < 6; i++) o.omega[i] += dw[i]; }
+function jointPrep(j, dt) {
+  const { a, b } = j, [pi, pj] = j.plane;
+  j.pa = a ? add(a.pos, R4.apply(a.rot, j.ca)) : j.ca; j.pb = add(b.pos, R4.apply(b.rot, j.cb));
+  j.ra = a ? sub(j.pa, a.pos) : null; j.rb = sub(j.pb, b.pos);
+  j.Kp = invN(E4.map(e => add(respond(b, j.rb, e), respond(a, j.ra, e))));
+  j.biasP = scale(sub(j.pb, j.pa), -0.2 / dt);
+  const WA = a ? R4.compose(a.rot, j.Fa) : j.Fa, WB = R4.compose(b.rot, j.Fb), u = E4.map(e => R4.apply(WA, e));
+  const M = R4.toRows(R4.compose(R4.inverse(WA), WB));
+  j.angle = Math.atan2(M[pj][pi] - M[pi][pj], M[pi][pi] + M[pj][pj]);
+  const err = rotLog(R4.compose(WB, R4.inverse(R4.compose(WA, R4.planeRotation(pi, pj, j.angle)))));   // WB = e^err ∘ where it should be
+  j.B = PL.filter(([p, q]) => p !== pi || q !== pj).map(([p, q]) => wedge(u[p], u[q]));
+  j.biasA = j.B.map(Bm => -0.2 / dt * dot6(err, Bm));
+  j.Ka = invN(j.B.map(Bn => { const r = invIOf(a, Bn), s = invIOf(b, Bn); return j.B.map(Bm => dot6(Bm, r) + dot6(Bm, s)); }));
+  // warm start: last step's impulses (the turning's only in the planes it holds now)
+  const P = scale(j.accP, 0.9), H = j.B.reduce((h, Bm) => { const c = 0.9 * dot6(j.accA, Bm); return h.map((x, k) => x + c * Bm[k]); }, [0, 0, 0, 0, 0, 0]);
+  applyImpulse(b, P, j.pb); applyImpulse(a, scale(P, -1), j.pa); angImpulse(b, H); angImpulse(a, H.map(x => -x));
+  j.accP = P; j.accA = H;
+}
+function jointSolve(j) {
+  const { a, b } = j;
+  const J = mulN(j.Kp, sub(j.biasP, sub(pointVel(b, j.pb), pointVel(a, j.pa))));
+  applyImpulse(b, J, j.pb); applyImpulse(a, scale(J, -1), j.pa); j.accP = add(j.accP, J);
+  const wr = a ? b.omega.map((x, k) => x - a.omega[k]) : b.omega;
+  const lam = mulN(j.Ka, j.B.map((Bm, m) => j.biasA[m] - dot6(wr, Bm)));
+  const H = j.B.reduce((h, Bm, m) => h.map((x, k) => x + lam[m] * Bm[k]), [0, 0, 0, 0, 0, 0]);
+  angImpulse(b, H); angImpulse(a, H.map(x => -x)); j.accA = j.accA.map((x, k) => x + H[k]);
+}
 // A body as primitives in the world: balls { g: true, p, r } and boxes { g: false, p, A (axes), e (half-extents) },
 // i numbering its parts (for warm starting).
 const H4 = h => [h, h, h, h];
@@ -317,7 +372,7 @@ function buoyancy(b, water, g, dt) {
 export class World {
   constructor({ accel, env, dt = 1 / 120, iterations = 12 }) {
     this.accel = accel; this.env = env; this.dt = dt; this.iterations = iterations;
-    this.bodies = []; this.water = null; this.warm = new Map();
+    this.bodies = []; this.water = null; this.warm = new Map(); this.joints = [];
   }
   add(b) { this.bodies.push(b); b.sleeping = false; b.sleepT = 0; return b; }
   remove(b) { const i = this.bodies.indexOf(b); if (i >= 0) this.bodies.splice(i, 1); }
@@ -390,8 +445,18 @@ export class World {
         applyImpulse(c.b, J, c.p); applyImpulse(c.a, scale(J, -1), c.p);
       }
     }
+    // the hinges whose bodies move (a moving one wakes the other)
+    const js = [];
+    for (const j of this.joints) {
+      const live = o => o && !o.sleeping && !o.kinematic;
+      if (!live(j.b) && !live(j.a)) continue;
+      for (const o of [j.a, j.b]) if (o && o.sleeping) this.wake(o);
+      jointPrep(j, dt); js.push(j);
+    }
     // 4. sequential impulses
-    for (let it = 0; it < this.iterations; it++) for (const c of cs) {
+    const solve = js.length ? [...cs, ...js] : cs;
+    for (let it = 0; it < this.iterations; it++) for (const c of solve) {
+      if (c.plane) { jointSolve(c); continue; }
       if (c.kn <= 0) continue;
       if ((!c.a || c.a.sleeping || c.a.kinematic) && (c.b.sleeping || c.b.kinematic)) continue;
       let vrel = sub(pointVel(c.b, c.p), pointVel(c.a, c.p));
@@ -430,6 +495,7 @@ export class World {
       for (const o of isl) { [o.vel, o.omega] = at(o, lo); }
       for (const c of cs) if (isl.includes(c.b) || isl.includes(c.a)) { c.ln *= lo; c.lt = scale(c.lt, lo); }
     }
+    for (let it = 0; it < 4; it++) for (const j of js) jointSolve(j);       // (the hinges have the last word)
     for (const c of cs) warm.set(c.key, { ln: c.ln, lt: c.lt });
     for (const v of struck.values()) this.impacts.push(v);
     // Rolling resistance of soft ground (soil and grass give under a rolling ball): a force c·N against the rolling
@@ -466,7 +532,7 @@ export class World {
       const floating = b.wet > 0 && b.wet < 0.999;               // a floating body bobs; it never sleeps
       const still = !floating && !b.held && len(b.vel) < 0.06 && len(b.omega) < 0.08;
       b.sleepT = still ? b.sleepT + dt : 0;
-      if (b.sleepT > 0.6) { b.sleeping = true; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; }
+      if (b.sleepT > 0.6 && !b.noSleep) { b.sleeping = true; b.vel = [0, 0, 0, 0]; b.omega = [0, 0, 0, 0, 0, 0]; }
     }
   }
 

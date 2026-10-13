@@ -266,13 +266,13 @@ export function carryHeld(cam) {
 // Not what you stand on (picking up the raft under your feet would pull you after it).
 export function lookedAt(cam, reach = 3.2, w = hereWorld()) {
   const hit = w.raycast(cam.eye, cam.F, reach, objects.held);
-  if (hit && !hit.body.fixed && hit.body !== G.player.ride) return hit.body;
+  if (hit && !hit.body.fixed && !hit.body.noTake && hit.body !== G.player.ride) return hit.body;
   // nothing to take where the ray strikes: the nearest thing it passes close by, short of anything fixed it meets (a
   // ring looked at through its hole, at the wall behind)
   const lim = hit ? hit.t : reach;
   let best = null, bd = 0.3;
   for (const b of w.bodies) {
-    if (b === objects.held || b.fixed || b === G.player.ride) continue;
+    if (b === objects.held || b.fixed || b.noTake || b === G.player.ride) continue;
     const e0 = b.pos[0] - cam.eye[0], e1 = b.pos[1] - cam.eye[1], e2 = b.pos[2] - cam.eye[2], e3 = b.pos[3] - cam.eye[3], m = reach + b.bound + 0.3;
     if (e0 * e0 + e1 * e1 + e2 * e2 + e3 * e3 > m * m) continue;
     const d = vec4.sub(b.pos, cam.eye), t = vec4.dot(d, cam.F);
@@ -491,14 +491,14 @@ export const objectsSave = {
       pouch: objects.pouch,
       held: objects.held ? objects.held.id : null,
       gone, gens: G.genCount || 0,
-      bodies: all.filter(b => !b.fixed && moved(b)).map(b => ({ id: b.id, gen: b.gen ?? null, kind: b.kind, tier: b.tier, pos: b.pos.slice(), vel: b.vel.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) }, omega: b.omega.map(r5), sleeping: b.sleeping, holdRel: b.holdRel || null, tag: b.tag || null, inB: !!b.inB })),
+      bodies: all.filter(b => !b.fixed && !b.keep && moved(b)).map(b => ({ id: b.id, gen: b.gen ?? null, kind: b.kind, tier: b.tier, pos: b.pos.slice(), vel: b.vel.map(r5), rot: { l: b.rot.l.map(r5), r: b.rot.r.map(r5) }, omega: b.omega.map(r5), sleeping: b.sleeping, holdRel: b.holdRel || null, tag: b.tag || null, inB: !!b.inB })),
     };
   },
   load(s) {
     const w = objects.world;
     // fixed things (the launcher) are rebuilt, not saved; the found things stay as the world made them unless saved
     const gens = new Map(w.bodies.filter(b => b.gen != null).map(b => [b.gen, b]));
-    w.bodies = w.bodies.filter(b => b.nook == null && (b.fixed || (b.gen != null && s.gens === G.genCount)));
+    w.bodies = w.bodies.filter(b => b.nook == null && (b.fixed || b.keep || (b.gen != null && s.gens === G.genCount)));   // (keep: built with the world, saved by its own part: the knot gate's leaf)
     if (objects.worldB) objects.worldB.bodies = objects.worldB.bodies.filter(b => b.fixed);
     if (s.gens === G.genCount) for (const k of s.gone || []) { const b = gens.get(k); if (b) w.remove(b); }
     else for (const b of gens.values()) w.add(b), b.sleeping = true;   // (a save from before they existed: keep them all)

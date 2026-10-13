@@ -55,5 +55,14 @@ input.mouse.alt = false; keys.delete('KeyR'); await gt(1.0);
 { const M = so4.rot.toRows(key.rot), kc = j => [0, 1, 2, 3].map(i => M[i][j]); out.attTurned = [0, 1, 2, 3].map(j => [0, 1, 2, 3].map(i => Math.round(V.dot(kc(j), i < 3 ? col(i) : up))).join('')); }
 await pushIn();
 out.turned = { solved: !!g.G.flags.solved_mirror, door: !!w.bodies.find(b => b.tag === 'vault2'), ballsLit: m.balls.every(b => b.glow > 0.5) };
+// 3. walk into the house through its doorway and take ring II from the floor
+const part = m.part;
+standAt(V.sub(m.house, V.sc(s_, 2.8))); await gt(0.4); await faceDir(nz(horiz(V.sub(part.pos, p.pos)))); p.pitch = 0;
+let near = 9; keys.add('KeyW');
+for (let i = 0; i < 60; i++) { await gt(0.1); near = len(horiz(V.sub(part.pos, p.pos))); if (near < 1.0) break; }
+keys.delete('KeyW'); await gt(0.3);
+out.reached = +near.toFixed(2);
+p.pitch = Math.asin(V.dot(nz(V.sub(part.pos, p.camera().eye)), up)); await gt(0.2); d.actions.fDown = true; await gt(0.4);
+out.tookRing = O.held === part;
 return JSON.stringify(out);
 })()

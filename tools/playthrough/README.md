@@ -34,3 +34,8 @@ Run three, N4 (sockets set into the launcher's pad, beacons): all five solved. p
 the orbit's low point (at least 40 m above the highest ground: the orbit is marginal by nature, and the flight drifts
 from the map's prediction by a few metres a minute at first, so a path that skims the hills can be lost) and waits up
 to 300 s for the turn. Two runs: full turns at 553 and 572 m out. Tier IV: landed on B after 69 s (predicted 68).
+
+Run seven, segment four: the knot gate rebuilt (knot.js). `pt_knot` squares the slice with the rope's plane, takes
+the loop and lifts it (it slips from the hand; the leaf stays), slides it to the knob (the same), then steps through
+ana with it and lets go: the leaf falls in, ring III is free, and the bot walks in over the leaf and takes it.
+`pt_mirror` now also walks into the house and takes ring II.

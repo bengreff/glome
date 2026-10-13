@@ -279,7 +279,7 @@ export function treeFrame(cam, sun, W, H, fov) {
     const x = P ? r.x.map((q, i) => { const p = P[i], dd = Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) + Math.abs(q[3] - p[3]); return dd > 1 ? q : q.map((v, k) => p[k] + (v - p[k]) * al); }) : r.x;
     let c = [0, 0, 0, 0]; for (const p of x) c = vec4.add(c, vec4.scale(p, 1 / x.length));
     let R = 0; for (const p of x) R = Math.max(R, vec4.len(vec4.sub(p, c)) + r.r);
-    if (vec4.len(vec4.sub(c, eye)) < 150 + R && Math.abs(vec4.dot(vec4.sub(c, eye), A)) < R) extras.push({ caps: x.slice(1).map((q, i) => [x[i], q, r.r, 2]), c, R });
+    if (vec4.len(vec4.sub(c, eye)) < 150 + R && Math.abs(vec4.dot(vec4.sub(c, eye), A)) < R) extras.push({ caps: (r.E || x.slice(1).map((_, i) => [i, i + 1])).map(([a, b]) => [x[a], x[b], r.r, 2]), c, R });
   }
   for (const L of legs.caps) extras.push(L);                   // { caps: [[a, b, r, kind]], c, R } per walker
   const tmp = new Float32Array(10);

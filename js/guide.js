@@ -69,10 +69,9 @@ function pickGoal() {
     return set(next.sock, 'socket');
   }
   if (next.id === 'knot' && G.rope) {
-    const R = G.rope, post = G.knotPost;
-    if (G.ropeHeld == null) return set(R.x[17], 'rope', { cue: near(R.x[17], 3.5) ? 'F' : null });
-    // holding the loop (how to free it is the puzzle)
-    return set(R.x[G.ropeHeld], 'loop');
+    // the rope's loop on its peg (how to free it is the puzzle)
+    const q = G.rope.x[next.loop[0]];
+    return set(q, 'loop', { cue: G.ropeHeld == null && G.canTake && near(q, 3.5) ? 'F' : null });
   }
   if (next.id === 'antipode') {
     // the bowl on the summit wants something left in it (anything you can carry)

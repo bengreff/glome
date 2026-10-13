@@ -1,5 +1,5 @@
 // Tests for js/bodies.js (Node, no packages): node tools/test-bodies.mjs
-import { World, makeBody, ballSubmerged, VOLUME, ROLL_RES, IApply } from '../js/bodies.js';
+import { World, makeBody, ballSubmerged, VOLUME, ROLL_RES, IApply, hinge } from '../js/bodies.js';
 import { ringParts, pillarParts, seatHeight, RING, PILLAR } from '../js/keys.js';
 import { rot as R4, wedge, bivApply } from '../js/so4.js';
 const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0), len = a => Math.hypot(...a);
@@ -166,6 +166,41 @@ for (const [rho, wantFlat] of [[60, true], [450, false]]) {
   let t = 0; for (; t < 10 && !r.sleeping; t += w.dt) w.step();
   const M = R4.toRows(r.rot), tilt = Math.acos(Math.min(1, Math.max(...[0, 1, 2, 3].map(j => Math.abs(M[3][j]))))) * 180 / Math.PI;
   check('a dropped ring lies flat and sleeps', r.sleeping && tilt < 1.5, `slept at ${t.toFixed(2)} s, tilt ${tilt.toFixed(2)}°`);
+}
+// 14. a hinge: a slab hung by its foot from the world, leaning 6° off upright, falls in its plane of turning only,
+// the hinge's point stays put, and it comes to rest flat on the ground; with a tumbling start it still turns only in
+// the hinge's plane (the other five rates held to nothing)
+{
+  const w = planet(), H = 2.0, T = 0.08, foot = onGround(0.02);
+  const parts = [{ shape: 'box', c: [-T / 2, 0, 0, H / 2], e: [T / 2, 0.6, 0.95, H / 2] }];   // (hung by the edge it falls toward)
+  const lean = R4.planeRotation(0, 3, -0.105);
+  const b = makeBody({ shape: 'compound', parts, density: 450, pos: foot, rot: lean });
+  b.pos = add(foot, R4.apply(lean, b.com)); w.add(b); b.noSleep = true;
+  const j = hinge({ b, ca: foot, cb: scale(b.com, -1), Fa: R4.identity(), plane: [0, 3] }); w.joints.push(j);
+  b.omega = [0.3, 0.2, 0, -0.4, 0.1, 0.5];                     // a knock in every plane
+  let maxOff = 0, maxDrift = 0, t = 0;
+  for (; t < 6; t += w.dt) {
+    w.step();
+    const M = R4.toRows(b.rot);
+    maxOff = Math.max(maxOff, Math.abs(M[1][1] - 1), Math.abs(M[2][2] - 1));      // s and a stay themselves
+    maxDrift = Math.max(maxDrift, len(sub(add(b.pos, R4.apply(b.rot, j.cb)), foot)));
+  }
+  const ang = j.angle * 180 / Math.PI;
+  check('hinge: turns in its plane only, lands flat', maxOff < 2e-3 && maxDrift < 5e-3 && Math.abs(Math.abs(ang) - 90) < 3, `fell to ${ang.toFixed(1)}°, off-plane ${maxOff.toExponential(1)}, point drift ${(maxDrift * 1000).toFixed(1)} mm`);
+}
+// 15. two bodies hinged to each other in free space: momentum and angular momentum are kept
+{
+  const w = new World({ accel: () => [0, 0, 0, 0], env: () => ({ d: 1e9, n: up }) });
+  const A = w.add(makeBody({ shape: 'tesseract', size: 0.4, density: 2600, pos: [0, 0, 0, 0], omega: [0.4, 0, 0.3, 0, 0, 0.2], vel: [0.1, 0, 0, 0] }));
+  const B = w.add(makeBody({ shape: 'tesseract', size: 0.4, density: 2600, pos: [0.4, 0, 0, 0], omega: [-0.5, 0.2, 0, 0.6, 0, 0] }));
+  w.joints.push(hinge({ a: A, b: B, ca: [0.2, 0, 0, 0.2], cb: [-0.2, 0, 0, 0.2], Fa: R4.identity(), plane: [0, 3] }));
+  const P = bs => bs.reduce((s, b) => add(s, scale(b.vel, b.m)), [0, 0, 0, 0]);
+  const Lt = bs => bs.reduce((s, b) => add(s, add(scale(wedge(b.vel, b.pos), b.m), IApply(b, b.omega))), [0, 0, 0, 0, 0, 0]);
+  for (let i = 0; i < 120; i++) w.step();                      // (settle the knock onto the hinge)
+  const P0 = P([A, B]), L0 = Lt([A, B]);
+  for (let i = 0; i < 1200; i++) w.step();
+  const dP = len(sub(P([A, B]), P0)), dL = len(sub(Lt([A, B]), L0)) / len(L0);
+  check('hinged pair keeps P and L', dP < 1e-9 && dL < 1e-2, `dP ${dP.toExponential(1)}, dL ${dL.toExponential(1)}`);
 }
 for (const [s, n, i] of results) console.log(`${s}  ${n.padEnd(46)} ${i || ''}`);
 const fails = results.filter(r => r[0] === 'FAIL').length;
