@@ -486,7 +486,9 @@ export class World {
       const live = o => o && !o.sleeping && !o.kinematic;
       if (!live(j.b) && !live(j.a)) continue;
       for (const o of [j.a, j.b]) if (o && o.sleeping) this.wake(o);
-      jointPrep(j, dt); js.push(j);
+      const was = j.side; jointPrep(j, dt); js.push(j);
+      // a stop met at speed strikes (for sound): the turning's rate times the reach of the moving body
+      if (j.side && !was) { const rate = Math.abs(dot6(j.Pl, j.a ? j.b.omega.map((x, k) => x - j.a.omega[k]) : j.b.omega)), v = rate * j.b.bound; if (v > 0.6) this.impacts.push({ a: null, b: j.b, p: j.pb, speed: v }); }
     }
     // 4. sequential impulses
     const solve = js.length ? [...cs, ...js] : cs;
