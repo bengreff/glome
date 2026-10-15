@@ -1,5 +1,23 @@
 # Glome: handoff (written 12 October 2026, after v1.3; run seven's status added after v1.5; run eight's plan from the owner, 13 October, at the top)
 
+## Run nine: start here (the owner on v1.6, 14 October)
+
+The owner's list, in their words where it matters:
+> 1) fine [gravity 10.6]. 3) Keep it [the lighthouse]. certain objects, like crystal-shaped boulders and creatures, are NOT evenly distributed across the surface so when I go to the other side of the planet I see none. No puzzles, but interacting with the world is encouraged, picking up rocks, moving things around, throwing things, interacting with animals somewhat. There should be crabs of various sizes and leg numbers and they are generally passive towards you and sometimes curious somewhat, may run away if you ram against them. When you are holding an impulse stone it should literally say, g to stow in pouch. On the map, make sure clicking on a target can set/unset a target, making the column of light target that thing. When in space, I only see max 5 copies of the planet looped around, if this is physically accurate keep, if an infinite chain is accurate implement that with adaptive resolution, also make an imitation of the atmosphere graphics for the copies so they don't look unnatural. For the launcher, the predicted trajectory is kind of laggy in response to the levers, increase update frequency. Add rudimentary timewarp up to 10x. When you have been in space for more than 60s and are not on an impact trajectory with the second planet, add a button to hold briefly to reset back to the launchpad exactly as you would if you land in the ocean. Make sure the boats exist and mark them on the map under 2.
+
+Follow-ups answered: words on every action cue (key plus a few words; the world stays wordless); crabs: bump and push, curious ones come to you, small ones can be carried, they chase thrown balls; the lighthouse is a place to see the hoop (its turning lamp blinks on the planet's copies). Session: as run eight (segments, then autonomous).
+
+**Measured first:** crystals stand only above 16 m (3 of 10 far-side places had any); crab herds are patchy (a presence field with a floor of 0.45, heights 2–22 m only; 2 of 10 far-side places had none in your slice within 40 m); copies drawn only for k = −2..2 (an infinite row is the true picture: R³×S¹ repeats without end); the prediction refreshes every 0.25 s; one raft and one sail on the whole planet.
+
+**Segments:**
+1. Words on the cues; boats (several rafts, each on a beach, marked under radar layer 2); clicking a mark on the radar sets or clears the column's target.
+2. Space: the prediction follows the levers at once; timewarp up to 10× (`,` and `.`); after 60 s in flight and not headed for B, hold B to return to the pad (as a splashdown does).
+3. Even spread: crystals on all dry land; crab herds on all dry land from the beach up, no thin patches.
+4. The copies: the whole row round the hoop (near ones in full, far ones as shaded spheres, only those a ray can reach tested), each with an atmosphere's rim.
+5. Crabs: sizes and leg counts (6, 8, 12), passive, curious ones approach, solid (bump and push), flee when rammed or hit, small ones carried, chase balls.
+6. The lighthouse: a tower on a headland, its lamp turning, its light blinking on the copies.
+Then tag v1.7, the zip, the report.
+
 ## Run eight: start here (the owner's verdict on run seven, 13 October)
 
 The owner played run seven's puzzles and answered its decisions. In their words:
