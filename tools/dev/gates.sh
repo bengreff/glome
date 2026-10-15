@@ -13,6 +13,8 @@ echo "== stones (a pedestal's stone: take, stow, draw, forming)"; "$D/run.sh" st
 echo "== sandbox (150 s of taking, throwing, setting down, jumping and twisting with things in hand)"; "$D/run.sh" sandbox 400 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== on B: walk to the console and open it"; "$D/run.sh" bconsole 300 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== the overhang: dropped on its floor, out of it on foot"; "$D/run.sh" overhang 400 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
+echo "== crabs (kinds, a bump, a run-in, one carried and set down, a ball chased)"; "$D/run.sh" crabs9 200 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
+echo "== space (the path follows a lever, timewarp 10x, back to the pad)"; "$D/run.sh" seg9c 300 --gpu 2>&1 | grep -v '^eval: 1$\|^status'
 echo "== playthroughs"; printf "stones: "; "$D/run.sh" pt_stones 400 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
 for n in caveout aim; do printf "%s: " $n; "$D/run.sh" pt_$n 150 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .; done
 printf "orbit: "; "$D/run.sh" pt_orbit 1500 --gpu 2>&1 | grep -v '^status\|^eval: 1$' | grep .
