@@ -73,6 +73,7 @@ export function updateLauncher(p) {
 export function tryLaunch(p, cam, jump) {
   if (!jump || !launcher.onPad || !(launcher.speed > 0) || G.simT - (launcher.last || -9) < 1.5) return false;
   launcher.last = G.simT;
+  p.dry = { pos: p.pos.slice(), F: p.F, R: p.R, A: p.A, onB: null };   // (a splashdown, or the way home from space, brings you back here)
   const u = p.up(), dir = launcher.aim ? launcher.aim.dir : vec4.dot(cam.F, u) > 0.05 ? cam.F : u;
   p.vel = vec4.scale(dir, Math.min(SPEED_MAX, launcher.speed));
   p.pos = vec4.add(p.pos, vec4.scale(u, 0.3));

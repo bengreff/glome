@@ -37,9 +37,13 @@ export function predict(x, v, t) {
   return { pts, hit };
 }
 
-// Refresh the prediction a few times a second: from your flight, or from the launch the pad would give you.
+// Refresh the prediction four times a second: from your flight, or from the launch the pad would give you. A change of
+// the launch (a lever moved) or of your flight (a stone thrown: smap.t is reset) is followed at once. (One prediction
+// takes 0.5–4 ms.)
 export function updateSpaceMap(state) {
-  if (G.simT - smap.t < 0.25) return;
+  const lk = state.launch ? state.launch.map(v => v.toFixed(4)).join() : '';
+  if (G.simT - smap.t < 0.25 && lk === smap.launchKey) return;
+  smap.launchKey = lk;
   smap.t = G.simT;
   const p = G.player, t = G.state.time;
   let x, v;

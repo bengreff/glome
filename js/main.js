@@ -9,7 +9,7 @@ import { radar, radarRect, drawRadar, blitRadar, drawRadarOverlay, makeRadarVolu
          compassAt, logMap } from './radar.js';
 import { boulders, makeBoulders, updateBoulders, boulderContact } from './boulders.js';
 import { keys, mouse, SENS, readInput, actions, pad, pollPad } from './input.js';
-import { gazePoint, drawFaced, drawGazeDot, drawBMarks, drawGoal, updateHUD } from './hud.js';
+import { gazePoint, drawFaced, drawGazeDot, drawBMarks, drawGoal, updateHUD, drawStatus } from './hud.js';
 import { guide, updateGuide, updateBeam } from './guide.js';
 import { flora, initFlora, updateFlora } from './flora.js';
 import { loadSettings, saveSettings, settings, loadWorld, startAutosave, exportFile, importFile, newWorld, hooks } from './save.js';
@@ -106,7 +106,7 @@ function backToDry() {
 const hold = { fT: -1, mT: -1, ghostT: 0 };
 // A change of your velocity given in A's frame (the frame objects live in): in flight it goes to the inertial state,
 // on B into B's frame (whose axes are inertial).
-const kickPlayer = dv => { const p = G.player; if (flight.active) kick(dv); else if (p.onB != null) p.vel = vec4.add(p.vel, dirToInertial(dv, state.time)); else p.vel = vec4.add(p.vel, dv); };
+const kickPlayer = dv => { const p = G.player; if (flight.active) kick(dv); else if (p.onB != null) p.vel = vec4.add(p.vel, dirToInertial(dv, state.time)); else p.vel = vec4.add(p.vel, dv); smap.t = -1; };   // (the map's path, at once)
 function handleActions(cam) {
   const now = G.simT, p = G.player;
   // things are handled in the frame of the world they are in: on B, B's (your own frame there)
@@ -155,6 +155,7 @@ export const B_PAD = 0, B_PAD_SPEED = 33;
 function tryLaunchB(p, jump) {
   if (!jump || p.onB == null || !p.grounded || floorOf(p.up()) !== B_PAD || G.simT - (tryLaunchB.last || -9) < 1.5) return false;
   tryLaunchB.last = G.simT;
+  p.dry = { pos: p.pos.slice(), F: p.F, R: p.R, A: p.A, onB: p.onB };   // (back to B's pad from space)
   const c = p.camera(), u = p.up(), dir = vec4.dot(c.F, u) > 0.05 ? c.F : u;
   p.vel = vec4.scale(dir, B_PAD_SPEED); p.pos = vec4.add(p.pos, vec4.scale(u, 0.3)); p.grounded = false; p.airborneUntil = G.simT + 0.5;
   G.audio?.emit('launch', p.pos, 1.0);
@@ -238,9 +239,16 @@ function frameBody(now) {
   tides.on = !!G.tides; seaTide.at = tides.on ? n => tides.at(n) : null;
   if (tides.on) updateTides(state.time);
   // physics runs in fixed steps of 1/120 s (PHYSICS.md), as many as the frame needs
-  physAcc += dt * LAWS.TIME_RATE;
+  // timewarp (`,` and `.`: 1, 2, 5 or 10 times): more steps a frame, the same steps
+  const warp = G.warp || 1;
+  physAcc += dt * LAWS.TIME_RATE * warp;
   handleActions(cameraNow());
-  for (let n = 0; physAcc >= STEP && n < 10; n++, physAcc -= STEP) {
+  // after 60 s in flight, unless the path ends on B: hold B (a gamepad's Back) a second to come back to the pad, as
+  // from a splashdown
+  G.canReturn = flight.active && flight.time > 60 && !(smap.hit && smap.hit.what === 'B') && fade.t < 0;
+  G.returnHold = G.canReturn && (keys.has('KeyB') || pad.back) ? (G.returnHold || 0) + dt : 0;
+  if (G.returnHold >= 1) { G.returnHold = 0; G.warp = 1; softReset(); }
+  for (let n = 0; physAcc >= STEP && n < 10 * warp; n++, physAcc -= STEP) {
     const onB = player.onB != null;
     player.prevPos = player.pos.slice(); player.prevOnB = player.onB;
     const v0 = player.vel.slice();
@@ -268,6 +276,7 @@ function frameBody(now) {
     if (player.onB != null) stepObjects(player.camera(), dv => { player.vel = vec4.add(player.vel, dv); }, objects.worldB, 150, 900);
     state.time += STEP;
   }
+  physAcc = Math.min(physAcc, 2 * STEP);                       // (behind? let it go, rather than fall further behind)
   if (player.depth > CHEST) fadeOut(backToDry);
   updateFade(dt);
   if (player.onB == null) recordTrail();
@@ -283,7 +292,7 @@ function frameBody(now) {
   let rad = null;
   if (player.onB == null) {
     updateNooks();
-    stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE, player.hf);
+    for (let i = 0, ns = Math.ceil(warp / 3); i < ns; i++) stepCreatures(Math.min(dt, 0.05) * LAWS.TIME_RATE * warp / ns, player.hf);
     const cd = creatureDraw(cam.eye, cam.A, player.hf, dt);
     setExtraProps(cd.items); legSlot.caps = cd.caps;          // the creatures' bodies are props; their legs go with the trees
   } else { setExtraProps([]); legSlot.caps = []; }
@@ -325,7 +334,7 @@ function frameBody(now) {
   if (objects.held !== G.heldLast) { G.heldLast = objects.held; G.heldSince = G.simT; }   // (for the cue after taking something)
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
-  if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); }
+  if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); drawStatus(); }
   if (rad) drawRadarOverlay(rad, sun); else radar.rect = null;
   if (spaceMode && !state.radar.hidden && !state.bare) {
     updateSpaceMap({ flight, launch: onLauncher && launcher.speed > 0 ? vec4.scale(launcher.aim.dir, launcher.speed) : null, onB: player.onB });   // (along the barrel)

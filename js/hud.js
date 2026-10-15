@@ -253,3 +253,23 @@ export function updateHUD(dt, cam, sun) {
     : `night · sun ${fmt(-el)}° below`;
   $('fps').textContent = `${fmt(fps)} fps · res ${fmt(100 * scene.w / canvas.width)}%${prof.gpu > 0 ? ` · gpu ${fmt(prof.gpu, 1)} ms` : ''}`;
 }
+
+// The clock and the way home: while time runs faster (`,` and `.`), its rate at the top; in flight, once you may go
+// back to the pad, a button to hold (B), filling as you hold it.
+export function drawStatus() {
+  const W = overlay.width, H = overlay.height, k = W / innerWidth, warp = G.warp || 1;
+  octx.save();
+  if (warp > 1 || G.simT - (G.warpShown ?? -9) < 3) {
+    octx.font = `600 ${15 * k}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+    const t = `×${warp}`, tw = octx.measureText(t).width;
+    octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; octx.fillRect(W / 2 - tw / 2 - 10 * k, 14 * k, tw + 20 * k, 24 * k);
+    octx.fillStyle = warp > 1 ? 'rgba(255, 210, 120, 0.95)' : 'rgba(225, 230, 238, 0.9)'; octx.fillText(t, W / 2, 26.5 * k);
+    if (G.simT - (G.warpShown ?? -9) < 3) { cueText(W / 2 - 70 * k, 52 * k, ',', 'slower', k, 'rgba(225, 230, 238, 0.85)'); cueText(W / 2 + 70 * k, 52 * k, '.', 'faster', k, 'rgba(225, 230, 238, 0.85)'); }
+  }
+  if (G.canReturn) {
+    const y = H - 110 * k, w = cueText(W / 2, y, 'B', 'hold to return to the pad', k, 'rgba(255, 210, 120, 0.95)', 1.15);
+    const f = Math.min(1, (G.returnHold || 0) / 1);
+    if (f > 0) { octx.fillStyle = 'rgba(255, 210, 120, 0.9)'; octx.fillRect(W / 2 - w / 2, y + 13 * k, w * f, 3 * k); }
+  }
+  octx.restore();
+}

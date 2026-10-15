@@ -28,6 +28,10 @@ addEventListener('keydown', e => {
     case 'KeyH': state.help = !state.help; $('help').hidden = !state.help; $('hud').hidden = !state.help; break;
     case 'KeyM': state.radar.compass = !state.radar.compass; break;
     case 'KeyP': state.radar.pin = state.radar.pin ? null : { n: G.player.up(), B: radarBasis() }; break;
+    case 'Comma': case 'Period': {                             // timewarp: 1, 2, 5, 10 times
+      const W = [1, 2, 5, 10], i = Math.max(0, W.indexOf(G.warp || 1)) + (e.code === 'Period' ? 1 : -1);
+      G.warp = W[Math.max(0, Math.min(W.length - 1, i))]; G.warpShown = G.simT; break;
+    }
   }
 });
 addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'KeyF') actions.fUp = true; });
@@ -99,7 +103,7 @@ export function pollPad() {
   const on = i => i === 6 || i === 7 ? (gp.buttons[i]?.value || 0) > 0.4 : !!gp.buttons[i]?.pressed;
   const now = gp.buttons.map((_, i) => on(i)), was = i => !!pad.prev[i], down = i => now[i] && !was(i), up = i => !now[i] && was(i);
   Object.assign(pad, { connected: true, lx: dead(gp.axes[0] || 0), ly: dead(gp.axes[1] || 0), rx: dead(gp.axes[2] || 0), ry: dead(gp.axes[3] || 0),
-    alt: now[6], jump: now[0], run: now[10], ana: (now[5] ? 1 : 0) - (now[4] ? 1 : 0), zoom: (now[13] ? 1 : 0) - (now[12] ? 1 : 0) });
+    alt: now[6], jump: now[0], run: now[10], ana: (now[5] ? 1 : 0) - (now[4] ? 1 : 0), zoom: (now[13] ? 1 : 0) - (now[12] ? 1 : 0), back: now[8] });
   levers.pad = true; pad.lever = 0;
   if (levers.shown) {                              // on the pad, the d-pad works the levers
     if (down(14)) levers.sel = (levers.sel + 3) % 4;
