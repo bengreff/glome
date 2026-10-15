@@ -74,6 +74,17 @@ uniform mat4 uSkyM;         // this frame -> the inertial frame, for the fixed s
 uniform ivec2 uStarK, uCopyK; // the images and copies near enough to your slice to be seen
 uniform float uDayE;        // how much of the row's light is above the eye's horizon (0 night .. 1 day)
 uniform float uAtmos;       // 1 near the ground, fading to 0 high above it (the sky's colour is artistic)
+uniform vec4 uLamp;         // the lighthouse's lamp, in the planet's frame (lighthouse.js)
+uniform float uLampI;       // its flash, 0..1
+// The lamp's light, seen as a glow round it: a ray passing within a few metres of it (your slice within a few metres,
+// along ana) sees it, a point a few pixels across however far off (its core grows with distance).
+vec3 lampGlowAt(vec4 ro, vec4 rd, vec4 P, float tEnd) {
+  if (uLampI <= 0.0) return vec3(0.0);
+  vec4 w = P - ro; float t = dot(w, rd);
+  if (t <= 0.0 || t > tEnd) return vec3(0.0);
+  float d = length(w - rd * t), R = 2.0 + t * 0.004;
+  return vec3(1.0, 0.86, 0.6) * uLampI * (1.6 * exp(-d * d / (R * R)) + 0.3 * exp(-d / (4.0 * R)));
+}
 float starW(int k) { return uStarW[k >> 2][k & 3]; }
 
 const float MAXT = 900.0;
@@ -1253,6 +1264,7 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col, out vec3 glow) {
     float b = dot(o, rd), tk = -b;
     if (tk <= 0.0 || tk > tc) { if (tk > tc) break; continue; }   // (behind you, or behind what is already hit: and all after it)
     float d2 = dot(o, o) - b * b, dm = sqrt(max(d2, 0.0));
+    if (dot(uLamp, o - uLamp) > 0.0) glow += lampGlowAt(o, rd, uLamp, tc);   // its lighthouse, on the face toward you
     // its atmosphere's rim: thicker toward the limb, lit on its day side
     float y = dm - R0;
     if (y > 0.0) glow += atmColour(normalize(o - rd * b)) * (1.0 - exp(-1.8 * exp(-y / ATM_H)));
@@ -1462,7 +1474,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
     else col = skyColor(rd, upE, uDayE) + ((uDebug & 2) == 0 ? starRow(ro, rd, ts) : vec3(0.0));
     col += cg * (1.0 - 0.85 * uAtmos);                          // the copies' air, in front of what lies behind (faint through your own sky)
     vec4 cl = clouds(ro, rd, 1e9);
-    return mix(col, cl.rgb, cl.a) + beaconGlow(ro, rd, tOut > 0.0 ? tOut : 3000.0);
+    return mix(col, cl.rgb, cl.a) + beaconGlow(ro, rd, tOut > 0.0 ? tOut : 3000.0) + lampGlowAt(ro, rd, uLamp, tOut > 0.0 ? tOut : 1e5);
   }
   vec4 p = ro + rd * t;
   if (kind == 7) {                                            // planet B's floor
@@ -1501,7 +1513,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
     vec4 cl = clouds(ro, rd, tOut);
     col = mix(col, cl.rgb, cl.a);
   }
-  return col + beaconGlow(ro, rd, t);
+  return col + beaconGlow(ro, rd, t) + lampGlowAt(ro, rd, uLamp, t);
 }
 // Trace one 4D ray (both halves in one). Returns colour; tOut = hit distance or -1 for sky.
 vec3 render(vec4 ro, vec4 rd, out float tOut) { return shadeHit(ro, rd, hitAll(ro, rd), tOut); }

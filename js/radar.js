@@ -15,7 +15,7 @@ export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   
 // mouse free). The disc, the ground your slice shows, is always there.
 export const RADAR_LAYERS = [
   { key: 'things', name: 'things to carry', on: true },     // balls, blocks, stones, lanterns, parts, raft, sail; a cache as one mark
-  { key: 'landmarks', name: 'places: cave, ruins, launcher, boats', on: true },
+  { key: 'landmarks', name: 'places: cave, ruins, launcher, boats, lighthouse', on: true },
   { key: 'creatures', name: 'creatures', on: false },
   { key: 'water', name: 'water and coast', on: false },
   { key: 'mountains', name: 'solid mountains', on: false },  // ground above 24 m, and its shadow on the disc toward ana or kata
@@ -603,6 +603,7 @@ export function landmarkList() {
   if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave', ref: 'cave', at: () => G.cave.out });
   for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin', ref: r });
   if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: true, ref: 'launcher', at: () => launcher.site });
+  if (G.lighthouse && G.lighthouse.n) out.push({ n: G.lighthouse.n, kind: 'lighthouse', keep: true, ref: 'lighthouse', at: () => vec4.scale(G.lighthouse.n, PLANET_R + G.player.hf.heightAt(G.lighthouse.n)) });
   if (G.objects) for (const b of G.objects.world.bodies) if (b.kind === 'raft' && !b.held)                       // the boats, wherever they are now
     out.push({ n: vec4.norm(b.pos), kind: 'boat', ref: b, at: () => (G.objects.world.bodies.includes(b) && !b.held ? b.pos : null) });
   return out;
@@ -622,6 +623,10 @@ export function drawLandmark(kind, P, k, bright) {
     octx.strokeStyle = 'rgba(225, 215, 195, 0.9)'; octx.lineWidth = 1.6 * k;
     octx.beginPath(); octx.moveTo(x - 4 * k, y + 4 * k); octx.lineTo(x - 4 * k, y - 3 * k); octx.moveTo(x + 4 * k, y + 4 * k); octx.lineTo(x + 4 * k, y - 3 * k);
     octx.moveTo(x - 5.5 * k, y - 3.5 * k); octx.lineTo(x + 5.5 * k, y - 3.5 * k); octx.stroke();
+  } else if (kind === 'lighthouse') {                         // a tower and its light
+    octx.strokeStyle = 'rgba(235, 225, 205, 0.95)'; octx.lineWidth = 1.5 * k;
+    octx.beginPath(); octx.moveTo(x - 3 * k, y + 5 * k); octx.lineTo(x - 1.6 * k, y - 3 * k); octx.lineTo(x + 1.6 * k, y - 3 * k); octx.lineTo(x + 3 * k, y + 5 * k); octx.closePath(); octx.stroke();
+    octx.fillStyle = 'rgba(255, 215, 140, 0.95)'; octx.beginPath(); octx.arc(x, y - 5 * k, 2 * k, 0, 7); octx.fill();
   } else if (kind === 'boat') {                               // a raft: a hull and its mast
     octx.strokeStyle = 'rgba(205, 160, 105, 0.95)'; octx.fillStyle = 'rgba(205, 160, 105, 0.55)'; octx.lineWidth = 1.5 * k;
     octx.beginPath(); octx.moveTo(x - 5.5 * k, y + 1 * k); octx.lineTo(x + 5.5 * k, y + 1 * k); octx.lineTo(x + 3.5 * k, y + 4.5 * k); octx.lineTo(x - 3.5 * k, y + 4.5 * k); octx.closePath(); octx.fill(); octx.stroke();

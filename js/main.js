@@ -36,6 +36,7 @@ import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creat
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad, rebaseSpin } from './cosmos.js';
 import { stepBoats, windAt, boatSpots } from './boats.js';
+import { lighthouse, findHeadland, buildLighthouse, updateLighthouse } from './lighthouse.js';
 import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { orbitOf, toBody, dirToBody, dirToInertial } from './cosmos.js';
@@ -242,6 +243,7 @@ function frameBody(now) {
   // the tide (when on): its field for this frame, for the water the physics and the renderer see
   tides.on = !!G.tides; seaTide.at = tides.on ? n => tides.at(n) : null;
   if (tides.on) updateTides(state.time);
+  updateLighthouse(state.time); G.lampLight = lighthouse.light;
   // physics runs in fixed steps of 1/120 s (PHYSICS.md), as many as the frame needs
   // timewarp (`,` and `.`: 1, 2, 5 or 10 times): more steps a frame, the same steps
   const warp = G.warp || 1;
@@ -447,6 +449,10 @@ function frameBody(now) {
         const T = tangents(n); spawnObj('sail', vec4.norm(vec4.add(vec4.scale(n, Math.cos(2.4 / 250)), vec4.scale(T[0], Math.sin(2.4 / 250)))));   // its sail beside it
       }
       G.raftHome = G.raftHomes[0] || beach;
+      // the lighthouse, on a headland (lighthouse.js): not by where you arrive, the launcher or a boat
+      const home = player.up(), far = (q, n, m) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 > m;
+      buildLighthouse(hf, findHeadland(hf, home, n => !(far(home, n, 60) && far(launcher.n, n, 150) && G.raftHomes.every(q => far(q, n, 20)))));
+      G.lighthouse = lighthouse;
     }
     {
       // the rocks: clusters of 4D shapes by kind over the whole planet, and a few of each near where you arrive; none
@@ -455,6 +461,7 @@ function frameBody(now) {
       if (launcher.n) keep.push([launcher.n, 45]);                  // (the summit stays clear: a launch leaves it nearly level)
       if (G.cave) keep.push([vec4.norm(G.cave.mouth), 10]);
       for (const n of G.raftHomes || []) keep.push([n, 6]);
+      if (lighthouse.n) keep.push([lighthouse.n, 6]);
       const keepOut = (n, r) => keep.some(([q, m]) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 < m + r)
         || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < r + 2;
       await step('Setting down rocks…', 'objects');
@@ -488,7 +495,7 @@ function frameBody(now) {
       await step('Building the ruins…', 'woods');
       G.findsMade = makeFinds(hf, home, [launcher.n], keepOut);
       // the flora: grown near you as you go; none on the pad or in the cave's mouth
-      const clearOf = [[launcher.n, 6], ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : [])].filter(([q]) => q);
+      const clearOf = [[launcher.n, 6], ...(G.cave ? [[vec4.norm(G.cave.mouth), 5]] : []), ...(lighthouse.n ? [[lighthouse.n, 3]] : [])].filter(([q]) => q);
       const clear = n => clearOf.some(([q, m]) => vec4.dot(q, n) > Math.cos(m / 250)) || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < 1.2;
       initFlora(hf, clear); creatures.keep = clear;               // (and no herd's home there either)
       G.genCount = finds.gen;

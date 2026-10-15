@@ -518,6 +518,7 @@ export function uploadObjects(cam, alpha = 1) {
   // lanterns: the nearest few light the world (held ones too)
   const lamps = w.bodies.filter(b => b.light).map(b => ({ pos: drawPose(b, cam, alpha).pos, light: b.light }))
     .concat((G.creatureItems || []).filter(it => it.light))          // (lanterns on B come with B's things)
+    .concat(G.lampLight && G.player && G.player.onB == null ? [G.lampLight] : [])   // (the lighthouse's flash)
     .map(l => ({ ...l, d: vec4.len(vec4.sub(l.pos, cam.eye)) })).sort((x, y) => x.d - y.d).slice(0, MAXL);
   lamps.forEach((l, i) => { gpuObj.LP.set(l.pos, 4 * i); gpuObj.LC.set([...l.light, 0], 4 * i); });
   gpuObj.ln = lamps.length;

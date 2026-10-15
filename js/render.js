@@ -372,6 +372,7 @@ export function setWorld(p, cam, sun) {
   if (p.slice) {
     gl.uniform1i(p.u('uSunTex'), 11); gl.uniform1i(p.u('uHits'), 5);   // (every sampler its own unit, used or not)
     gl.uniform4fv(p.u('uBeam'), beam.B); gl.uniform4fv(p.u('uBeamC'), beam.C); gl.uniform4fv(p.u('uBeamS'), beam.S);
+    const LH = G.lighthouse; gl.uniform4fv(p.u('uLamp'), LH && LH.lamp ? LH.lamp : [0, 0, 0, 0]); gl.uniform1f(p.u('uLampI'), LH && LH.lamp && G.player && G.player.onB == null ? LH.I : 0);
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, propTex);
     gl.uniform1i(p.u('uPropTex'), 3); gl.activeTexture(gl.TEXTURE0);
     gl.uniform4fv(p.u('uPS'), props.circles); gl.uniform4fv(p.u('uPC'), props.centres);
