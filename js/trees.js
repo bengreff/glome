@@ -264,9 +264,9 @@ export function treeFrame(cam, sun, W, H, fov) {
   // leafy: a chunk of clumps of leaves only (stored as 3D balls in the slice, their 4D centres second); 'skin': a
   // creature's pieces, one group, blended into one surface by the shader (each piece holds the group's first piece and
   // count, for its shading)
-  const group = (first, leafy = false) => {
-    const skin = leafy === 'skin', chunk = skin ? 16 : CHUNK;
-    if (skin) for (let j = first; j < nc; j++) { D[12 * j + 10] = first; D[12 * j + 11] = nc - first; }
+  const group = (first, leafy = false, tint = 0) => {
+    const skin = leafy === 'skin', chunk = skin ? 28 : CHUNK;
+    if (skin) for (let j = first; j < nc; j++) { D[12 * j + 10] = first; D[12 * j + 11] = nc - first + 0.05 + 0.9 * tint; }   // (count, and the shell's tint in its fraction)
     for (let s0 = first; s0 < nc && ng < MAXTG; s0 += chunk) {
       const s1 = Math.min(nc, s0 + chunk), c = [0, 0, 0, 0], ends = leafy === true ? [4] : [0, 4];
       for (let j = s0; j < s1; j++) for (const e of ends) for (let q = 0; q < 4; q++) c[q] += D[12 * j + e + q] / (ends.length * (s1 - s0));
@@ -292,7 +292,7 @@ export function treeFrame(cam, sun, W, H, fov) {
     const first = nc;
     if (e.skin && nc + e.caps.length > MAXTC) break;
     for (const [a, b, r, kind] of e.caps) { if (nc >= MAXTC) break; tmp.set(a, 0); tmp.set(b, 4); tmp[8] = r; tmp[9] = kind; emit(tmp, 0, 1); }
-    group(first, e.skin ? 'skin' : false);
+    group(first, e.skin ? 'skin' : false, e.tint || 0);
   }
   // the flora near you (flora.js): the clusters your slice cuts, nearest first, a group to a plant (so its circle on
   // the screen is small), within a share of the budget

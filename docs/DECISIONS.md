@@ -459,3 +459,11 @@ From the owner's list on v1.6 (HANDOFF, run nine): no puzzles, but the world to 
 - **Cost:** 7.5 ms of GPU at full resolution in space looking down the row (M2 Pro), within the frame.
 
 ![The row of copies round the hoop, from 1,160 m out](copies-row.jpg)
+
+### Segment five: crabs of many kinds
+
+- **Each herd is a kind:** legs 6 (along the ground's three axes, three pairs swinging in turn), 8 (toward a cube's corners: two tetrapods, as a tetrahedron of feet is the least stance on 3D ground) or 12 (toward an icosahedron's corners, three groups of four in turn), in 50/30/20 shares; size small (0.5), medium (0.95), large (1.25) or big (1.65), each crab 0.85–1.15 of its kind, one in five young at 0.6; a shell tint per herd (tawny, rust, slate, sand). Near the start: all twelve kinds of legs and size, 4,336 crabs within 64 m. A 12-legged crab's skin is 26 pieces (the shader's group grew from 16 to 28).
+- **Passive:** they graze on when you come near (they used to trot off). A curious one (45%) now and then (about one chance in 16 s while you are within 15 m) comes over, stops 1.6 + 1.2 K m off, faces you and watches for 8–18 s, then goes home and won't come again for 25–55 s.
+- **Solid:** your body and a crab's shell (a ball of 0.5 K) push apart, the crab the more (it steps aside 1–2 m); knock into one at more than 2.5 m/s, or run at one (faster than walking pace, 5.5 m/s, within 3 + K m), and it runs, some of them out of your slice through ana; so does one past which something flies fast (a throw). Checked: walked into a medium crab, it moved 3.1 m aside without running; ran at another, it ran.
+- **Small ones can be carried** (K up to 0.7): your gaze on its shell, F, and it becomes a body in your hand (a ball 0.42 K, 30 K³ kg), drawn as itself with its legs waving; set down or thrown, once it has rested 0.8 s it is a crab again and scuttles off (home, if home is within 60 m; else it makes its home there). Its herd's cell won't make it again while you have it.
+- **Balls:** the playful ones (40%) chase a ball rolling within 20 m of home and nudge it on, as rollers do.

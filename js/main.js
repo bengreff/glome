@@ -22,7 +22,7 @@ import { MASSIF } from './world.js';
 import { quality, updateSky, setFov, hits, sunbuf, programsReady } from './render.js';
 import { updateSound } from './sounds.js';
 import { spawn as spawnObj, gpuObj, objects, initObjects, placeStart, stepObjects, playerContacts, uploadObjects, lookedAt, pickUp, drop, throwHeld,
-         drawStone, pouchKey, tiltHeld, endTilt, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState } from './objects.js';
+         drawStone, pouchKey, tiltHeld, endTilt, computeGhost, setDown, objectsSave, moveHeld, carryHeld, hold as holdState, bodyOf } from './objects.js';
 import { flight, updateFlightMode, stepFlight, syncFlightFrame, kick } from './flight.js';
 import { launcher, buildLauncher, updateLauncher, tryLaunch, setAim, setSpeed } from './launcher.js';
 import { GIMBAL } from './gimbal.js';
@@ -32,7 +32,7 @@ import { accelB, groundRadiusB, floorOf } from './planetB.js';
 import { buildLandforms, floorRadius, nearCarves, carveSD } from './landforms.js';
 import { growTree, trees, groves, rope as ropeSlot, makeForests, treeFrame, tgpu } from './trees.js';
 import { tides, updateTides } from './tides.js';
-import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
+import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave, bumpCreatures, creatureAt, takeCrab } from './creatures.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad, rebaseSpin } from './cosmos.js';
 import { stepBoats, windAt, boatSpots } from './boats.js';
@@ -116,8 +116,12 @@ function handleActions(cam) {
     if (!objects.held && nearConsole(G.player)) { if ($('console').hidden) openConsole(); else closeConsole(); }
     else if (objects.held) hold.fT = now;                  // tap: drop · hold: show where it will rest
     else {
-      const b = lookedAt(camW);
+      const b = lookedAt(camW), crab = !b && p.onB == null ? creatureAt(camW) : null;
       if (b) pickUp(b, camW);
+      else if (crab) {                                     // a small crab: it becomes a body in your hand (creatures.js)
+        const t = takeCrab(crab), body = bodyOf('crab', t.pos, t.rot, { size: t.size, mass: t.mass });
+        body.mat = 7; body.crab = crab; objects.world.add(body); pickUp(body, camW);
+      }
     }
   }
   if (actions.fUp) {
@@ -277,6 +281,7 @@ function frameBody(now) {
     state.time += STEP;
   }
   physAcc = Math.min(physAcc, 2 * STEP);                       // (behind? let it go, rather than fall further behind)
+  if (!flight.active && player.onB == null) bumpCreatures(player, dt);   // (crabs are solid: creatures.js)
   if (player.depth > CHEST) fadeOut(backToDry);
   updateFade(dt);
   if (player.onB == null) recordTrail();
@@ -328,7 +333,7 @@ function frameBody(now) {
   mark('present');
   radar.gaze = gazePoint(cam);
   // what the dot rests on: something you could take (or the console, on B), and how hard you strain at what you hold
-  G.lookingAtThing = !objects.held && !!lookedAt(player.onB != null ? player.camera() : cam);
+  G.lookingAtThing = !objects.held && (!!lookedAt(player.onB != null ? player.camera() : cam) || (player.onB == null && !!creatureAt(cam)));
   G.canTake = !objects.held && fade.t < 0 && (G.lookingAtThing || nearConsole(player));
   G.flying = flight.active;
   if (objects.held !== G.heldLast) { G.heldLast = objects.held; G.heldSince = G.simT; }   // (for the cue after taking something)

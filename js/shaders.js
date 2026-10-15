@@ -632,7 +632,7 @@ float sdBodyUp(vec4 p, vec4 c, vec4 top, float R) {
 }
 float skinSD(vec4 p, int s0, int cnt) {
   float d = 1e9;
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 28; i++) {
     if (i >= cnt) break;
     int j = s0 + i;
     vec4 pa = treeT(j, 0), pb = treeT(j, 1), q = treeT(j, 2);
@@ -670,7 +670,7 @@ float hitTrees(vec4 ro, vec4 rd, float tMax, out vec4 nrm, out float leaf, out i
       // where the ray first comes within reach of it: the nearest of its pieces, each grown by what the blend can add
       // (a smooth union lies within k/4 of the pieces' union); then step along the ray from there
       float tt = 1e9;
-      for (int i = 0; i < 16; i++) {
+      for (int i = 0; i < 28; i++) {
         if (i >= cnt) break;
         int j = s0 + i;
         vec4 pa = treeT(j, 0), pb = treeT(j, 1), q = treeT(j, 2);
@@ -1291,7 +1291,8 @@ vec3 shadeTree(vec4 p, vec4 n, float leaf, vec4 rd, float t, float seed) {
   if (foliage && t < 40.0) d2 = detail(p, kind == 1 ? 4.6 : 8.0, n, g2) * (1.0 - smoothstep(15.0, 40.0, t));   // clumps of leaves, tufts of needles
   // each tree its own green: deeper, fresher or more olive
   vec3 lo = mix(vec3(0.06, 0.15, 0.04), vec3(0.09, 0.15, 0.03), seed), hi = mix(vec3(0.22, 0.36, 0.10), vec3(0.32, 0.36, 0.11), seed * seed);
-  vec3 alb = kind >= 10 ? mix(vec3(0.62, 0.40, 0.22), vec3(0.46, 0.24, 0.11), smoothstep(-0.2, 0.7, dot(n, up))) * (0.88 + 0.12 * d1)   // a crab's shell: tawny, darker on its back
+  vec3 shell = seed < 0.27 ? vec3(0.62, 0.40, 0.22) : seed < 0.5 ? vec3(0.68, 0.30, 0.19) : seed < 0.73 ? vec3(0.42, 0.47, 0.52) : vec3(0.72, 0.64, 0.46);   // tawny, rust, slate, sand
+  vec3 alb = kind >= 10 ? mix(shell, shell * 0.62, smoothstep(-0.2, 0.7, dot(n, up))) * (0.88 + 0.12 * d1)   // a crab's shell, darker on its back
            : kind == 3 ? vec3(0.30, 0.19, 0.11) * (0.9 + 0.1 * d1)                                     // a walker's legs
            : kind == 2 ? vec3(0.62, 0.52, 0.36) * (0.9 + 0.1 * d1)                                     // rope: hemp
            : kind == 1 ? mix(lo, hi, clamp(0.5 + 0.3 * d1 + 0.45 * d2, 0.0, 1.0))
@@ -1475,7 +1476,7 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
     if (kind == 4) { vec4 n; hitObjectOne(ro, rd, idx, n); col = shadeObject(p, n, idx, rd, t); }
     else if (kind == 5) {
       vec4 pa = treeT(idx, 0), pb = treeT(idx, 1), q = treeT(idx, 2);
-      if (q.y > 9.5) col = shadeTree(p, skinNormal(p, int(q.z + 0.5), int(q.w + 0.5)), 10.0, rd, t, 0.0);   // a creature's skin
+      if (q.y > 9.5) col = shadeTree(p, skinNormal(p, int(q.z + 0.5), int(floor(q.w))), 10.0, rd, t, fract(q.w));   // a creature's skin (its tint in the fraction)
       else if (q.y > 0.5 && q.y < 1.5) {                      // leaves: the clump's 4D centre is in the second texel
         col = shadeTree(p, normalize(p - pb), 1.0, rd, t, q.z);
         col *= mix(0.45, 1.0, smoothstep(0.55, 0.98, length(p - pb) / q.x));   // deep in a clump it is darker

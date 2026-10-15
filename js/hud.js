@@ -135,6 +135,7 @@ function anaCue(x, y, a, k, s = 1, words = false) {
 // way across ana beside it when it is not. Near it, or with something to do there, a cue sits under the gaze dot.
 export function drawGoal(cam) {
   const g = guide.goal;
+  G.goalCue = false;
   if (!g) return;
   const W = overlay.width, H = overlay.height, k = W / innerWidth, fx = FOV * W / H;
   const d = vec4.sub(g.pos, cam.eye), dist = vec4.len(d);
@@ -177,6 +178,7 @@ export function drawGoal(cam) {
   // under the dot: the way across ana once you stand at the goal's place in your slice, else what to do there
   const cx = W / 2, cy = H / 2 + 34 * k;
   const centred = w => cx - w / 2;
+  G.goalCue = (!inSlice && Math.hypot(z, x) < 7) || g.cue === 'F' || g.cue === 'Space';   // (the hands' cues go below it)
   if (!inSlice && Math.hypot(z, x) < 7) {
     octx.globalAlpha = 0; const w = anaCue(0, -100, a, k, 1.3, true); octx.globalAlpha = 1;
     anaCue(centred(w), cy, a, k, 1.3, true);
@@ -199,7 +201,7 @@ export function drawGazeDot() {
   octx.strokeStyle = gz.open > 0.05 ? `rgba(${Math.round(255 - 173 * gz.open)}, ${Math.round(255 - 35 * gz.open)}, ${Math.round(255 - 55 * gz.open)}, 0.9)` : 'rgba(255, 255, 255, 0.85)';
   octx.lineWidth = 1.4 * k;
   octx.beginPath(); octx.arc(W / 2, H / 2, r, 0, 7); octx.stroke();
-  const CUE = 'rgba(82, 220, 200, 0.92)', y1 = H / 2 + 24 * k;
+  const CUE = 'rgba(82, 220, 200, 0.92)', y1 = H / 2 + (G.goalCue ? 62 : 24) * k;
   if (gz.open > 0.6 && !(guide.goal && guide.goal.cue)) { octx.globalAlpha = gz.open; cueText(W / 2, y1, 'F', G.player && G.player.onB != null && !G.lookingAtThing ? 'to use' : 'to pick up', k, CUE); octx.globalAlpha = 1; }
   // what your hands can do: with an impulse stone, G stows it (or the pouch is full); with something else, for a
   // few seconds after you take it, how to set it down or throw it; in flight with empty hands, G draws a stone

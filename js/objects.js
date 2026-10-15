@@ -36,6 +36,7 @@ export const KINDS = {
   raft: { shape: 'tesseract', size: 1.3, density: 60, mat: 6 },                  // a hollow crate of planks (171 kg): a uniform cube floats flat
                                                                                    // only below about a fifth of water's density
   sail: { shape: 'tesseract', size: 0.4, density: DENSITY.wood, mat: 2, glow: 0.2 }, // set on a raft, it catches the wind
+  crab: { shape: 'glome', size: 0.21, mass: 4, mat: 7 },                          // a small crab you took: its shell (creatures.js draws it)
 };
 export const STONE_SPEED = 80;     // an impulse stone always leaves your hand at 80 m/s (relative to you)
 export const POUCH_MAX = 9;        // the pouch holds nine
@@ -472,6 +473,7 @@ export function uploadObjects(cam, alpha = 1) {
   // its support along ana (does your slice cut it?)
   const support = (rot, e) => { const M = R4.toRows(rot); let r = 0; for (let j = 0; j < 4; j++) r += e[j] * Math.abs(M[0][j] * cam.A[0] + M[1][j] * cam.A[1] + M[2][j] * cam.A[2] + M[3][j] * cam.A[3]); return r; };
   for (const b of w.bodies) {
+    if (b.kind === 'crab') continue;                       // (a crab in hand is drawn as a crab: creatures.js)
     if (b.hidden) continue;                                  // (drawn otherwise: the pillar, as props)
     const d = vec4.len(vec4.sub(b.pos, cam.eye));
     if (d > 120) continue;
