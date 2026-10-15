@@ -174,7 +174,7 @@ export function stepCreatures(dt, hf) {
     const v = vec4.len(o.vel);
     if (o.shape === 'glome' && v > 0.4) o.toyUntil = G.simT + 6;
     if (o.shape === 'glome' && !o.light && (o.toyUntil || 0) > G.simT) balls.push(o);
-    if (v > 3) flyers.push(o);
+    if (v > 3 && G.simT - (o.thrownAt ?? -99) < 4) flyers.push(o);              // (a throw, not something merely knocked about)
   }
   const nearCos = Math.cos(NEAR / PLANET_R);
   for (const c of creatures.list) {
@@ -363,7 +363,7 @@ export const creaturesSave = { save: () => ({ v: 3 }), load: () => {} };
 
 // ---------- your hands and feet ----------
 // Walk into a crab and it is solid: its shell (a ball of 0.5 K about 0.55 K up) and your body (a capsule, 0.3 m round)
-// push apart, the crab the more (it is lighter, and it steps aside); knock into it at more than 2.5 m/s and it runs.
+// push apart, the crab the more (it is lighter, and it steps aside); run into it (faster than walking, 5 m/s) and it runs.
 export function bumpCreatures(p, dt) {
   if (!p || p.onB != null) return;
   const up = vec4.norm(p.pos), a = vec4.add(p.pos, vec4.scale(up, 0.3)), b = vec4.add(p.pos, vec4.scale(up, 1.75)), me = up;
@@ -378,7 +378,7 @@ export function bumpCreatures(p, dt) {
     c.n = along(c.n, nrm, over * 0.8);                                                       // it is pushed aside...
     p.pos = vec4.sub(p.pos, vec4.scale(nrm, over * 0.2));                                    // ...and pushes back a little
     if (vn > 0) { p.vel = vec4.sub(p.vel, vec4.scale(nrm, vn * 0.6)); for (let k = 0; k < 4; k++) c.v[k] += nrm[k] * vn * 0.8; }
-    if (vn > 2.5) { c.spooked = G.simT + 6; c.alarm = 1; }                                   // rammed: it runs
+    if (vn > 5) { c.spooked = G.simT + 6; c.alarm = 1; }                                     // rammed (you ran into it): it runs
     else { c.goal = along(c.n, nrm, 1.2 + K); c.goalUntil = creatures.clock + 3; c.rest = false; }   // nudged: it steps aside
   }
 }

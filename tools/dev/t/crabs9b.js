@@ -10,8 +10,9 @@ if (c) {
   const T = [[-c.n[1], c.n[0], c.n[3], -c.n[2]]], dir = nz(V.sub(T[0], V.sc(c.n, V.dot(T[0], c.n))));
   const at = nz(V.add(V.sc(c.n, 250), V.sc(dir, 4)));
   ball.pos = V.sc(at, 250 + p.hf.heightAt(at) + 0.4); ball.vel = V.sc(dir, 1.5); ball.sleeping = false; ball.kinematic = false;
-  const d0 = len(V.sub(V.sc(c.n, 250 + p.hf.heightAt(c.n)), ball.pos)); await gt(4);
-  out.ballChase = { before: +d0.toFixed(1), after: +len(V.sub(V.sc(c.n, 250 + p.hf.heightAt(c.n)), ball.pos)).toFixed(1), toy: !!c.toy };
+  const d0 = len(V.sub(V.sc(c.n, 250 + p.hf.heightAt(c.n)), ball.pos)); let took = false;
+  for (let i = 0; i < 40; i++) { await gt(0.1); took = took || !!c.toy; }
+  out.ballChase = { before: +d0.toFixed(1), after: +len(V.sub(V.sc(c.n, 250 + p.hf.heightAt(c.n)), ball.pos)).toFixed(1), chased: took };
 }
 out.errors = G.errors || 0; out.lastError = G.lastError ? G.lastError.slice(0, 200) : null;
 return JSON.stringify(out);

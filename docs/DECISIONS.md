@@ -474,3 +474,8 @@ From the owner's list on v1.6 (HANDOFF, run nine): no puzzles, but the world to 
 - **The tower:** four stacked blocks, as wide in each of the ground's three directions (a 4D tower: square in any slice through its axis), in pale and dark bands, 19.4 m to the lamp room; a metal floor and cap; the lamp a glowing ball 0.7 m round, its lamp 26.7 m above the sea. Solid, like the ruins; marked under the radar's places, with its own glyph; a target like any place.
 - **The light:** two flashes of half a second, 1.2 s apart, every 8 s. While it flashes the lamp glows and lights what is near (a light like a lantern's, falling as 1/r³). Its glow is drawn round it: a ray passing within a few metres of the lamp sees it, as a point a few pixels across however far off (the glow's core grows with distance, 2 m + 0.4%).
 - **On the copies:** every copy round the hoop is this planet, so the lamp flashes on each, where it faces you: a row of flashes down the row of copies. 4D has its say: a light reaches you only along your slice, so your slice must pass within a few metres of the lamp, along ana; squared to the hoop and to the lamp, the whole row flashes together.
+
+### From the gates
+
+- **Walking into a crab no longer scares it:** the knock that makes it run is 5 m/s (faster than walking, 4.2); at walking pace it steps aside.
+- **Only a throw startles a crab:** "anything flying past fast" took in whatever moved faster than 3 m/s near it (things knocked about); now only what you threw, for four seconds after.

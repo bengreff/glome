@@ -18,6 +18,8 @@ Follow-ups answered: words on every action cue (key plus a few words; the world 
 6. The lighthouse: a tower on a headland, its lamp turning, its light blinking on the copies.
 Then tag v1.7, the zip, the report.
 
+**Run nine's status:** all six segments done and live; v1.7 tagged at the end (report: "Run nine" in NIGHT_REPORT; reasons in DECISIONS). Open: Windows untested; upload `dist/glome-v1.7.zip`.
+
 ## Run eight: start here (the owner's verdict on run seven, 13 October)
 
 The owner played run seven's puzzles and answered its decisions. In their words:

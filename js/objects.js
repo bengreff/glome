@@ -348,6 +348,7 @@ export function throwHeld(cam, charge, kickPlayer) {
   const u = b.kind === 'stone' ? STONE_SPEED : Math.min(THROW_VMAX, (0.15 + 0.85 * charge) * THROW_MAX / mo);   // speed relative to you
   const dir = cam.F;
   release(b, vec4.add(b.vel, vec4.scale(dir, u * mp / (mp + mo))));             // on top of the motion it has
+  b.thrownAt = G.simT;                                                          // (what startles a crab: creatures.js)
   const dv = vec4.scale(dir, -u * mo / (mp + mo));
   kickPlayer(dv);
   G.audio?.emit(b.kind === 'stone' ? 'launch' : 'throw', b.pos, b.kind === 'stone' ? 0.5 : 0.6);

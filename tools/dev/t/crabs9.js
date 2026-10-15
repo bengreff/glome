@@ -19,7 +19,10 @@ out.ram = { spooked: G.simT < (m2.spooked || 0), speed: +len(m2.v).toFixed(2) };
 let sm = L.filter(c => c.K <= CR.CRAB_SMALL).sort((a, b) => arc(a.n, nz(p.pos)) - arc(b.n, nz(p.pos)))[0];
 out.smallFound = !!sm;
 if (sm) {
-  sm.curious = false; standBefore(sm, 1.4); const eye = p.camera().eye, ctr = V.sc(sm.n, 250 + (sm.g ?? 0) + 0.55 * sm.K); p.pitch = Math.asin(V.dot(nz(V.sub(ctr, eye)), p.up())); await gt(0.3);
+  sm.curious = false; sm.playful = false; sm.rest = true; sm.goal = sm.n.slice(); sm.goalUntil = 1e9; sm.spooked = 0; sm.v = [0, 0, 0, 0];
+  standBefore(sm, 1.4); await gt(0.3);
+  const eye = p.camera().eye, ctr = V.sc(sm.n, 250 + (sm.g ?? 0) + 0.55 * sm.K), dd = nz(V.sub(ctr, eye)), uu = p.up();   // (aim at it now, where it stands)
+  let hz = V.sub(dd, V.sc(uu, V.dot(dd, uu))); hz = V.sub(hz, V.sc(p.A, V.dot(hz, p.A))); p.F = nz(hz); p.settleFrame(); p.pitch = Math.asin(V.dot(dd, uu)); await gt(0.1);
   out.canTake = !!G.canTake; d.actions.fDown = true; await gt(0.1); d.actions.fUp = true; await gt(0.5);
   out.heldKind = O.held && O.held.kind; out.inList = d.creatures.list.includes(sm);
   window.HELDCRAB = 1; await gt(0.2);

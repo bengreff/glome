@@ -1,10 +1,10 @@
 # Night report
 
-The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), run five on 12 October, which fills the world where you are (v1.2), run six the same day: Windows, creatures where they live and a cave you can leave (v1.3), run seven: four puzzles rebuilt (v1.4, v1.5), and run eight on 13 October: the puzzles scrapped, and the game playable start to finish without them (v1.6); their sections are at the end.
+The overnight build of 7–8 October (milestones M0 to M7), the day of refinements that followed on 8 October, run three on 11 October, which takes Glome to v1.0, run four the same day, which shows the way (v1.1), run five on 12 October, which fills the world where you are (v1.2), run six the same day: Windows, creatures where they live and a cave you can leave (v1.3), run seven: four puzzles rebuilt (v1.4, v1.5), run eight on 13 October: the puzzles scrapped, and the game playable start to finish without them (v1.6), and run nine on 14 October: a world to play in (v1.7); their sections are at the end.
 
 **Play:** https://bengreff.github.io/glome/ · **Hub:** https://bengreff.github.io/ · **Source:** https://github.com/bengreff/glome
 
-Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**; run six, **v1.3**; run seven, **v1.4** and **v1.5**; run eight, **v1.6**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
+Tagged v0.0 to v0.7 after the night; run three added v0.8 to v0.11 and **v1.0**; run four, **v1.1**; run five, **v1.2**; run six, **v1.3**; run seven, **v1.4** and **v1.5**; run eight, **v1.6**; run nine, **v1.7**. (After the night, v1.0 was held back for performance; run three met the revised gate of 60 fps at 50% or more with a far fuller world.)
 
 ## What to try first
 
@@ -414,3 +414,47 @@ On the M2 Pro, part of the time with another session's jobs on four cores:
 3. **The lighthouse:** with the puzzles gone, is it still wanted, as a puzzle or as a place?
 4. **Windows:** still untested.
 5. **itch.io:** upload `dist/glome-v1.6.zip`.
+
+
+## Run nine (14 October): a world to play in (v1.7)
+
+Your list on v1.6: no puzzles, but a world to play with; crabs of many kinds that leave you be; words on the cues; the map to set the way; the whole row of copies; timewarp; a way home from space; boats; the lighthouse, as a place to see the hoop. Gravity on the pad stays at 10.6.
+
+### What changed
+
+- **Cues in words:** "F to pick up", "G to stow in pouch", "Space to launch", "E 0.4 m through ana", and so on: a key and what it does, wherever a key is shown. The world stays wordless.
+- **The map sets the way:** free the mouse (Esc) and click a mark on the radar (a thing, a crab, a ruin, a boat, the lighthouse, a summit, any ground) and the column of light stands over it; click it again to let it go.
+- **Boats:** six rafts, each with its sail, on shores round the planet, above high water (the old one sat where the tide floated it off). Carry one down to the sea. Under the radar's second layer.
+- **An even world:** crystals on any dry ground (they were only on the heights, so most of the planet had none), crab herds from the beach to the hills with no thin patches.
+- **Crabs of many kinds:** 6, 8 or 12 legs (along the ground's axes, toward a cube's corners, toward an icosahedron's), small to big, four shell colours, young among them. They graze on as you come; a curious one now and then walks over and watches you, then goes home. Walk into one and it steps aside; run into one and it runs. Pick up a small one (F); set it down and off it goes. Roll a ball near a herd and the playful ones chase it.
+- **Space:** the predicted path follows the levers at once; timewarp to 10× (`,` and `.`); after a minute in flight and not on your way to B, hold B to come back to the pad (as a splashdown does, and now always to the pad you left from).
+- **The whole row of copies:** an endless row is the true picture of an R³ × S¹ universe, so it is drawn: the near copies as before, the rest to ±400 as shaded spheres, each with an atmosphere's rim and haze, so they look like planets seen from outside.
+
+![The row of copies round the hoop, from 1,160 m out](copies-row.jpg)
+
+- **The lighthouse:** a banded tower on a headland, 379 m from where you arrive, its lamp flashing twice every 8 s. Its light shows on every copy round the hoop too, a point flashing on each, when your slice passes through the lamp (light reaches you only along your slice).
+
+![The lighthouse, mid-flash](lighthouse.jpg)
+
+### Checked
+
+- Rafts: six, 8.1–9.2 m up, the nearest 183 m from the start. A click on a raft on the radar made it the goal; another click let it go.
+- Far side of the planet, ten random places: crystals at all ten (7–56 within 150 m); crabs at all, thinnest where the ground is mostly sea or steep rock.
+- Crabs: all twelve kinds near the start. Walked into a medium one: it stepped 3.1 m aside without running. Ran at another: it ran. Took a small one in hand, set it down: a crab again. A ball rolled past a playful one: it chased it.
+- Space: a lever moved, the path changed within 40 ms; 10.07 game seconds a second at 10× and 60 fps; held B after a minute: back on the pad, 0 m off.
+- The row of copies: 7.5 ms of GPU looking down it.
+
+### Gates
+
+On the M2 Pro, with another session's job on two cores:
+- **Unit tests** pass; **smoke** no errors, boot 4.3 s.
+- **Performance** in the five usual views: 48–56% resolution at 59–60 fps (looking down, 48%, just under the 50% line, as in run eight).
+- **Persistence:** your things, the finds, the levers; a crab carried in your hand comes back in your hand after a reload.
+- **Playthroughs:** the stones loop to a launch (pad in 34 s); out of the cave; out of the rock shelter (7.8 s); the levers; an orbit at 57.4 m/s; B at 72 m/s (67 s, as predicted); on B, to the console and open; the sandbox shaken with nothing NaN, flung or sunk; crabs (kinds, a bump, a run-in, carried, a ball chased); space (the path follows a lever, 10×, back to the pad).
+- **Two fixes from the gates:** walking into a crab at walking pace scared it (the knock that makes it run is now running speed, 5 m/s); and crabs were startled by anything moving fast near them, not only throws (now only what you threw, for four seconds).
+
+### For you
+
+1. **Play from a new world:** the crabs (try picking up a small one, rolling a ball past a herd), a raft down to the sea, the lighthouse, a flight with timewarp, and the row of copies (square your slice to the hoop: the copies line up when ana is across the hoop's axis).
+2. **Windows:** still untested.
+3. **itch.io:** upload `dist/glome-v1.7.zip`.
