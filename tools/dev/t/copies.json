@@ -1,0 +1,1 @@
+[{"eval":"1","wait":3000},{"file":"t/waitboot.js"},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/copies.js","wait":1500,"snap":"row"},{"eval":"JSON.stringify({gpu: +(__glome.prof.gpu||0).toFixed(1), e: __glome.G.errors||0, fail: (document.getElementById(\"fail\")||{}).textContent||null})"}]

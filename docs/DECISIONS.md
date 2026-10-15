@@ -451,3 +451,11 @@ From the owner's list on v1.6 (HANDOFF, run nine): no puzzles, but the world to 
 - **Crystals stand on any dry ground above 2.5 m,** 180 clusters (they were 70, and only above 16 m: on the massif and the few other heights, so most of the planet had none). At ten random places on the far side: crystals within 150 m at all ten (7–56), where before three of the ten had any.
 - **Crab herds on any dry ground from 0.8 m (the beach) to 30 m,** and the slowly drifting presence that thins them never goes below 0.75 (it went to 0.45, leaving thin patches, and heights 2–22 m only). Median within 40 m wherever you stand on dry ground: 627 (458). At the ten far-side places: 46–666 within 40 m; the two lowest are where most of the ground within 64 m is sea or steep rock.
 - (Rocks after the crystals are placed differently now, since the crystals take more of the shared random sequence; nothing of theirs is saved.)
+
+### Segment four: the whole row of copies
+
+- **An endless row is the true picture.** The universe is R³ × S¹: every image of the planet round the hoop is there, so looking along the hoop you see copy after copy, each smaller, down to a point. Only k = −2..2 were drawn. Now: the nearest (|k| ≤ 2) are marched like the ground under you, as before; out to ±400 (where a copy is a twentieth of a pixel across), each is a sphere at the planet's mean ground, shaded with the real ground or sea at the point met (one height lookup) and the same terrain shading. A ray tries only the copies it passes near: their centres lie on a line, so those within reach of a ray are a range of k, from a quadratic; nearest first, stopping at the first one met.
+- **An atmosphere for each copy** (an imitation of a sky seen from outside): a rim beyond its limb whose strength falls off with height over a 16 m scale, blue on its day side, warm at its terminator, dark at night; and a haze over its face that thickens toward the limb, where a ray's path through the air is longer. From the ground it is faint (your own sky lies over it). Your own planet seen from space has the rim too.
+- **Cost:** 7.5 ms of GPU at full resolution in space looking down the row (M2 Pro), within the frame.
+
+![The row of copies round the hoop, from 1,160 m out](copies-row.jpg)

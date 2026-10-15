@@ -1201,10 +1201,21 @@ vec3 shadeWater(vec4 p, vec4 rd, float tw, float tBottom, vec4 ro) {
 }
 
 // The planet's own copies round the hoop, k·L along the hoop axis: the same ground under the same suns (the row
-// of images is periodic too), so a copy is shaded exactly like the planet itself.
-bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
-  tc = 1e9;
-  vec4 oBest = vec4(0.0); bool sea = false;
+// of images is periodic too), so a copy is shaded exactly like the planet itself. The row has no end (the universe is
+// R³ × S¹: every image is there), each copy further off smaller, down to a point along the hoop. The nearest (|k| <= 2)
+// are marched like the ground under you; beyond them, out to ±400 (by then a copy is a twentieth of a pixel), each is
+// a sphere shaded with the ground and sea at the point the ray meets, and only those this ray passes near are tried:
+// their centres lie on a line, so which ones form a range of k, from a quadratic. Each has an atmosphere, an
+// imitation of a sky seen from outside: a blue rim lit on its day side, and a haze over its face toward the limb.
+const int KFAR = 400;
+const float ATM_H = 16.0;                                    // the rim's scale height (m)
+vec3 atmColour(vec4 nLimb) {
+  float lit = dot(nLimb, uSun);
+  return mix(vec3(0.02, 0.03, 0.07), mix(vec3(0.9, 0.45, 0.25), vec3(0.42, 0.62, 1.0), smoothstep(0.0, 0.35, lit)), smoothstep(-0.25, 0.1, lit));
+}
+bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col, out vec3 glow) {
+  tc = 1e9; glow = vec3(0.0); col = vec3(0.0);
+  vec4 oBest = vec4(0.0); int how = 0;                       // 1 marched ground, 2 its sea, 3 a far copy's sphere
   for (int k = -2; k <= 2; k++) {
     if (k == 0 || k < uCopyK.x || k > uCopyK.y) continue;    // only copies your slice cuts
     vec4 o = ro - float(k) * uL * uHoop;
@@ -1213,15 +1224,55 @@ bool hitCopies(vec4 ro, vec4 rd, out float tc, out vec3 col) {
     if (b > 0.0 || b * b < c) continue;                      // misses the copy's terrain shell
     float t = marchTerrainFar(o, rd);
     float cw = dot(o, o) - Rw * Rw, dw = b * b - cw, tw = dw > 0.0 ? -b - sqrt(dw) : -1.0;
-    if (tw > 0.0 && (t < 0.0 || tw < t)) { if (tw < tc) { tc = tw; oBest = o; sea = true; } }   // the copy's sea
-    else if (t > 0.0 && t < tc) { tc = t; oBest = o; sea = false; }
+    if (tw > 0.0 && (t < 0.0 || tw < t)) { if (tw < tc) { tc = tw; oBest = o; how = 2; } }   // the copy's sea
+    else if (t > 0.0 && t < tc) { tc = t; oBest = o; how = 1; }
+  }
+  // the whole row: the k whose centres pass within reach of this ray (|k·L·hp − rp| < Rs, hp and rp the hoop axis and
+  // the ray's origin less their parts along the ray), nearest first
+  const float R0 = 254.0;                                    // a far copy's sphere: the planet's mean ground
+  float Rs = R0 + 4.0 * ATM_H, hr = dot(uHoop, rd);
+  vec4 hp = uHoop - rd * hr, rp = ro - rd * dot(ro, rd);
+  float qa = uL * uL * dot(hp, hp), qb = -2.0 * uL * dot(hp, rp), qc = dot(rp, rp) - Rs * Rs;
+  float k1 = -float(KFAR), k2 = float(KFAR);
+  if (qa > 1e-6) { float D = qb * qb - 4.0 * qa * qc; if (D < 0.0) { k1 = 1.0; k2 = 0.0; } else { float sq = sqrt(D); k1 = (-qb - sq) / (2.0 * qa); k2 = (-qb + sq) / (2.0 * qa); } }
+  else if (qc > 0.0) { k1 = 1.0; k2 = 0.0; }
+  // in front of you: t_k = k·L·(hoop·rd) − ro·rd > 0
+  float kf = abs(hr) > 1e-6 ? dot(ro, rd) / (uL * hr) : 0.0;
+  int lo = int(ceil(max(k1, -float(KFAR)))), hi = int(floor(min(k2, float(KFAR))));
+  if (hr > 1e-6) lo = max(lo, int(floor(kf)) + 1); else if (hr < -1e-6) hi = min(hi, int(ceil(kf)) - 1);
+  int dir = hr >= 0.0 ? 1 : -1, nk = hi - lo + 1;
+  for (int i = 0; i < 48; i++) {
+    if (i >= nk) break;
+    int k = dir > 0 ? lo + i : hi - i;
+    vec4 o = ro - float(k) * uL * uHoop;
+    if (k == 0) {                                            // your own planet: its rim too, seen from outside its air
+      float b0 = dot(o, rd), y0 = sqrt(max(dot(o, o) - b0 * b0, 0.0)) - R0;
+      if (b0 < 0.0 && y0 > 0.0) glow += (1.0 - uAtmos) * atmColour(normalize(o - rd * b0)) * (1.0 - exp(-1.8 * exp(-y0 / ATM_H)));
+      continue;
+    }
+    float b = dot(o, rd), tk = -b;
+    if (tk <= 0.0 || tk > tc) { if (tk > tc) break; continue; }   // (behind you, or behind what is already hit: and all after it)
+    float d2 = dot(o, o) - b * b, dm = sqrt(max(d2, 0.0));
+    // its atmosphere's rim: thicker toward the limb, lit on its day side
+    float y = dm - R0;
+    if (y > 0.0) glow += atmColour(normalize(o - rd * b)) * (1.0 - exp(-1.8 * exp(-y / ATM_H)));
+    if (abs(k) <= 2 && (k >= uCopyK.x && k <= uCopyK.y)) continue;   // (marched above)
+    float c0 = d2 - R0 * R0;
+    if (c0 < 0.0) { float t = -b - sqrt(-c0); if (t > 0.0 && t < tc) { tc = t; oBest = o; how = 3; } break; }
   }
   if (tc > 1e8) return false;
-  // shaded once, after the loop (shading samples textures with their own mip levels, which a loop can't hold on D3D)
+  // shaded once, after the loops (shading samples textures with their own mip levels, which a loop can't hold on D3D)
   vec4 p = oBest + rd * tc;
-  if (sea) { vec4 up = normalize(p); col = vec3(0.03, 0.12, 0.2) * (0.3 + 0.7 * dayFactor(up)) + vec3(0.9, 0.85, 0.7) * pow(max(dot(reflect(rd, up), uSun), 0.0), 60.0) * 0.6; }
+  if (how == 3) {                                            // a far copy: its ground or sea at the point met
+    vec4 n = normalize(p); float h = heightAt(n), sea = seaAt(n);
+    if (h < sea) how = 2; else { p = n * (uPR + h); how = 1; }
+  }
+  if (how == 2) { vec4 up = normalize(p); col = vec3(0.03, 0.12, 0.2) * (0.3 + 0.7 * dayFactor(up)) + vec3(0.9, 0.85, 0.7) * pow(max(dot(reflect(rd, up), uSun), 0.0), 60.0) * 0.6; }
   else col = shadeTerrain(p, rd, tc, false);
-  col = mix(col, skyColor(rd, normalize(ro), uDayE), (1.0 - exp(-tc * 0.0004)) * uAtmos);   // a little haze
+  // its air over its face: more toward the limb (a longer path through it)
+  vec4 nh = normalize(p); float mu = max(0.06, -dot(rd, nh));
+  col = mix(col, atmColour(nh), clamp((1.0 - exp(-0.18 / mu)) * 0.85, 0.0, 0.85));
+  col = mix(col, skyColor(rd, normalize(ro), uDayE), (1.0 - exp(-tc * 0.0004)) * uAtmos);   // a little haze (your own sky)
   return true;
 }
 
@@ -1405,9 +1456,10 @@ vec3 shadeHit(vec4 ro, vec4 rd, vec4 H, out float tOut) {
   if (kind == 0) {                                            // the sky: the planet's copies, the row of suns, the clouds
     tOut = -1.0;
     float tc, ts;
-    vec3 cc;
-    if ((uDebug & 4) == 0 && hitCopies(ro, rd, tc, cc)) { col = cc; tOut = tc; }
+    vec3 cc, cg = vec3(0.0);
+    if ((uDebug & 4) == 0 && hitCopies(ro, rd, tc, cc, cg)) { col = cc; tOut = tc; }
     else col = skyColor(rd, upE, uDayE) + ((uDebug & 2) == 0 ? starRow(ro, rd, ts) : vec3(0.0));
+    col += cg * (1.0 - 0.85 * uAtmos);                          // the copies' air, in front of what lies behind (faint through your own sky)
     vec4 cl = clouds(ro, rd, 1e9);
     return mix(col, cl.rgb, cl.a) + beaconGlow(ro, rd, tOut > 0.0 ? tOut : 3000.0);
   }
