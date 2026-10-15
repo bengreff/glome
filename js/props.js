@@ -163,17 +163,17 @@ function cluster(kind, n, hf, keepOut) {
   return out;
 }
 const slopeAt = (hf, n) => { const T = tangents(n), e = 2; let s = 0; for (const t of T) s += ((hf.heightAt(off(n, t, e)) - hf.heightAt(off(n, t, -e))) / (2 * e)) ** 2; return Math.sqrt(s); };
-// The planet's rocks, clustered by kind on the ground that suits each: outcrops on slopes and heights, crystals in the
-// highlands, smooth stones by rivers and shores, scree at the foot of steep ground, and erratic blocks anywhere dry.
+// The planet's rocks, clustered by kind on the ground that suits each: outcrops on slopes and heights, crystals on any
+// dry ground, smooth stones by rivers and shores, scree at the foot of steep ground, and erratic blocks anywhere dry.
 // A few of each near where you arrive. keepOut(n, r) says where none may stand (the start, the launcher, paths).
 export function makeRocks(hf, home, keepOut, near) {
   seed = 31337;                                               // (the launcher's sockets are already in)
   const gauss = () => rnd() + rnd() + rnd() + rnd() - 2;
   const randomUnit = () => vec4.norm([gauss(), gauss(), gauss(), gauss()]);
-  const want = { outcrop: 450, crystal: 70, stone: 240, scree: 180, erratic: 380 };
+  const want = { outcrop: 450, crystal: 180, stone: 240, scree: 180, erratic: 380 };
   const fits = {
     outcrop: (h, s, w) => w <= 0.01 && h > 3 && (s > 0.22 || h > 14),
-    crystal: (h, s, w) => w <= 0.01 && h > 16,
+    crystal: (h, s, w) => w <= 0.01 && h > 2.5,                 // (anywhere dry: they were only above 16 m, and so on one side of the planet)
     stone: (h, s, w, river) => (river || (h > -0.3 && h < 1.6)),
     scree: (h, s, w) => w <= 0.01 && s > 0.35 && h > 4,
     erratic: (h, s, w) => w <= 0.01 && h > 1.5 && s < 0.3,

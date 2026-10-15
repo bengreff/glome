@@ -39,14 +39,14 @@ function rng(i, j, k, l) {                              // a small generator see
 const dirAt = (n, r) => { const T = tangents(n); let w; do { w = [r() - 0.5, r() - 0.5, r() - 0.5]; } while (Math.hypot(...w) < 0.05 || Math.hypot(...w) > 0.5); return vec4.norm([0, 1, 2, 3].map(q => w[0] * T[0][q] + w[1] * T[1][q] + w[2] * T[2][q])); };
 // where herds are, this while: a slow drift over the planet (a herd's cell is grown as it comes into range, so a
 // place that had none may have one the next time you pass, days later)
-const presence = n => { const t = ((G.state && G.state.time) || 0) / 2400; return 0.45 + 0.5 * Math.min(1, Math.max(0, (fbm4(n[0] * 2.1 + t, n[1] * 2.1 - 0.6 * t, n[2] * 2.1 + 3.7, n[3] * 2.1 - 1.9, 2) + 0.25) / 0.5)); };
+const presence = n => { const t = ((G.state && G.state.time) || 0) / 2400; return 0.75 + 0.2 * Math.min(1, Math.max(0, (fbm4(n[0] * 2.1 + t, n[1] * 2.1 - 0.6 * t, n[2] * 2.1 + 3.7, n[3] * 2.1 - 1.9, 2) + 0.25) / 0.5)); };   // (never thin: 0.75 at least)
 
 function make(kind, n, home, r) {
   return { id: creatures.nextId++, kind, n: n.slice(), home, v: [0, 0, 0, 0], heading: dirAt(n, r), phase: r(), th1: 0, th2: 0, alarm: 0,
            curious: kind === 'walker' && r() < 0.45, slip: r() < 0.35, ring: kind === 'roller' ? [dirAt(home, r), 3 + 4 * r(), r() * 6.283] : null };
 }
 // The herds of one cell: two points to a cell, each kept if within half a cell of the sphere (a herd's chance to every
-// 2,000 m³ of ground), on dry ground; on grass a herd of walkers (three to nine), elsewhere now and then a roller.
+// 2,000 m³ of ground), on dry ground: mostly a herd of crabs (three to nine), now and then a roller.
 function cellGroups(i, j, k, l, hf) {
   const r = rng(i, j, k, l), out = [];
   for (let q = 0; q < 2; q++) {
@@ -54,7 +54,7 @@ function cellGroups(i, j, k, l, hf) {
     if (Math.abs(len - PLANET_R) > CELL / 2) continue;
     const home = vec4.scale(p, 1 / len), h = hf.heightAt(home), u = r();
     if (h < 0.8 || h > 30 || hf.waterAt(home) > 0.01 || creatures.keep(home)) continue;
-    if (h > 2 && h < 22 && u < presence(home)) {
+    if (u < presence(home)) {                                  // (crabs on any dry ground, the beach to the hills)
       const size = 3 + Math.floor(r() * 7);
       for (let m = 0; m < size; m++) { const n = m ? along(home, dirAt(home, r), 1 + 5 * r()) : home; if (hf.waterAt(n) < 0.01) out.push(make('walker', n, home, r)); }
     } else if (u > 0.8) out.push(make('roller', home, home, r));
