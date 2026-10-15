@@ -1,0 +1,1 @@
+[{"eval":"1","wait":3000},{"file":"t/waitboot.js"},{"file":"/Users/ben/glome/tools/playthrough/pt_common.js"},{"file":"t/seg9a.js","wait":500,"snap":"stowcue"},{"eval":"__glome.G.state.radar.range = 300; 1","wait":800},{"file":"t/seg9b.js","snap":"target"}]

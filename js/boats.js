@@ -70,3 +70,24 @@ export function stepBoats(dt, t) {
     }
   }
 }
+
+// Where boats are kept: on the shore above high water (8–10 m up: the tide reaches 9 m only now and then, at the two
+// points facing the copies), with the sea within 30 m below, on ground level enough for a raft to lie still. You
+// carry one down to the water (a raft is 171 kg: heavy, but you can lift it). The first near `near` (within 400 m),
+// the rest spread over the planet, at least 300 m apart. A seeded search of its own, so nothing else in the world
+// moves. Returns unit points.
+export function boatSpots(hf, near, count) {
+  let s = 2027; const rnd = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296), g = () => rnd() + rnd() + rnd() + rnd() - 2;
+  const off = (u, t, m) => vec4.norm(vec4.add(vec4.scale(u, Math.cos(m / 250)), vec4.scale(t, Math.sin(m / 250))));
+  const dirs = n => { const T = tangents(n), out = []; for (let i = 0; i < 26; i++) { const a = i * 2.39996, b = Math.acos(1 - 2 * ((i * 0.618034 + 0.5) % 1)); out.push(vec4.norm([0, 1, 2, 3].map(k => Math.sin(b) * Math.cos(a) * T[0][k] + Math.sin(b) * Math.sin(a) * T[1][k] + Math.cos(b) * T[2][k]))); } return out; };
+  const ok = n => {
+    const h = hf.heightAt(n); if (h < 8 || h > 10 || hf.waterAt(n) > h - 0.05) return false;
+    const D = dirs(n);
+    for (const d of D) { const q = off(n, d, 1.5); if (Math.abs(hf.heightAt(q) - h) > 0.5) return false; }      // level enough
+    return D.some(d => [10, 20, 30].some(m => hf.heightAt(off(n, d, m)) < -0.3));                              // the sea below, near
+  };
+  const spots = [], far = n => spots.every(q => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 > 300);
+  if (near) for (let i = 0; i < 20000 && !spots.length; i++) { const T = tangents(near), d = vec4.norm([0, 1, 2, 3].map(k => g() * T[0][k] + g() * T[1][k] + g() * T[2][k])), n = off(near, d, 400 * Math.sqrt(rnd())); if (ok(n)) spots.push(n); }
+  for (let i = 0; i < 200000 && spots.length < count; i++) { const n = vec4.norm([g(), g(), g(), g()]); if (far(n) && ok(n)) spots.push(n); }
+  return spots;
+}

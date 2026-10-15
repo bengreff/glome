@@ -102,15 +102,30 @@ export function keyCap(x, y, label, col, k, s = 1) {
   return w;
 }
 const ANA = 'rgba(255, 175, 100, 0.98)', KATA = 'rgba(125, 180, 255, 0.98)', GOAL = 'rgba(82, 220, 200, 0.98)';
+// A cue in words: the key, then what it does ("G to stow in pouch"), centred on cx at height y. Returns its width.
+export function cueText(cx, y, key, text, k, col = GOAL, s = 1) {
+  octx.save();
+  octx.globalAlpha *= 0; const kw = keyCap(0, -100, key, col, k, s); octx.globalAlpha = 1;
+  octx.font = `500 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`;
+  const tw = octx.measureText(text).width, w = kw + 6 * k * s + tw, x = cx - w / 2;
+  octx.fillStyle = 'rgba(11, 14, 20, 0.55)'; octx.beginPath();
+  if (octx.roundRect) octx.roundRect(x + kw + 2 * k * s, y - 8.5 * k * s, tw + 8 * k * s, 17 * k * s, 4 * k * s); else octx.rect(x + kw + 2 * k * s, y - 8.5 * k * s, tw + 8 * k * s, 17 * k * s);
+  octx.fill();
+  keyCap(x, y, key, col, k, s);
+  octx.font = `500 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`; octx.fillStyle = col; octx.textAlign = 'left'; octx.textBaseline = 'middle';
+  octx.fillText(text, x + kw + 6 * k * s, y + 0.5 * k);
+  octx.restore();
+  return w;
+}
 // The way across ana: a key (E or Q), a caret up (ana) or down (kata), and how far. Returns its width.
-function anaCue(x, y, a, k, s = 1) {
+function anaCue(x, y, a, k, s = 1, words = false) {
   const col = a > 0 ? ANA : KATA;
   let w = keyCap(x, y, a > 0 ? 'E' : 'Q', col, k, s) + 5 * k * s;
   const c = 5 * k * s, up = a > 0 ? -1 : 1;
   octx.fillStyle = col; octx.beginPath(); octx.moveTo(x + w, y - up * c * 0.6); octx.lineTo(x + w + 2 * c, y - up * c * 0.6); octx.lineTo(x + w + c, y + up * c); octx.closePath(); octx.fill();
   w += 2 * c + 5 * k * s;
   octx.font = `600 ${11.5 * k * s}px "IBM Plex Mono", ui-monospace, monospace`; octx.textAlign = 'left'; octx.textBaseline = 'middle';
-  const t = `${Math.abs(a) < 2 ? Math.abs(a).toFixed(1) : Math.round(Math.abs(a))} m`;   // (tenths, close: a stone is 18 cm across)
+  const t = `${Math.abs(a) < 2 ? Math.abs(a).toFixed(1) : Math.round(Math.abs(a))} m${words ? (a > 0 ? ' through ana' : ' through kata') : ''}`;   // (tenths, close: a stone is 18 cm across)
   octx.fillStyle = 'rgba(11, 14, 20, 0.6)'; const tw = octx.measureText(t).width; octx.fillRect(x + w - 3 * k, y - 8 * k * s, tw + 6 * k, 16 * k * s);
   octx.fillStyle = col; octx.fillText(t, x + w, y + 0.5 * k); octx.textBaseline = 'alphabetic';
   return w + tw;
@@ -163,12 +178,10 @@ export function drawGoal(cam) {
   const cx = W / 2, cy = H / 2 + 34 * k;
   const centred = w => cx - w / 2;
   if (!inSlice && Math.hypot(z, x) < 7) {
-    octx.globalAlpha = 0; const w = anaCue(0, -100, a, k, 1.3); octx.globalAlpha = 1;
-    anaCue(centred(w), cy, a, k, 1.3);
-  } else if (g.cue === 'F' || g.cue === 'Space') {
-    octx.globalAlpha = 0; const w = keyCap(0, -100, g.cue, GOAL, k, 1.3); octx.globalAlpha = 1;
-    keyCap(centred(w), cy, g.cue, GOAL, k, 1.3);
-  }
+    octx.globalAlpha = 0; const w = anaCue(0, -100, a, k, 1.3, true); octx.globalAlpha = 1;
+    anaCue(centred(w), cy, a, k, 1.3, true);
+  } else if (g.cue === 'F') cueText(cx, cy, 'F', 'to pick up', k, GOAL, 1.2);
+  else if (g.cue === 'Space') cueText(cx, cy, 'Space', 'to launch', k, GOAL, 1.2);
   octx.restore();
 }
 
@@ -186,13 +199,17 @@ export function drawGazeDot() {
   octx.strokeStyle = gz.open > 0.05 ? `rgba(${Math.round(255 - 173 * gz.open)}, ${Math.round(255 - 35 * gz.open)}, ${Math.round(255 - 55 * gz.open)}, 0.9)` : 'rgba(255, 255, 255, 0.85)';
   octx.lineWidth = 1.4 * k;
   octx.beginPath(); octx.arc(W / 2, H / 2, r, 0, 7); octx.stroke();
-  if (gz.open > 0.6 && !(guide.goal && guide.goal.cue)) { octx.globalAlpha = gz.open; keyCap(W / 2 - 9 * k, H / 2 + 22 * k, 'F', 'rgba(82, 220, 200, 0.9)', k); octx.globalAlpha = 1; }
-  // holding an impulse stone, with room in the pouch: G puts it there
-  const held = G.objects && G.objects.held;
-  if (held && held.kind === 'stone' && G.objects.pouch < 9) {
-    const x = W / 2 - 17 * k, w = keyCap(x, H / 2 + 22 * k, 'G', 'rgba(82, 220, 200, 0.9)', k);
-    pouchGlyph(x + w + 9 * k, H / 2 + 22 * k, k, 'rgba(82, 220, 200, 0.9)');
-  }
+  const CUE = 'rgba(82, 220, 200, 0.92)', y1 = H / 2 + 24 * k;
+  if (gz.open > 0.6 && !(guide.goal && guide.goal.cue)) { octx.globalAlpha = gz.open; cueText(W / 2, y1, 'F', G.player && G.player.onB != null && !G.lookingAtThing ? 'to use' : 'to pick up', k, CUE); octx.globalAlpha = 1; }
+  // what your hands can do: with an impulse stone, G stows it (or the pouch is full); with something else, for a
+  // few seconds after you take it, how to set it down or throw it; in flight with empty hands, G draws a stone
+  const held = G.objects && G.objects.held, flying = G.flying;
+  if (held && held.kind === 'stone') {
+    if (G.objects.pouch < 9) { const w = cueText(W / 2 - 9 * k, y1, 'G', 'to stow in pouch', k, CUE); pouchGlyph(W / 2 - 9 * k + w / 2 + 12 * k, y1, k, CUE); }
+    else cueText(W / 2, y1, 'G', 'pouch full', k, 'rgba(225, 230, 238, 0.7)');
+    if (flying) cueText(W / 2, y1 + 22 * k, 'click', 'to throw it: you go the other way', k, CUE);
+  } else if (held && G.simT - (G.heldSince || 0) < 5) cueText(W / 2, y1, 'F', 'to set down · hold the mouse to throw', k, 'rgba(225, 230, 238, 0.8)');
+  else if (!held && flying && G.objects && G.objects.pouch > 0) cueText(W / 2, y1, 'G', 'to take out a stone', k, CUE);
   if ((G.strain || 0) > 0.35) {
     octx.strokeStyle = `rgba(255, 255, 255, ${(0.5 * (G.strain - 0.35) / 0.65).toFixed(3)})`; octx.lineWidth = 1.2 * k;
     octx.beginPath(); octx.arc(W / 2, H / 2, 13 * k, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * G.strain); octx.stroke();

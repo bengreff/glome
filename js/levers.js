@@ -7,7 +7,7 @@
 import { overlay, octx, canvas } from './render.js';
 import { launcher, setAim, setSpeed, SPEED_MAX } from './launcher.js';
 import { GIMBAL } from './gimbal.js';
-import { keyCap } from './hud.js';
+import { cueText } from './hud.js';
 
 const DEG = 180 / Math.PI;
 const ANA = 'rgba(255, 175, 100, 0.98)', KATA = 'rgba(125, 180, 255, 0.98)', GOAL = 'rgba(82, 220, 200, 0.98)', PALE = 'rgba(225, 230, 238, 0.95)';
@@ -107,10 +107,7 @@ export function drawLevers(r) {
     octx.fillStyle = col; octx.fillText(L.fmt(v), cx, b.y + b.h - 17 * k);
   });
   // with the mouse taken by the view: Esc frees it, to work the levers
-  if (locked && !levers.pad) {
-    const w = keyCap(b.x + b.w / 2 - 22 * k, b.y - 14 * k, 'Esc', PALE, k);
-    const ax = b.x + b.w / 2 - 22 * k + w + 8 * k, ay = b.y - 21 * k;            // a pointer
-    octx.fillStyle = PALE; octx.beginPath(); octx.moveTo(ax, ay); octx.lineTo(ax, ay + 13 * k); octx.lineTo(ax + 3.5 * k, ay + 9.5 * k); octx.lineTo(ax + 6 * k, ay + 14 * k); octx.lineTo(ax + 8 * k, ay + 13 * k); octx.lineTo(ax + 5.5 * k, ay + 8.5 * k); octx.lineTo(ax + 10 * k, ay + 8.5 * k); octx.closePath(); octx.fill();
-  }
+  if (locked && !levers.pad) cueText(b.x + b.w / 2, b.y - 14 * k, 'Esc', 'to free the mouse for the levers', k, PALE);
+  else if (!locked) cueText(b.x + b.w / 2, b.y - 14 * k, 'drag', 'a lever · click the view to look again', k, PALE);
   octx.restore();
 }

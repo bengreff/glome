@@ -1,7 +1,7 @@
 // Keyboard and mouse. The look deltas accumulate here and the frame loop consumes them.
 import { G } from './game.js';
 import { canvas, overlay } from './render.js';
-import { radar, radarBasis, faceMarkAt, orbitRadar, zoomRadar, legend, toggleLayer, legendHit } from './radar.js';
+import { radar, radarBasis, clickRadar, orbitRadar, zoomRadar, legend, toggleLayer, legendHit } from './radar.js';
 import { levers, leverAt, grabLever, dragLever, nudgeLever } from './levers.js';
 
 const $ = id => document.getElementById(id);
@@ -52,7 +52,7 @@ canvas.addEventListener('mousedown', e => {
 addEventListener('mouseup', e => {
   if (document.pointerLockElement === canvas && e.button === 0) actions.mUp = true;
   mouse.dragging = false; levers.drag = -1;
-  if (radar.drag && !radar.drag.moved) faceMarkAt(devPx(e));
+  if (radar.drag && !radar.drag.moved) clickRadar(devPx(e));   // (a click, not a drag: the way's goal)
   radar.drag = null;
 });
 addEventListener('mousemove', e => {

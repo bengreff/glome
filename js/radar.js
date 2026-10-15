@@ -15,7 +15,7 @@ export const RADAR_FOV = 0.4, RANGE_MIN = 25, RANGE_MAX = Math.PI * PLANET_R;   
 // mouse free). The disc, the ground your slice shows, is always there.
 export const RADAR_LAYERS = [
   { key: 'things', name: 'things to carry', on: true },     // balls, blocks, stones, lanterns, parts, raft, sail; a cache as one mark
-  { key: 'landmarks', name: 'places: cave, ruins, launcher', on: true },
+  { key: 'landmarks', name: 'places: cave, ruins, launcher, boats', on: true },
   { key: 'creatures', name: 'creatures', on: false },
   { key: 'water', name: 'water and coast', on: false },
   { key: 'mountains', name: 'solid mountains', on: false },  // ground above 24 m, and its shadow on the disc toward ana or kata
@@ -40,7 +40,7 @@ export const radarShows = () => { const s = G.state.radar.show || (G.state.radar
 export const TRAIL_AGE = 120;                     // seconds a step of your trail stays on the radar, fading
 const VN_SMALL = 80, VN_BIG = 128, BIG_RANGE = 330;   // baked volume resolution: finer for the far ranges
 export const radar = { fbo: gl.createFramebuffer(), tex: null, w: 0, h: 0, volFbo: gl.createFramebuffer(), vols: {}, enc: 0, bakeKey: '', summits: null,
-                trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], rect: null, hover: null, drag: null, gaze: null };
+                trail: [], peaks: [], peaksAt: null, peaksR: 0, marks: [], picks: [], rect: null, hover: null, drag: null, gaze: null };
 function ensureRadar(w, h) {
   if (radar.tex && radar.w === w && radar.h === h) return false;
   if (radar.tex) gl.deleteTexture(radar.tex);
@@ -321,6 +321,19 @@ export function pickRadar([x, y]) {
   }
   return null;
 }
+// A click on the ball (the mouse free): on a mark, that thing or place becomes the way's goal (its column of light), or
+// stops being it if it already was; on the goal's own mark, the goal you chose is cleared; elsewhere (a summit, a
+// mountain, the ground, a boulder) you turn to face it and it becomes the goal.
+export function clickRadar(p) {
+  const k = overlay.width / innerWidth, [x, y] = p;
+  if (guide.user && radar.goalAt && Math.hypot(radar.goalAt.x - x, radar.goalAt.y - y) < 9 * k) { guide.user = null; return; }
+  let best = null, bd = 10 * k;
+  for (const m of radar.picks) { const d = Math.hypot(m.x - x, m.y - y); if (d < bd) { bd = d; best = m; } }
+  if (best) { guide.user = guide.user && guide.user.ref === best.ref ? null : { ref: best.ref, at: best.at }; return; }
+  const hit = pickRadar(p);
+  faceMarkAt(p);
+  if (hit && hit.n) { const q = hit.kind === 'boulder' && hit.b ? hit.b.c : vec4.scale(hit.n, PLANET_R + G.player.hf.heightAt(hit.n)); guide.user = { ref: q, at: () => q }; }
+}
 export function faceMarkAt(p) {
   const hit = pickRadar(p);
   if (hit && headingTo(hit.n).dist > 2) { G.state.facing = hit.n; G.state.facingWhat = hit.kind === 'summit' ? `summit ${Math.round(hit.h)} m` : hit.kind === 'boulder' ? 'boulder' : hit.kind === 'mountain' ? 'mountain' : hit.h < SEA ? 'water' : 'this ground'; }
@@ -337,6 +350,7 @@ export function drawRadarOverlay(r, sun) {
   const foot = m => { const a = dot3(m, discN); return [m[0] - a * discN[0], m[1] - a * discN[1], m[2] - a * discN[2]]; };
   const mono = (w, px) => `${w} ${px * k}px "IBM Plex Mono", ui-monospace, monospace`;
   const inB = v => B.map(b => vec4.dot(v, b));
+  radar.picks = [];                                          // what a click can take as the way's goal: { x, y, at(), ref }
   octx.save();
   octx.lineCap = 'round'; octx.lineJoin = 'round';
 
@@ -379,13 +393,14 @@ export function drawRadarOverlay(r, sun) {
   if (sh.things && RB <= 330 && G.objects) {
     const caches = new Set();
     for (const b of G.objects.world.bodies) {
-      if (b.held || b.fixed || b.keep) continue;              // (not what is built in: a gate's leaf, the fold's plates, the sliders' knobs)
+      if (b.held || b.fixed || b.keep || b.kind === 'raft') continue;   // (not what is built in; rafts are under places)
       const still = b.find && b.spawnPos && vec4.len(vec4.sub(b.pos, b.spawnPos)) < 0.5;
       if (still && b.find === 'cairn') continue;              // a cairn untouched is not a thing to carry
       if (still && b.find === 'cache') { caches.add(b.cache); continue; }
       const m = logMap(vec4.norm(b.pos), B, u);
       if (Math.hypot(...m) > RB * 0.97) continue;
       const P = proj(m), sz = Math.max(2.2 * k, 3.4 * k * Math.min(1.6, b.bound / 0.3));
+      radar.picks.push({ x: P[0], y: P[1], ref: b, at: () => (G.objects.world.bodies.includes(b) && !b.held ? b.pos : null) });
       const cut = Math.abs(vec4.dot(vec4.sub(b.pos, G.player.camera().eye), G.player.A)) < b.bound;
       stalk(m, P, 0.45);
       octx.strokeStyle = 'rgba(82, 220, 200, 0.95)'; octx.lineWidth = 1.3 * k; octx.fillStyle = 'rgba(82, 220, 200, 0.85)';
@@ -394,7 +409,8 @@ export function drawRadarOverlay(r, sun) {
     for (const i of caches) {                                // a cache: three small squares, one mark
       const m = logMap(finds.caches[i].n, B, u);
       if (Math.hypot(...m) > RB * 0.97) continue;
-      const P = proj(m), z = 2.6 * k;
+      const P = proj(m), z = 2.6 * k, cn = finds.caches[i].n;
+      radar.picks.push({ x: P[0], y: P[1], ref: finds.caches[i], at: () => vec4.scale(cn, PLANET_R + G.player.hf.heightAt(cn) + 0.3) });
       stalk(m, P, 0.45);
       octx.fillStyle = 'rgba(82, 220, 200, 0.85)';
       for (const [dx, dy] of [[-1.3, 0.8], [1.3, 0.8], [0, -1.2]]) octx.fillRect(P[0] + dx * z - z / 2, P[1] + dy * z - z / 2, z, z);
@@ -406,6 +422,7 @@ export function drawRadarOverlay(r, sun) {
       const m = logMap(c.n, B, u);
       if (Math.hypot(...m) > RB * 0.97) continue;
       const P = proj(m), z = 3 * k;
+      radar.picks.push({ x: P[0], y: P[1], ref: c, at: () => (G.creatures.list.includes(c) ? vec4.scale(c.n, PLANET_R + (c.g ?? 0) + 0.6) : null) });
       stalk(m, P, 0.4);
       if (c.kind === 'walker') {
         octx.fillStyle = 'rgba(240, 200, 150, 0.9)';
@@ -421,6 +438,7 @@ export function drawRadarOverlay(r, sun) {
     const at = (n, keep) => { const m = logMap(n, B, u), r = Math.hypot(...m); return r < RB * 0.95 ? proj(m) : keep ? proj(m.map(v => v / r * RB * 0.95)) : null; };
     for (const L of landmarkList()) {
       const P = at(L.n, L.keep); if (!P) continue;
+      radar.picks.push({ x: P[0], y: P[1], ref: L.ref || L.kind + L.n.join(), at: L.at || (() => vec4.scale(L.n, PLANET_R + G.player.hf.heightAt(L.n))) });
       const m = logMap(L.n, B, u); if (Math.hypot(...m) < RB * 0.95) stalk(m, P, 0.5);
       drawLandmark(L.kind, P, k, L.bright);
     }
@@ -432,6 +450,7 @@ export function drawRadarOverlay(r, sun) {
     let m = logMap(vec4.norm(goal.pos), B, u); const r = Math.hypot(...m), out = r > RB * 0.93;
     if (out) m = m.map(v => v / r * RB * 0.93);
     const P = proj(m), Q = proj(foot(m)), C0 = proj(pinned ? logMap(me, B, u) : [0, 0, 0]);
+    radar.goalAt = { x: P[0], y: P[1] };
     octx.setLineDash([4 * k, 3 * k]); octx.strokeStyle = 'rgba(82, 220, 200, 0.8)'; octx.lineWidth = 1.5 * k;
     octx.beginPath(); octx.moveTo(...C0); octx.lineTo(...Q); octx.stroke(); octx.setLineDash([]);
     stalk(m, P, 0.95);
@@ -581,9 +600,11 @@ export function drawRadarOverlay(r, sun) {
 // What the Landmarks layer marks: { n (unit position), kind, keep (stay on the rim when out of range), bright }.
 export function landmarkList() {
   const out = [];
-  if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave' });
-  for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin' });
-  if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: true });
+  if (G.cave) out.push({ n: vec4.norm(G.cave.mouth), kind: 'cave', ref: 'cave', at: () => G.cave.out });
+  for (const r of finds.ruins) out.push({ n: r.n, kind: 'ruin', ref: r });
+  if (launcher.n) out.push({ n: launcher.n, kind: 'launcher', keep: true, bright: true, ref: 'launcher', at: () => launcher.site });
+  if (G.objects) for (const b of G.objects.world.bodies) if (b.kind === 'raft' && !b.held)                       // the boats, wherever they are now
+    out.push({ n: vec4.norm(b.pos), kind: 'boat', ref: b, at: () => (G.objects.world.bodies.includes(b) && !b.held ? b.pos : null) });
   return out;
 }
 const ACCENT = 'rgba(82, 220, 200, 0.95)';
@@ -601,6 +622,10 @@ export function drawLandmark(kind, P, k, bright) {
     octx.strokeStyle = 'rgba(225, 215, 195, 0.9)'; octx.lineWidth = 1.6 * k;
     octx.beginPath(); octx.moveTo(x - 4 * k, y + 4 * k); octx.lineTo(x - 4 * k, y - 3 * k); octx.moveTo(x + 4 * k, y + 4 * k); octx.lineTo(x + 4 * k, y - 3 * k);
     octx.moveTo(x - 5.5 * k, y - 3.5 * k); octx.lineTo(x + 5.5 * k, y - 3.5 * k); octx.stroke();
+  } else if (kind === 'boat') {                               // a raft: a hull and its mast
+    octx.strokeStyle = 'rgba(205, 160, 105, 0.95)'; octx.fillStyle = 'rgba(205, 160, 105, 0.55)'; octx.lineWidth = 1.5 * k;
+    octx.beginPath(); octx.moveTo(x - 5.5 * k, y + 1 * k); octx.lineTo(x + 5.5 * k, y + 1 * k); octx.lineTo(x + 3.5 * k, y + 4.5 * k); octx.lineTo(x - 3.5 * k, y + 4.5 * k); octx.closePath(); octx.fill(); octx.stroke();
+    octx.beginPath(); octx.moveTo(x, y + 1 * k); octx.lineTo(x, y - 5 * k); octx.lineTo(x + 3.5 * k, y - 1.5 * k); octx.lineTo(x, y - 1.5 * k); octx.stroke();
   } else if (kind === 'launcher') {                           // the pad: a square with a rising chevron
     octx.strokeStyle = bright ? ACCENT : 'rgba(200, 210, 225, 0.85)';
     octx.strokeRect(x - 4.5 * k, y - 4.5 * k, 9 * k, 9 * k);

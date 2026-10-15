@@ -35,7 +35,7 @@ import { tides, updateTides } from './tides.js';
 import { creatures, initCreatures, addWalker, stepCreatures, creatureDraw, creaturesSave } from './creatures.js';
 import { bworld, buildB, bItems, trackOrbit, nearConsole, openConsole, closeConsole, updateConsole, bindConsole } from './console.js';
 import { spinSave, spinLoad, rebaseSpin } from './cosmos.js';
-import { stepBoats, windAt } from './boats.js';
+import { stepBoats, windAt, boatSpots } from './boats.js';
 import { legs as legSlot } from './trees.js';
 import { terrainSD } from './env.js';
 import { orbitOf, toBody, dirToBody, dirToInertial } from './cosmos.js';
@@ -319,7 +319,10 @@ function frameBody(now) {
   mark('present');
   radar.gaze = gazePoint(cam);
   // what the dot rests on: something you could take (or the console, on B), and how hard you strain at what you hold
-  G.canTake = !objects.held && fade.t < 0 && (!!lookedAt(player.onB != null ? player.camera() : cam) || nearConsole(player));
+  G.lookingAtThing = !objects.held && !!lookedAt(player.onB != null ? player.camera() : cam);
+  G.canTake = !objects.held && fade.t < 0 && (G.lookingAtThing || nearConsole(player));
+  G.flying = flight.active;
+  if (objects.held !== G.heldLast) { G.heldLast = objects.held; G.heldSince = G.simT; }   // (for the cue after taking something)
   G.strain = objects.held ? holdState.strain || 0 : 0;
   mark('gaze');
   if (!state.bare) { drawFaced(cam); drawBMarks(); drawGoal(cam); drawGazeDot(); }
@@ -416,15 +419,20 @@ function frameBody(now) {
     hooks.creatures = creaturesSave;
     G.creatures = creatures;
     {
-      // a raft on a beach facing the archipelago, and a sail on one of the islands
+      // boats: rafts on the shore round the planet, each with its sail
       const hf = player.hf; let beach = null;
       for (let i = 0; i < 4000 && !beach; i++) {
         const T = tangents(ARCHI), d = vec4.norm([0, 1, 2, 3].map(k => (rand() - 0.5) * T[0][k] + (rand() - 0.5) * T[1][k] + (rand() - 0.5) * T[2][k]));
         const m = 150 + 60 * rand(), n = vec4.norm(vec4.add(vec4.scale(ARCHI, Math.cos(m / 250)), vec4.scale(d, Math.sin(m / 250)))), h = hf.heightAt(n);
         if (h > 0.4 && h < 1.6 && hf.waterAt(n) < 0.01) beach = n;
       }
-      if (beach) { const r = spawnObj('raft', beach); r.boat = true; G.raftHome = beach; }
-      spawnObj('sail', ISLANDS[2].n);
+      // (that search still runs, so the world after it is made as before; the boats now lie above high water: boats.js)
+      G.raftHomes = boatSpots(hf, player.up(), 6);
+      for (const n of G.raftHomes) {
+        const r = spawnObj('raft', n); r.boat = true;
+        const T = tangents(n); spawnObj('sail', vec4.norm(vec4.add(vec4.scale(n, Math.cos(2.4 / 250)), vec4.scale(T[0], Math.sin(2.4 / 250)))));   // its sail beside it
+      }
+      G.raftHome = G.raftHomes[0] || beach;
     }
     {
       // the rocks: clusters of 4D shapes by kind over the whole planet, and a few of each near where you arrive; none
@@ -432,7 +440,7 @@ function frameBody(now) {
       const hf = player.hf, home = player.up(), keep = [[home, 7]];
       if (launcher.n) keep.push([launcher.n, 45]);                  // (the summit stays clear: a launch leaves it nearly level)
       if (G.cave) keep.push([vec4.norm(G.cave.mouth), 10]);
-      if (G.raftHome) keep.push([G.raftHome, 8]);
+      for (const n of G.raftHomes || []) keep.push([n, 6]);
       const keepOut = (n, r) => keep.some(([q, m]) => Math.acos(Math.max(-1, Math.min(1, vec4.dot(q, n)))) * 250 < m + r)
         || carveSD(vec4.scale(n, 250 + hf.heightAt(n))).d < r + 2;
       await step('Setting down rocks…', 'objects');

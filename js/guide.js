@@ -14,7 +14,7 @@ import { launcher } from './launcher.js';
 import { flight } from './flight.js';
 import { carves } from './landforms.js';
 
-export const guide = { goal: null };
+export const guide = { goal: null, user: null };            // user: a goal you chose on the radar { ref, at() }
 const segDist = (p, a, b) => { const ab = vec4.sub(b, a), t = Math.max(0, Math.min(1, vec4.dot(vec4.sub(p, a), ab) / Math.max(1e-9, vec4.dot(ab, ab)))); return vec4.len(vec4.sub(p, vec4.add(a, vec4.scale(ab, t)))); };
 
 // In the cave (its chamber, passage or tunnel, below the hillside's surface)?
@@ -50,6 +50,11 @@ function pickGoal() {
   guide.goal = null;
   if (!p || p.onB != null || flight.active || !launcher.site) return;
   const held = objects.held;
+  if (guide.user) {                                        // a goal you chose (radar.js): until it is gone, or in your hand
+    const q = guide.user.at();
+    if (!q || (held && held === guide.user.ref)) guide.user = null;
+    else { const d = vec4.len(vec4.sub(q, p.pos)); guide.goal = { pos: q, kind: 'user', near: guide.user.ref && guide.user.ref.kind === 'stone' ? 0.3 : undefined, cue: G.canTake && d < 4 && guide.user.ref && guide.user.ref.kind ? 'F' : null }; return; }
+  }
   if (held && held.kind === 'stone' && objects.pouch < 9) return;          // (the cue under the dot: G)
   if (objects.pouch === 0) {
     const s = nearestStone(p.pos);
